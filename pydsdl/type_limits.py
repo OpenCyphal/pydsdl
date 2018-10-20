@@ -71,7 +71,7 @@ def _unittest_type_limits():
     assert (0, 1) == get_unsigned_integer_inclusive_range(1)
     assert (0, 3) == get_unsigned_integer_inclusive_range(2)
     assert (0, 31) == get_unsigned_integer_inclusive_range(5)
-    assert (0, 0xFFFF_FFFF_FFFF_FFFF) == get_unsigned_integer_inclusive_range(64)
+    assert (0, 0xFFFFFFFFFFFFFFFF) == get_unsigned_integer_inclusive_range(64)
 
     assert (-2, 1) == get_signed_integer_inclusive_range(2)
     assert (-16, 15) == get_signed_integer_inclusive_range(5)
