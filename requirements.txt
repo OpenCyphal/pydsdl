@@ -1,0 +1,2 @@
+# Development-only dependencies (not required to use the library)
+pytest ~= 3.3
