@@ -1,6 +1,9 @@
 PyDSDL
 ======
 
+[![Travis CI](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
+[![Travis CI](https://travis-ci.org/UAVCAN/pydsdl.svg?branch=master)](https://travis-ci.org/UAVCAN/pydsdl)
+
 **PyDSDL is a [UAVCAN](https://uavcan.org) DSDL parser implemented in Python.**
 
 ## Requirements
