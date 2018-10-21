@@ -425,3 +425,52 @@ class StructureType(CompoundType):
         blr = [f.data_type.bit_length_range for f in self.fields]
         return BitLengthRange(min=sum([b.min for b in blr]),
                               max=sum([b.max for b in blr]))
+
+
+class ServiceType(CompoundType):
+    def __init__(self,
+                 name:                str,
+                 version:             Version,
+                 request_attributes:  typing.Iterable[Attribute],
+                 response_attributes: typing.Iterable[Attribute],
+                 request_is_union:    bool,
+                 response_is_union:   bool,
+                 deprecated:          bool,
+                 static_port_id:      typing.Optional[int]):
+        request_meta_type = UnionType if request_is_union else StructureType
+        self._request_type = request_meta_type(name=name + '.Request',
+                                               version=version,
+                                               attributes=request_attributes,
+                                               deprecated=deprecated,
+                                               static_port_id=None)
+
+        response_meta_type = UnionType if response_is_union else StructureType
+        self._response_type = response_meta_type(name=name + '.Response',
+                                                 version=version,
+                                                 attributes=response_attributes,
+                                                 deprecated=deprecated,
+                                                 static_port_id=None)
+
+        container_attributes = [
+            Field(data_type=self._request_type,  name='request'),
+            Field(data_type=self._response_type, name='response'),
+        ]
+
+        super(ServiceType, self).__init__(name=name,
+                                          version=version,
+                                          attributes=container_attributes,
+                                          deprecated=deprecated,
+                                          static_port_id=static_port_id)
+
+    @property
+    def request_type(self) -> CompoundType:
+        return self._request_type
+
+    @property
+    def response_type(self) -> CompoundType:
+        return self._response_type
+
+    @property
+    def bit_length_range(self) -> BitLengthRange:
+        """This data type is not directly serializable, so we always return zero."""
+        return BitLengthRange(0, 0)
