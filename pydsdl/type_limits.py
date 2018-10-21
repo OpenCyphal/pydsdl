@@ -6,7 +6,12 @@
 import typing
 
 
-def get_unsigned_integer_inclusive_range(bit_length: int) -> typing.Tuple[int, int]:
+IntegerValueRange = typing.NamedTuple('IntegerValueRange', [('min', int), ('max', int)])
+
+FloatValueRange = typing.NamedTuple('RealValueRange', [('min', float), ('max', float)])
+
+
+def get_unsigned_integer_inclusive_range(bit_length: int) -> IntegerValueRange:
     """
     :param bit_length: bit size of the integer; must be in [1, 64]
     :return: a tuple containing the minimum and the maximum attainable values
@@ -14,10 +19,10 @@ def get_unsigned_integer_inclusive_range(bit_length: int) -> typing.Tuple[int, i
     if not 1 <= bit_length <= 64:
         raise ValueError('Invalid bit length for unsigned integer type: %d' % bit_length)
 
-    return 0, (1 << bit_length) - 1
+    return IntegerValueRange(0, (1 << bit_length) - 1)
 
 
-def get_signed_integer_inclusive_range(bit_length: int) -> typing.Tuple[int, int]:
+def get_signed_integer_inclusive_range(bit_length: int) -> IntegerValueRange:
     """
     :param bit_length: bit size of the integer; must be in [1, 64]
     :return: a tuple containing the minimum and the maximum attainable values
@@ -26,10 +31,10 @@ def get_signed_integer_inclusive_range(bit_length: int) -> typing.Tuple[int, int
         raise ValueError('Invalid bit length for signed integer type: %d' % bit_length)
 
     _, uint_max = get_unsigned_integer_inclusive_range(bit_length)
-    return -int(uint_max // 2) - 1, int(uint_max // 2)
+    return IntegerValueRange(-int(uint_max // 2) - 1, int(uint_max // 2))
 
 
-def get_float_inclusive_range(bit_length: int) -> typing.Tuple[float, float]:
+def get_float_inclusive_range(bit_length: int) -> FloatValueRange:
     """
     :param bit_length: bit size of the float, assuming IEEE754; must be in {16, 32, 64}
     :return: a tuple containing the minimum and the maximum attainable values
@@ -43,7 +48,7 @@ def get_float_inclusive_range(bit_length: int) -> typing.Tuple[float, float]:
     except KeyError:
         raise ValueError('Invalid bit length for float type: %d' % bit_length)
 
-    return -max_value, max_value
+    return FloatValueRange(-max_value, max_value)
 
 
 def _unittest_type_limits():
