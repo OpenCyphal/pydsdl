@@ -22,7 +22,9 @@ class InvalidBitLengthException(ValueError):
 
 class DataType:
     """
-    Invoking __str__() on a data type returns its uniform normalized definition, e.g. "float16[<=36]".
+    Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
+        - uavcan.node.Heartbeat.1.0[<=36]
+        - truncated float16[<=36]
     """
 
     @property
