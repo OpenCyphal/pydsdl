@@ -6,15 +6,18 @@
 import typing
 
 
-class DSDLException(Exception):
+class ParserError(Exception):       # PEP8 says that the "Exception" suffix is redundant and should not be used.
     """
-    This exception is raised in case of a parser failure.
+    This exception is raised in case if the parser discovers an error in the DSDL code.
     Fields:
         path    Source file path where the error has occurred. Optional, will be None if unknown.
         line    Source file line number where the error has occurred. Optional, will be None if unknown.
     """
 
-    def __init__(self, text: str, path: typing.Optional[str]=None, line: typing.Optional[int]=None):
+    def __init__(self,
+                 text: str,
+                 path: typing.Optional[str]=None,
+                 line: typing.Optional[int]=None):
         Exception.__init__(self, text)
         self.path = str(path or '')
         self.line = int(line or 0)
@@ -35,19 +38,19 @@ class DSDLException(Exception):
 
 def _unittest_exception() -> None:
     try:
-        raise DSDLException('Hello world!')
+        raise ParserError('Hello world!')
     except Exception as ex:
         assert str(ex) == 'Hello world!'
-        assert repr(ex) == "DSDLException: 'Hello world!'"
+        assert repr(ex) == "ParserError: 'Hello world!'"
 
     try:
-        raise DSDLException('Hello world!', path='path/to/file.uavcan', line=123)
+        raise ParserError('Hello world!', path='path/to/file.uavcan', line=123)
     except Exception as ex:
         assert str(ex) == 'path/to/file.uavcan:123: Hello world!'
-        assert repr(ex) == "DSDLException: 'path/to/file.uavcan:123: Hello world!'"
+        assert repr(ex) == "ParserError: 'path/to/file.uavcan:123: Hello world!'"
 
     try:
-        raise DSDLException('Hello world!', path='path/to/file.uavcan')
+        raise ParserError('Hello world!', path='path/to/file.uavcan')
     except Exception as ex:
         assert str(ex) == 'path/to/file.uavcan: Hello world!'
-        assert repr(ex) == "DSDLException: 'path/to/file.uavcan: Hello world!'"
+        assert repr(ex) == "ParserError: 'path/to/file.uavcan: Hello world!'"

@@ -16,11 +16,11 @@ FloatValueRange = typing.NamedTuple('RealValueRange', [('min', float), ('max', f
 Version = typing.NamedTuple('Version', [('minor', int), ('major', int)])
 
 
-class InvalidBitLengthException(ValueError):
+class InvalidBitLengthError(ValueError):
     pass
 
 
-class InvalidNumberOfElementsException(ValueError):
+class InvalidNumberOfElementsError(ValueError):
     pass
 
 
@@ -54,10 +54,10 @@ class PrimitiveType(DataType):
         self._cast_mode = cast_mode
 
         if self._bit_length < 1:
-            raise InvalidBitLengthException('Bit length must be positive')
+            raise InvalidBitLengthError('Bit length must be positive')
 
         if self._bit_length > self.MAX_BIT_LENGTH:
-            raise InvalidBitLengthException('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
+            raise InvalidBitLengthError('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
 
     @property
     def bit_length(self) -> int:
@@ -113,7 +113,7 @@ class IntegerType(ArithmeticType):
         super(IntegerType, self).__init__(bit_length, cast_mode)
 
         if self._bit_length < 2:
-            raise InvalidBitLengthException('Bit length of integer types cannot be less than 2')
+            raise InvalidBitLengthError('Bit length of integer types cannot be less than 2')
 
     @property
     def inclusive_value_range(self) -> IntegerValueRange:
@@ -166,7 +166,7 @@ class FloatType(ArithmeticType):
                 64: 1.79769313486231570815e+308,
             }[self.bit_length]
         except KeyError:
-            raise InvalidBitLengthException('Invalid bit length for float type: %d' % bit_length) from None
+            raise InvalidBitLengthError('Invalid bit length for float type: %d' % bit_length) from None
 
     @property
     def inclusive_value_range(self) -> FloatValueRange:
@@ -194,16 +194,16 @@ def _unittest_primitive() -> None:
     assert FloatType(32, PrimitiveType.CastMode.SATURATED).bit_length_range == (32, 32)
     assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (approx(-65504), approx(65504))
 
-    with raises(InvalidBitLengthException):
+    with raises(InvalidBitLengthError):
         FloatType(8, PrimitiveType.CastMode.TRUNCATED)
 
-    with raises(InvalidBitLengthException):
+    with raises(InvalidBitLengthError):
         SignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
 
-    with raises(InvalidBitLengthException):
+    with raises(InvalidBitLengthError):
         UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
 
-    with raises(InvalidBitLengthException):
+    with raises(InvalidBitLengthError):
         UnsignedIntegerType(65, PrimitiveType.CastMode.TRUNCATED)
 
     assert repr(SignedIntegerType(24, PrimitiveType.CastMode.TRUNCATED)) == \
@@ -218,10 +218,10 @@ class VoidType(DataType):
         self._bit_length = int(bit_length)
 
         if self._bit_length < 1:
-            raise InvalidBitLengthException('Bit length must be positive')
+            raise InvalidBitLengthError('Bit length must be positive')
 
         if self._bit_length > self.MAX_BIT_LENGTH:
-            raise InvalidBitLengthException('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
+            raise InvalidBitLengthError('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
 
     @property
     def bit_length(self) -> int:
@@ -246,11 +246,11 @@ def _unittest_void() -> None:
     assert str(VoidType(13)) == 'void13'
     assert repr(VoidType(64)) == 'VoidType(bit_length=64)'
 
-    with raises(InvalidBitLengthException):
+    with raises(InvalidBitLengthError):
         VoidType(1)
         VoidType(0)
 
-    with raises(InvalidBitLengthException):
+    with raises(InvalidBitLengthError):
         VoidType(64)
         VoidType(65)
 
@@ -280,7 +280,7 @@ class StaticArrayType(ArrayType):
         self._size = int(size)
 
         if self._size < 1:
-            raise InvalidNumberOfElementsException('Array size cannot be less than 1')
+            raise InvalidNumberOfElementsError('Array size cannot be less than 1')
 
     @property
     def size(self) -> int:
@@ -311,7 +311,7 @@ def _unittest_static_array() -> None:
     assert StaticArrayType(su8, 200).size == 200
     assert StaticArrayType(ti64, 200).element_type is ti64
 
-    with raises(InvalidNumberOfElementsException):
+    with raises(InvalidNumberOfElementsError):
         StaticArrayType(ti64, 0)
 
     assert repr(StaticArrayType(ti64, 128)) == \
@@ -326,7 +326,7 @@ class DynamicArrayType(ArrayType):
         self._max_size = int(max_size)
 
         if self._max_size < 1:
-            raise InvalidNumberOfElementsException('Max array size cannot be less than 1')
+            raise InvalidNumberOfElementsError('Max array size cannot be less than 1')
 
     @property
     def max_size(self) -> int:
@@ -363,7 +363,7 @@ def _unittest_dynamic_array() -> None:
     assert DynamicArrayType(tu8, 200).max_size == 200
     assert DynamicArrayType(tu8, 200).element_type is tu8
 
-    with raises(InvalidNumberOfElementsException):
+    with raises(InvalidNumberOfElementsError):
         DynamicArrayType(si64, 0)
 
     assert repr(DynamicArrayType(si64, 128)) == \
@@ -545,8 +545,8 @@ class UnionType(CompoundType):
                                         static_port_id=static_port_id)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
-            raise InvalidNumberOfElementsException('A tagged union cannot contain less than %d variants' %
-                                                   self.MIN_NUMBER_OF_VARIANTS)
+            raise InvalidNumberOfElementsError('A tagged union cannot contain less than %d variants' %
+                                               self.MIN_NUMBER_OF_VARIANTS)
 
     @property
     def number_of_variants(self) -> int:
