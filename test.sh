@@ -2,7 +2,7 @@
 
 all_ok=0
 
-mypy --config-file=setup.cfg pydsdl
+mypy --strict --config-file=setup.cfg pydsdl
 all_ok=$(($all_ok + $?))
 
 pytest --capture=no -vv pydsdl || exit 1

@@ -9,6 +9,7 @@ PyDSDL
 ## Requirements
 
 PyDSDL requires Python 3.5 or newer.
+No third-party dependencies are needed to use the library.
 
 ## Installation
 
@@ -22,12 +23,19 @@ CBL
 
 ## Development
 
+### Dependencies
+
+Despite the fact that the library itself is dependency-free,
+some additional packages are needed for development and testing.
+They are listed in `requirements.txt`.
+
 ### Coding conventions
 
 Follow [PEP8](https://www.python.org/dev/peps/pep-0008/) with the following exception:
 the line length limit is 120 characters (not 79).
 
-Arguments and return types of all public functions and methods must be well-annotated.
+All public functions and methods must be type-annotated.
+This is enforced statically with MyPy.
 
 Ensure compatibility with Python 3.5 and all newer versions.
 
@@ -43,7 +51,7 @@ For extra functionality, import `pytest` in your test function locally.
 outside of test-enabled environments.
 
 ```python
-def _unittest_my_test():
+def _unittest_my_test() -> None:    # Type annotations required
     import pytest  # OK to import inside test functions only (rarely useful)
     assert get_the_answer() == 42
 ```
