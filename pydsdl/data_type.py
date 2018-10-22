@@ -20,6 +20,10 @@ class InvalidBitLengthException(ValueError):
     pass
 
 
+class InvalidNumberOfElementsException(ValueError):
+    pass
+
+
 class DataType:
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
@@ -202,6 +206,9 @@ def _unittest_primitive() -> None:
     with raises(InvalidBitLengthException):
         UnsignedIntegerType(65, PrimitiveType.CastMode.TRUNCATED)
 
+    assert repr(SignedIntegerType(24, PrimitiveType.CastMode.TRUNCATED)) == \
+        'SignedIntegerType(bit_length=24, cast_mode=<CastMode.TRUNCATED: 1>)'
+
 
 class VoidType(DataType):
     MAX_BIT_LENGTH = 64
@@ -232,6 +239,22 @@ class VoidType(DataType):
         return 'VoidType(bit_length=%d)' % self.bit_length
 
 
+def _unittest_void() -> None:
+    from pytest import raises
+
+    assert VoidType(1).bit_length_range == (1, 1)
+    assert str(VoidType(13)) == 'void13'
+    assert repr(VoidType(64)) == 'VoidType(bit_length=64)'
+
+    with raises(InvalidBitLengthException):
+        VoidType(1)
+        VoidType(0)
+
+    with raises(InvalidBitLengthException):
+        VoidType(64)
+        VoidType(65)
+
+
 class ArrayType(DataType):
     def __init__(self, element_type: DataType):
         super(ArrayType, self).__init__()
@@ -257,7 +280,7 @@ class StaticArrayType(ArrayType):
         self._size = int(size)
 
         if self._size < 1:
-            raise ValueError('Size cannot be less than 1')
+            raise InvalidNumberOfElementsException('Array size cannot be less than 1')
 
     @property
     def size(self) -> int:
@@ -275,6 +298,26 @@ class StaticArrayType(ArrayType):
         return 'StaticArrayType(element_type=%r, size=%r)' % (self.element_type, self.size)
 
 
+def _unittest_static_array() -> None:
+    from pytest import raises
+
+    su8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.SATURATED)
+    ti64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.TRUNCATED)
+
+    assert str(StaticArrayType(su8, 4)) == 'saturated uint8[4]'
+    assert str(StaticArrayType(ti64, 1)) == 'truncated int64[1]'
+
+    assert StaticArrayType(su8, 4).bit_length_range == (32, 32)
+    assert StaticArrayType(su8, 200).size == 200
+    assert StaticArrayType(ti64, 200).element_type is ti64
+
+    with raises(InvalidNumberOfElementsException):
+        StaticArrayType(ti64, 0)
+
+    assert repr(StaticArrayType(ti64, 128)) == \
+        'StaticArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.TRUNCATED: 1>), size=128)'
+
+
 class DynamicArrayType(ArrayType):
     def __init__(self,
                  element_type: DataType,
@@ -283,7 +326,7 @@ class DynamicArrayType(ArrayType):
         self._max_size = int(max_size)
 
         if self._max_size < 1:
-            raise ValueError('Max size cannot be less than 1')
+            raise InvalidNumberOfElementsException('Max array size cannot be less than 1')
 
     @property
     def max_size(self) -> int:
@@ -300,6 +343,32 @@ class DynamicArrayType(ArrayType):
 
     def __repr__(self) -> str:
         return 'DynamicArrayType(element_type=%r, max_size=%r)' % (self.element_type, self.max_size)
+
+
+def _unittest_dynamic_array() -> None:
+    from pytest import raises
+
+    tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
+    si64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.SATURATED)
+
+    assert str(DynamicArrayType(tu8, 4))    == 'truncated uint8[<=4]'
+    assert str(DynamicArrayType(si64, 255)) == 'saturated int64[<=255]'
+
+    # Mind the length prefix!
+    assert DynamicArrayType(tu8, 3).bit_length_range == (2, 26)
+    assert DynamicArrayType(tu8, 1).bit_length_range == (1, 9)
+    assert DynamicArrayType(tu8, 255).bit_length_range == (8, 2048)
+    assert DynamicArrayType(tu8, 65535).bit_length_range == (16, 16 + 65535 * 8)
+
+    assert DynamicArrayType(tu8, 200).max_size == 200
+    assert DynamicArrayType(tu8, 200).element_type is tu8
+
+    with raises(InvalidNumberOfElementsException):
+        DynamicArrayType(si64, 0)
+
+    assert repr(DynamicArrayType(si64, 128)) == \
+        'DynamicArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
+        'max_size=128)'
 
 
 class Attribute:
@@ -359,6 +428,26 @@ class Constant(Attribute):
     def __repr__(self) -> str:
         return 'Constant(data_type=%r, name=%r, value=%r, initialization_expression=%r)' % \
             (self.data_type, self.name, self.value, self.initialization_expression)
+
+
+def _unittest_attribute() -> None:
+    assert str(Field(BooleanType(PrimitiveType.CastMode.TRUNCATED), 'flag')) == 'truncated bool flag'
+    assert repr(Field(BooleanType(PrimitiveType.CastMode.TRUNCATED), 'flag')) == \
+        'Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.TRUNCATED: 1>), name=\'flag\')'
+
+    assert str(PaddingField(VoidType(32))) == 'void32 '     # Mind the space!
+    assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
+
+    data_type = SignedIntegerType(32, PrimitiveType.CastMode.SATURATED)
+    const = Constant(data_type, 'FOO_CONST', -123, '-0x7B')
+    assert str(const) == 'saturated int32 FOO_CONST = -123'
+    assert const.data_type is data_type
+    assert const.name == 'FOO_CONST'
+    assert const.value == -123
+    assert const.initialization_expression == '-0x7B'
+
+    assert repr(const) == \
+        'Constant(data_type=%r, name=\'FOO_CONST\', value=-123, initialization_expression=\'-0x7B\')' % data_type
 
 
 class CompoundType(DataType):
@@ -439,6 +528,26 @@ class CompoundType(DataType):
 
 
 class UnionType(CompoundType):
+    MIN_NUMBER_OF_VARIANTS = 2
+
+    def __init__(self,
+                 name:             str,
+                 version:          Version,
+                 attributes:       typing.Iterable[Attribute],
+                 deprecated:       bool,
+                 static_port_id:   typing.Optional[int]):
+        # Proxy all parameters directly to the base type - I wish we could do that
+        # with kwargs while preserving the type information
+        super(UnionType, self).__init__(name=name,
+                                        version=version,
+                                        attributes=attributes,
+                                        deprecated=deprecated,
+                                        static_port_id=static_port_id)
+
+        if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
+            raise InvalidNumberOfElementsException('A tagged union cannot contain less than %d variants' %
+                                                   self.MIN_NUMBER_OF_VARIANTS)
+
     @property
     def number_of_variants(self) -> int:
         return len(self.fields)
