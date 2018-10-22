@@ -13,7 +13,9 @@ No third-party dependencies are needed to use the library.
 
 ## Installation
 
-Either clone this repository or run `pip install pydsdl`.
+Install from PIP: `pip install pydsdl`.
+Alternatively, fetch this repository or add it as a submodule,
+add its root to the Python import lookup paths, and you're ready to roll.
 
 Make sure that it works by importing it: `import pydsdl`.
 
