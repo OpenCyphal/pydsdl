@@ -7,6 +7,6 @@ import sys
 from .version import __version__, __license__
 
 
-if sys.version_info[:2] < (3, 5):
+if sys.version_info[:2] < (3, 5):   # pragma: no cover
     print('A newer version of Python is required', file=sys.stderr)
     sys.exit(1)
