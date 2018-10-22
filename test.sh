@@ -7,7 +7,7 @@ then
     status=1
 fi
 
-if coverage run -m pytest --capture=no -vv pydsdl
+if coverage run --source pydsdl -m pytest --capture=no -vv pydsdl
 then
     coverage report
 else

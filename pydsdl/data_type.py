@@ -108,6 +108,9 @@ class IntegerType(ArithmeticType):
                  cast_mode: PrimitiveType.CastMode):
         super(IntegerType, self).__init__(bit_length, cast_mode)
 
+        if self._bit_length < 2:
+            raise InvalidBitLengthException('Bit length of integer types cannot be less than 2')
+
     @property
     def inclusive_value_range(self) -> IntegerValueRange:
         raise NotImplementedError
@@ -121,9 +124,6 @@ class SignedIntegerType(IntegerType):
                  bit_length: int,
                  cast_mode: PrimitiveType.CastMode):
         super(SignedIntegerType, self).__init__(bit_length, cast_mode)
-
-        if self._bit_length < 2:
-            raise InvalidBitLengthException('Bit length of signed integer types cannot be less than 2')
 
     @property
     def inclusive_value_range(self) -> IntegerValueRange:
@@ -171,6 +171,36 @@ class FloatType(ArithmeticType):
 
     def __str__(self) -> str:
         return self._cast_mode_name + ' float' + str(self.bit_length)
+
+
+def _unittest_primitive() -> None:
+    from pytest import raises, approx
+
+    assert str(BooleanType(PrimitiveType.CastMode.SATURATED)) == 'saturated bool'
+
+    assert str(SignedIntegerType(15, PrimitiveType.CastMode.SATURATED)) == 'saturated int15'
+    assert SignedIntegerType(64, PrimitiveType.CastMode.SATURATED).bit_length_range == (64, 64)
+    assert SignedIntegerType(8, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-128, 127)
+
+    assert str(UnsignedIntegerType(15, PrimitiveType.CastMode.TRUNCATED)) == 'truncated uint15'
+    assert UnsignedIntegerType(53, PrimitiveType.CastMode.SATURATED).bit_length_range == (53, 53)
+    assert UnsignedIntegerType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (0, 0xFFFFFFFF)
+
+    assert str(FloatType(64, PrimitiveType.CastMode.SATURATED)) == 'saturated float64'
+    assert FloatType(32, PrimitiveType.CastMode.SATURATED).bit_length_range == (32, 32)
+    assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (approx(-65504), approx(65504))
+
+    with raises(InvalidBitLengthException):
+        FloatType(8, PrimitiveType.CastMode.TRUNCATED)
+
+    with raises(InvalidBitLengthException):
+        SignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
+
+    with raises(InvalidBitLengthException):
+        UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
+
+    with raises(InvalidBitLengthException):
+        UnsignedIntegerType(65, PrimitiveType.CastMode.TRUNCATED)
 
 
 class VoidType(DataType):
