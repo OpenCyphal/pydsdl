@@ -19,7 +19,7 @@ class DSDLException(Exception):
         self.path = str(path or '')
         self.line = int(line or 0)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Returns a nicely formatted error string in a GCC-like format (can be parsed by e.g. Eclipse error parser)"""
         if self.path and self.line > 0:
             return '%s:%d: %s' % (self.path, self.line, Exception.__str__(self))
@@ -29,11 +29,11 @@ class DSDLException(Exception):
 
         return Exception.__str__(self)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__class__.__name__ + ': ' + repr(self.__str__())
 
 
-def _unittest_exception():
+def _unittest_exception() -> None:
     try:
         raise DSDLException('Hello world!')
     except Exception as ex:

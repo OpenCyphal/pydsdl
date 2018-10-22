@@ -31,7 +31,7 @@ class DataType:
     def bit_length_range(self) -> BitLengthRange:
         raise NotImplementedError
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
 
@@ -77,10 +77,10 @@ class PrimitiveType(DataType):
             self.CastMode.TRUNCATED: 'truncated',
         }[self.cast_mode]
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(bit_length=%r, cast_mode=%r)' % (self.__class__.__name__, self.bit_length, self.cast_mode)
 
 
@@ -88,7 +88,7 @@ class BooleanType(PrimitiveType):
     def __init__(self, cast_mode: PrimitiveType.CastMode):
         super(BooleanType, self).__init__(bit_length=1, cast_mode=cast_mode)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._cast_mode_name + ' bool'
 
 
@@ -98,7 +98,7 @@ class ArithmeticType(PrimitiveType):
                  cast_mode: PrimitiveType.CastMode):
         super(ArithmeticType, self).__init__(bit_length, cast_mode)
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
 
@@ -112,7 +112,7 @@ class IntegerType(ArithmeticType):
     def inclusive_value_range(self) -> IntegerValueRange:
         raise NotImplementedError
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
 
@@ -131,7 +131,7 @@ class SignedIntegerType(IntegerType):
         return IntegerValueRange(min=-uint_max_half - 1,
                                  max=+uint_max_half)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._cast_mode_name + ' int' + str(self.bit_length)
 
 
@@ -145,7 +145,7 @@ class UnsignedIntegerType(IntegerType):
     def inclusive_value_range(self) -> IntegerValueRange:
         return IntegerValueRange(min=0, max=(1 << self.bit_length) - 1)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._cast_mode_name + ' uint' + str(self.bit_length)
 
 
@@ -169,7 +169,7 @@ class FloatType(ArithmeticType):
         return FloatValueRange(min=-self._magnitude,
                                max=+self._magnitude)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._cast_mode_name + ' float' + str(self.bit_length)
 
 
@@ -195,10 +195,10 @@ class VoidType(DataType):
     def bit_length_range(self) -> BitLengthRange:
         return BitLengthRange(self.bit_length, self.bit_length)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return 'void%d' % self.bit_length
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'VoidType(bit_length=%d)' % self.bit_length
 
 
@@ -215,7 +215,7 @@ class ArrayType(DataType):
     def bit_length_range(self) -> BitLengthRange:
         raise NotImplementedError
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
 
@@ -238,10 +238,10 @@ class StaticArrayType(ArrayType):
         return BitLengthRange(min=self.element_type.bit_length_range.min * self.size,
                               max=self.element_type.bit_length_range.max * self.size)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s[%d]' % (self.element_type, self.size)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'StaticArrayType(element_type=%r, size=%r)' % (self.element_type, self.size)
 
 
@@ -265,10 +265,10 @@ class DynamicArrayType(ArrayType):
         return BitLengthRange(min=length_prefix_bit_length,
                               max=length_prefix_bit_length + self.element_type.bit_length_range.max * self.max_size)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s[<=%d]' % (self.element_type, self.max_size)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'DynamicArrayType(element_type=%r, max_size=%r)' % (self.element_type, self.max_size)
 
 
@@ -287,10 +287,10 @@ class Attribute:
     def name(self) -> str:
         return self._name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s %s' % (self.data_type, self.name)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(data_type=%r, name=%r)' % (self.__class__.__name__, self.data_type, self.name)
 
 
@@ -323,10 +323,10 @@ class Constant(Attribute):
     def initialization_expression(self) -> str:
         return self._initialization_expression
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s %s = %s' % (self.data_type, self.name, self.value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'Constant(data_type=%r, name=%r, value=%r, initialization_expression=%r)' % \
             (self.data_type, self.name, self.value, self.initialization_expression)
 
@@ -394,10 +394,10 @@ class CompoundType(DataType):
     def bit_length_range(self) -> BitLengthRange:
         raise NotImplementedError
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s.%d.%d' % (self.name, self.version.major, self.version.minor)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, static_port_id=%r)' % \
            (self.__class__.__name__,
             self.name,
