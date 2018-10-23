@@ -46,7 +46,6 @@ def parse_namespace(root_namespace_directory: str,
     # Normalize paths
     root_namespace_directory = os.path.abspath(root_namespace_directory)
     lookup_directories = list(map(lambda d: str(os.path.abspath(d)), lookup_directories))
-
     _logger.info('Lookup directories are listed below:')
     for a in lookup_directories:
         _logger.info(_LOG_LIST_ITEM_PREFIX + a)
@@ -55,35 +54,32 @@ def parse_namespace(root_namespace_directory: str,
     _ensure_no_nested_root_namespaces(lookup_directories)
     _ensure_no_namespace_name_collisions(lookup_directories)
 
-    try:
-        target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
-        _logger.debug('Target DSDL definitions are listed below:')
-        for x in target_dsdl_definitions:
-            _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
+    # Construct DSDL definitions from the target and the lookup dirs
+    target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
+    _logger.debug('Target DSDL definitions are listed below:')
+    for x in target_dsdl_definitions:
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-        lookup_dsdl_definitions = []    # type: typing.List[DSDLDefinition]
-        for ld in lookup_directories:
-            lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
+    lookup_dsdl_definitions = []    # type: typing.List[DSDLDefinition]
+    for ld in lookup_directories:
+        lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
-        _logger.debug('Lookup DSDL definitions are listed below:')
-        for x in lookup_dsdl_definitions:
-            _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
+    _logger.debug('Lookup DSDL definitions are listed below:')
+    for x in lookup_dsdl_definitions:
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-        types = _parse_namespace_definitions(target_dsdl_definitions, lookup_dsdl_definitions)
+    # Parse the constructed definitions
+    types = _parse_namespace_definitions(target_dsdl_definitions, lookup_dsdl_definitions)
 
-        # Note that we check for collisions in the parsed namespace only.
-        # We intentionally ignore (do not check for) possible collisions in the lookup directories,
-        # because that would exceed the expected scope of responsibility of the parser, and the lookup
-        # directories may contain issues and mistakes that are outside of the control of the user (e.g.,
-        # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
-        # by the third party.
-        _ensure_no_regulated_port_id_collisions(types)
+    # Note that we check for collisions in the parsed namespace only.
+    # We intentionally ignore (do not check for) possible collisions in the lookup directories,
+    # because that would exceed the expected scope of responsibility of the parser, and the lookup
+    # directories may contain issues and mistakes that are outside of the control of the user (e.g.,
+    # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
+    # by the third party.
+    _ensure_no_regulated_port_id_collisions(types)
 
-        return types
-    except ParseError:
-        raise
-    except Exception as ex:
-        raise InternalParserError(culprit=ex) from ex
+    return types
 
 
 def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition],
