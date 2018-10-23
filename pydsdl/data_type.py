@@ -456,16 +456,16 @@ class CompoundType(DataType):
     MAX_VERSION_NUMBER = 255
 
     def __init__(self,
-                 name:             str,
-                 version:          Version,
-                 attributes:       typing.Iterable[Attribute],
-                 deprecated:       bool,
-                 static_port_id:   typing.Optional[int]):
+                 name:              str,
+                 version:           Version,
+                 attributes:        typing.Iterable[Attribute],
+                 deprecated:        bool,
+                 regulated_port_id: typing.Optional[int]):
         self._name = str(name).strip()
         self._version = version
         self._attributes = list(attributes)
         self._deprecated = bool(deprecated)
-        self._static_port_id = None if static_port_id is None else int(static_port_id)
+        self._regulated_port_id = None if regulated_port_id is None else int(regulated_port_id)
 
         if not self._name:
             raise ValueError('Name cannot be empty')
@@ -506,8 +506,12 @@ class CompoundType(DataType):
         return [a for a in self.attributes if isinstance(a, Constant)]
 
     @property
-    def static_port_id(self) -> typing.Optional[int]:
-        return self._static_port_id
+    def regulated_port_id(self) -> typing.Optional[int]:
+        return self._regulated_port_id
+
+    @property
+    def has_regulated_port_id(self) -> bool:
+        return self.regulated_port_id is not None
 
     @property
     def bit_length_range(self) -> BitLengthRange:
@@ -517,32 +521,32 @@ class CompoundType(DataType):
         return '%s.%d.%d' % (self.name, self.version.major, self.version.minor)
 
     def __repr__(self) -> str:
-        return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, static_port_id=%r)' % \
+        return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, regulated_port_id=%r)' % \
            (self.__class__.__name__,
             self.name,
             self.version,
             self.fields,
             self.constants,
             self.deprecated,
-            self.static_port_id)
+            self.regulated_port_id)
 
 
 class UnionType(CompoundType):
     MIN_NUMBER_OF_VARIANTS = 2
 
     def __init__(self,
-                 name:             str,
-                 version:          Version,
-                 attributes:       typing.Iterable[Attribute],
-                 deprecated:       bool,
-                 static_port_id:   typing.Optional[int]):
+                 name:              str,
+                 version:           Version,
+                 attributes:        typing.Iterable[Attribute],
+                 deprecated:        bool,
+                 regulated_port_id: typing.Optional[int]):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
                                         version=version,
                                         attributes=attributes,
                                         deprecated=deprecated,
-                                        static_port_id=static_port_id)
+                                        regulated_port_id=regulated_port_id)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
             raise InvalidNumberOfElementsError('A tagged union cannot contain less than %d variants' %
@@ -577,20 +581,20 @@ class ServiceType(CompoundType):
                  request_is_union:    bool,
                  response_is_union:   bool,
                  deprecated:          bool,
-                 static_port_id:      typing.Optional[int]):
+                 regulated_port_id:   typing.Optional[int]):
         request_meta_type = UnionType if request_is_union else StructureType
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_attributes,
                                                deprecated=deprecated,
-                                               static_port_id=None)
+                                               regulated_port_id=None)
 
         response_meta_type = UnionType if response_is_union else StructureType
         self._response_type = response_meta_type(name=name + '.Response',
                                                  version=version,
                                                  attributes=response_attributes,
                                                  deprecated=deprecated,
-                                                 static_port_id=None)
+                                                 regulated_port_id=None)
 
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
@@ -601,7 +605,7 @@ class ServiceType(CompoundType):
                                           version=version,
                                           attributes=container_attributes,
                                           deprecated=deprecated,
-                                          static_port_id=static_port_id)
+                                          regulated_port_id=regulated_port_id)
 
     @property
     def request_type(self) -> CompoundType:
