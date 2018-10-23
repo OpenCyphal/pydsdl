@@ -10,8 +10,8 @@ import fnmatch
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
 from .dsdl_definition_parser import parse_definition
-from .error import ParseError, InternalParserError, RegulatedPortIDCollisionError, NamespaceNameCollisionError, \
-    NestedRootNamespaceError
+from .error import ParseError, InternalParserError
+from .error import RegulatedPortIDCollisionError, NamespaceNameCollisionError, NestedRootNamespaceError
 
 
 DSDL_FILE_GLOB = '*.uavcan'
