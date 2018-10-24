@@ -10,7 +10,7 @@ import fnmatch
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
 from .dsdl_definition_parser import parse_definition
-from .error import ParseError, InternalParserError
+from .error import ParseError, InternalParserError, FileNameFormatError
 from .error import RegulatedPortIDCollisionError, NamespaceNameCollisionError, NestedRootNamespaceError
 
 
@@ -22,7 +22,7 @@ _LOG_LIST_ITEM_PREFIX = ' ' * 4
 
 
 def parse_namespace(root_namespace_directory: str,
-                    lookup_directories: typing.List[str]) -> typing.List[CompoundType]:
+                    lookup_directories: typing.Iterable[str]) -> typing.List[CompoundType]:
     """
     Parse all DSDL definitions in the specified root namespace directory.
 
@@ -41,7 +41,7 @@ def parse_namespace(root_namespace_directory: str,
     :raises: ParseError
     """
     # Add the own root namespace to the set of lookup directories, remove duplicates
-    lookup_directories = list(set(lookup_directories + [root_namespace_directory]))
+    lookup_directories = list(set(list(lookup_directories) + [root_namespace_directory]))
 
     # Normalize paths
     root_namespace_directory = os.path.abspath(root_namespace_directory)
@@ -153,7 +153,7 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
     Those can be fed to the actual DSDL parser later.
     """
     def on_walk_error(os_ex: OSError) -> None:
-        raise os_ex
+        raise os_ex     # pragma: no cover
 
     walker = os.walk(root_namespace_path,
                      onerror=on_walk_error,
@@ -176,10 +176,121 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
     return output
 
 
-def _unittest_parse_namespace_nested_directories() -> None:
+def _unittest_parse_namespace_faults() -> None:
     try:
         parse_namespace('/foo/bar/baz', ['/bat/wot', '/foo/bar/baz/bad'])
     except NestedRootNamespaceError as ex:
         print(ex)
-    else:
+    else:               # pragma: no cover
+        assert False
+
+    try:
+        parse_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/baz'])
+    except NamespaceNameCollisionError as ex:
+        print(ex)
+    else:               # pragma: no cover
+        assert False
+    try:
+        parse_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/zoo', '/foo/bar/doo/roo/baz'])
+    except NamespaceNameCollisionError as ex:
+        print(ex)
+    else:               # pragma: no cover
+        assert False
+
+
+def _unittest_dsdl_definition_constructor() -> None:
+    import tempfile
+
+    directory = tempfile.TemporaryDirectory()
+    root_ns_dir = os.path.join(directory.name, 'foo')
+
+    os.mkdir(root_ns_dir)
+    os.mkdir(os.path.join(root_ns_dir, 'nested'))
+
+    def touchy(relative_path: str) -> None:
+        with open(os.path.join(root_ns_dir, relative_path), 'w') as f:
+            f.write('# TEST TEXT')
+
+    def discard(relative_path: str) -> None:
+        os.unlink(os.path.join(root_ns_dir, relative_path))
+
+    touchy('123.Qwerty.123.234.uavcan')
+    touchy('nested/2.Asd.21.32.uavcan')
+    touchy('nested/Foo.32.43.uavcan')
+
+    dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
+    print(dsdl_defs)
+    lut = {x.name: x for x in dsdl_defs}    # type: typing.Dict[str, DSDLDefinition]
+    assert len(lut) == 3
+
+    assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])
+    assert str(lut['foo.Qwerty']) == \
+        "DSDLDefinition(name='foo.Qwerty', version=Version(major=123, minor=234), regulated_port_id=123, " \
+        "file_path='%s')" % lut['foo.Qwerty'].file_path
+
+    assert str(lut['foo.nested.Foo']) == \
+        "DSDLDefinition(name='foo.nested.Foo', version=Version(major=32, minor=43), regulated_port_id=None, " \
+        "file_path='%s')" % lut['foo.nested.Foo'].file_path
+
+    t = lut['foo.Qwerty']
+    assert t.file_path == os.path.join(root_ns_dir, '123.Qwerty.123.234.uavcan')
+    assert t.has_regulated_port_id
+    assert t.regulated_port_id == 123
+    assert t.text == '# TEST TEXT'
+    assert t.version.major == 123
+    assert t.version.minor == 234
+    assert t.name_components == ['foo', 'Qwerty']
+    assert t.short_name == 'Qwerty'
+    assert t.root_namespace == 'foo'
+    assert t.namespace == 'foo'
+
+    t = lut['foo.nested.Asd']
+    assert t.file_path == os.path.join(root_ns_dir, 'nested', '2.Asd.21.32.uavcan')
+    assert t.has_regulated_port_id
+    assert t.regulated_port_id == 2
+    assert t.text == '# TEST TEXT'
+    assert t.version.major == 21
+    assert t.version.minor == 32
+    assert t.name_components == ['foo', 'nested', 'Asd']
+    assert t.short_name == 'Asd'
+    assert t.root_namespace == 'foo'
+    assert t.namespace == 'foo.nested'
+
+    t = lut['foo.nested.Foo']
+    assert t.file_path == os.path.join(root_ns_dir, 'nested', 'Foo.32.43.uavcan')
+    assert not t.has_regulated_port_id
+    assert t.regulated_port_id is None
+    assert t.text == '# TEST TEXT'
+    assert t.version.major == 32
+    assert t.version.minor == 43
+    assert t.name_components == ['foo', 'nested', 'Foo']
+    assert t.short_name == 'Foo'
+    assert t.root_namespace == 'foo'
+    assert t.namespace == 'foo.nested'
+
+    touchy('nested/Malformed.MAJOR.MINOR.uavcan')
+    try:
+        _construct_dsdl_definitions_from_namespace(root_ns_dir)
+    except FileNameFormatError as ex:
+        print(ex)
+        discard('nested/Malformed.MAJOR.MINOR.uavcan')
+    else:       # pragma: no cover
+        assert False
+
+    touchy('nested/NOT_A_NUMBER.Malformed.1.0.uavcan')
+    try:
+        _construct_dsdl_definitions_from_namespace(root_ns_dir)
+    except FileNameFormatError as ex:
+        print(ex)
+        discard('nested/NOT_A_NUMBER.Malformed.1.0.uavcan')
+    else:       # pragma: no cover
+        assert False
+
+    touchy('nested/Malformed.uavcan')
+    try:
+        _construct_dsdl_definitions_from_namespace(root_ns_dir)
+    except FileNameFormatError as ex:
+        print(ex)
+        discard('nested/Malformed.uavcan')
+    else:       # pragma: no cover
         assert False

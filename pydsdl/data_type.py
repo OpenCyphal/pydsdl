@@ -13,7 +13,7 @@ IntegerValueRange = typing.NamedTuple('IntegerValueRange', [('min', int), ('max'
 
 FloatValueRange = typing.NamedTuple('RealValueRange', [('min', float), ('max', float)])
 
-Version = typing.NamedTuple('Version', [('minor', int), ('major', int)])
+Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
 
 class InvalidBitLengthError(ValueError):

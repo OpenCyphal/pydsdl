@@ -71,7 +71,7 @@ class InternalParserError(ParseError):
                           urllib.parse.quote(repr(culprit))
             if text:
                 text = text + ' ' + report_text
-            else:
+            else:   # pragma: no cover
                 text = report_text
 
         if not text:
@@ -142,3 +142,38 @@ def _unittest_exception() -> None:
     except Exception as ex:
         assert str(ex) == 'path/to/file.uavcan: Hello world!'
         assert repr(ex) == "ParseError: 'path/to/file.uavcan: Hello world!'"
+
+
+def _unittest_internal_error_github_reporting() -> None:
+    try:
+        raise InternalParserError(path='FILE_PATH',
+                                  line=42)
+    except ParseError as ex:
+        assert ex.path == 'FILE_PATH'
+        assert ex.line == 42
+        assert str(ex) == 'FILE_PATH:42: '
+
+    try:
+        try:
+            try:    # TRY HARDER
+                raise InternalParserError(text='BASE TEXT',
+                                          culprit=Exception('ERROR TEXT'))
+            except ParseError as ex:
+                ex.set_error_location_if_unknown(path='FILE_PATH')
+                raise
+        except ParseError as ex:
+            ex.set_error_location_if_unknown(line=42)
+            raise
+    except ParseError as ex:
+        print(ex)
+        assert ex.path == 'FILE_PATH'
+        assert ex.line == 42
+        assert str(ex) == 'FILE_PATH:42: BASE TEXT ' \
+                          'PLEASE REPORT AT https://github.com/UAVCAN/pydsdl/issues/new?title=' \
+                          'Exception%28%27ERROR%20TEXT%27%2C%29'
+
+    try:
+        raise InternalParserError(text='BASE TEXT',
+                                  path='FILE_PATH')
+    except ParseError as ex:
+        assert str(ex) == 'FILE_PATH: BASE TEXT'

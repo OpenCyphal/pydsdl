@@ -29,9 +29,10 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Determining the relative path within the root namespace directory
-        relative_path = str(os.path.relpath(self._file_path, root_namespace_path))
+        relative_path = str(os.path.join(os.path.split(root_namespace_path)[-1],
+                                         os.path.relpath(self._file_path, root_namespace_path)))
+
         relative_directory, basename = [str(x) for x in os.path.split(relative_path)]   # type: str, str
-        assert os.path.join(root_namespace_path, relative_directory, basename) == self._file_path
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.uavcan
         basename_components = basename.split('.')[:-1]
@@ -86,7 +87,7 @@ class DSDLDefinition:
     @property
     def root_namespace(self) -> str:
         """The first component of the full name, e.g., uavcan of uavcan.node.Heartbeat"""
-        return self.name_components[-1]
+        return self.name_components[0]
 
     @property
     def text(self) -> str:
@@ -95,7 +96,7 @@ class DSDLDefinition:
 
     @property
     def version(self) -> Version:
-        return self.version
+        return self._version
 
     @property
     def regulated_port_id(self) -> typing.Optional[int]:
