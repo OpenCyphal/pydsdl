@@ -98,7 +98,7 @@ class OctalLiteral(NumericLiteral):
 
 
 class DecimalLiteral(NumericLiteral):
-    REGEXP = r'([1-9][0-9]*)(?:[^\w\.]|$)'
+    REGEXP = r'((?:[1-9][0-9]*|0))(?:[^\w\.]|$)'
 
 
 class HexadecimalLiteral(NumericLiteral):
@@ -263,6 +263,9 @@ def _unittest_tokenizer() -> None:
         @ directive
 
         float64 CONSTANT = '/'  # comment
+
+        @assert min_offset%8==-0
+        @assert min_offset % 8 == - 0
         """,
         [
             Statement(
@@ -286,6 +289,16 @@ def _unittest_tokenizer() -> None:
             Statement(
                 10,
                 Identifier('float64') + Identifier('CONSTANT') + Assignment('=') + StringLiteral("'/'")
+            ),
+            Statement(
+                12,
+                Directive('@assert') + Identifier('min_offset') + ArithmeticOperator('%') + DecimalLiteral('8') +
+                ArithmeticOperator('==') + ArithmeticOperator('-') + DecimalLiteral('0')
+            ),
+            Statement(
+                13,
+                Directive('@assert') + Identifier('min_offset') + ArithmeticOperator('%') + DecimalLiteral('8') +
+                ArithmeticOperator('==') + ArithmeticOperator('-') + DecimalLiteral('0')
             ),
         ]
     )
