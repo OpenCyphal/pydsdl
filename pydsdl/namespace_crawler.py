@@ -9,8 +9,8 @@ import logging
 import fnmatch
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
-from .dsdl_definition_parser import parse_definition
-from .error import ParseError, InternalParserError, FileNameFormatError
+from .parser import parse_definition
+from .error import ParseError, InternalError, FileNameFormatError
 from .error import RegulatedPortIDCollisionError, NamespaceNameCollisionError, NestedRootNamespaceError
 
 
@@ -99,7 +99,7 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
         except Exception as ex:
-            raise InternalParserError(culprit=ex, path=tdd.file_path) from ex
+            raise InternalError(culprit=ex, path=tdd.file_path) from ex
         else:
             types.append(parsed)
 

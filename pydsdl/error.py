@@ -56,7 +56,7 @@ class ParseError(Exception):       # PEP8 says that the "Exception" suffix is re
         return self.__class__.__name__ + ': ' + repr(self.__str__())
 
 
-class InternalParserError(ParseError):
+class InternalError(ParseError):
     """
     This exception is used to report internal errors in the parser itself that prevented it from
     processing the definitions.
@@ -77,12 +77,19 @@ class InternalParserError(ParseError):
         if not text:
             text = ''
 
-        super(InternalParserError, self).__init__(text=text, path=path, line=line)
+        super(InternalError, self).__init__(text=text, path=path, line=line)
 
 
 class InvalidDefinitionError(ParseError):
     """
     This exception is used to point out mistakes and errors in the parsed definitions.
+    """
+    pass
+
+
+class DSDLSyntaxError(InvalidDefinitionError):
+    """
+    Unexpected syntax.
     """
     pass
 
@@ -146,8 +153,8 @@ def _unittest_exception() -> None:
 
 def _unittest_internal_error_github_reporting() -> None:
     try:
-        raise InternalParserError(path='FILE_PATH',
-                                  line=42)
+        raise InternalError(path='FILE_PATH',
+                            line=42)
     except ParseError as ex:
         assert ex.path == 'FILE_PATH'
         assert ex.line == 42
@@ -156,8 +163,8 @@ def _unittest_internal_error_github_reporting() -> None:
     try:
         try:
             try:    # TRY HARDER
-                raise InternalParserError(text='BASE TEXT',
-                                          culprit=Exception('ERROR TEXT'))
+                raise InternalError(text='BASE TEXT',
+                                    culprit=Exception('ERROR TEXT'))
             except ParseError as ex:
                 ex.set_error_location_if_unknown(path='FILE_PATH')
                 raise
@@ -178,7 +185,7 @@ def _unittest_internal_error_github_reporting() -> None:
         )
 
     try:
-        raise InternalParserError(text='BASE TEXT',
-                                  path='FILE_PATH')
+        raise InternalError(text='BASE TEXT',
+                            path='FILE_PATH')
     except ParseError as ex:
         assert str(ex) == 'FILE_PATH: BASE TEXT'
