@@ -265,6 +265,7 @@ def _unittest_tokenizer() -> None:
         float64 CONSTANT = '/'  # comment
 
         @assert min_offset%8==-0
+        ---
         @assert min_offset % 8 == - 0
         """,
         [
@@ -297,6 +298,10 @@ def _unittest_tokenizer() -> None:
             ),
             Statement(
                 13,
+                [ServiceResponseMarker('---')]
+            ),
+            Statement(
+                14,
                 Directive('@assert') + Identifier('min_offset') + ArithmeticOperator('%') + DecimalLiteral('8') +
                 ArithmeticOperator('==') + ArithmeticOperator('-') + DecimalLiteral('0')
             ),
