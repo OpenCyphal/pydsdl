@@ -94,6 +94,20 @@ class DSDLSyntaxError(InvalidDefinitionError):
     pass
 
 
+class DSDLSemanticError(InvalidDefinitionError):
+    """
+    The definition is formed correctly but no sensible interpretation is defined.
+    """
+    pass
+
+
+class UndefinedDataTypeError(DSDLSemanticError):
+    """
+    A DSDL definition is referring to a data type the definition of which is not available to the parser.
+    """
+    pass
+
+
 class FileNameFormatError(InvalidDefinitionError):
     """
     Raised when a DSDL definition file is named incorrectly.
