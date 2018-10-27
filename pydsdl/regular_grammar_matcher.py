@@ -8,7 +8,8 @@ import typing
 import logging
 
 
-Handler = typing.Union[
+GrammarConstructHandler = typing.Union[
+    typing.Callable[[], typing.Any],
     typing.Callable[[str], typing.Any],
     typing.Callable[[str, str], typing.Any],
     typing.Callable[[str, str, str], typing.Any],
@@ -40,7 +41,7 @@ class RegularGrammarMatcher:
 
     def add_rule(self,
                  regular_expression: str,
-                 handler: Handler) -> None:
+                 handler: GrammarConstructHandler) -> None:
         self._rules.append((re.compile(regular_expression), handler))
 
     def match(self, text: str) -> typing.Any:
