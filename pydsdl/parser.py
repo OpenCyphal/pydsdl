@@ -11,7 +11,8 @@ from .error import ParseError, InternalError, DSDLSyntaxError, DSDLSemanticError
 from .dsdl_definition import DSDLDefinition
 from .data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType, DataType
 from .data_type import ArrayType, StaticArrayType, DynamicArrayType, CompoundType, UnionType, StructureType
-from .data_type import ServiceType, Attribute, Field, PaddingField, Constant, PrimitiveType, Version
+from .data_type import ServiceType, Attribute, Field, PaddingField, Constant, PrimitiveType
+from .data_type import TypeParameterError
 from .port_id_ranges import is_valid_regulated_service_id, is_valid_regulated_subject_id
 from .regular_grammar_matcher import RegularGrammarMatcher, InvalidGrammarError, GrammarConstructHandler
 
@@ -59,10 +60,16 @@ def parse_definition(definition: DSDLDefinition,
         'assert':     on_assert,
     }   # type: typing.Dict[str, _DirectiveHandler]
 
-    _evaluate(definition.text,
-              attribute_collections,
-              lookup_definitions,
-              directive_handlers)
+    try:
+        _evaluate(definition.text,
+                  attribute_collections,
+                  lookup_definitions,
+                  directive_handlers)
+    except ParseError as ex:  # pragma: no cover
+        ex.set_error_location_if_unknown(path=definition.file_path)
+        raise
+    except Exception as ex:  # pragma: no cover
+        raise InternalError(culprit=ex, path=definition.file_path)
 
     if len(attribute_collections) == 1:
         ac = attribute_collections[-1]
@@ -113,6 +120,8 @@ def _evaluate(definition_text:          str,
                 pass
             else:
                 assert False
+        except TypeParameterError as ex:
+            raise DSDLSemanticError(str(ex), line=line_number)
         except ParseError as ex:  # pragma: no cover
             ex.set_error_location_if_unknown(line=line_number)
             raise

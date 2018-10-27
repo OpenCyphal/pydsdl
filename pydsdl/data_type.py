@@ -3,8 +3,9 @@
 # This software is distributed under the terms of the MIT License.
 #
 
-import typing
 import enum
+import string
+import typing
 
 
 BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)])
@@ -16,11 +17,23 @@ FloatValueRange = typing.NamedTuple('RealValueRange', [('min', float), ('max', f
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
 
-class InvalidBitLengthError(ValueError):
+class TypeParameterError(ValueError):
     pass
 
 
-class InvalidNumberOfElementsError(ValueError):
+class InvalidBitLengthError(TypeParameterError):
+    pass
+
+
+class InvalidNumberOfElementsError(TypeParameterError):
+    pass
+
+
+class InvalidNameError(TypeParameterError):
+    pass
+
+
+class InvalidVersionError(TypeParameterError):
     pass
 
 
@@ -455,6 +468,10 @@ class CompoundType(DataType):
 
     MAX_VERSION_NUMBER = 255
 
+    NAME_COMPONENT_SEPARATOR = '.'
+    VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT = string.ascii_letters + '_'
+    VALID_CONTINUATION_CHARACTERS_OF_NAME_COMPONENT = VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT + string.digits
+
     def __init__(self,
                  name:              str,
                  version:           Version,
@@ -468,18 +485,26 @@ class CompoundType(DataType):
         self._regulated_port_id = None if regulated_port_id is None else int(regulated_port_id)
 
         if not self._name:
-            raise ValueError('Name cannot be empty')
+            raise InvalidNameError('Name cannot be empty')
 
         if len(self._name) > self.MAX_NAME_LENGTH:
-            raise ValueError('Name is too long: %r is longer than %d characters' %
-                             (self._name, self.MAX_NAME_LENGTH))
+            raise InvalidNameError('Name is too long: %r is longer than %d characters' %
+                                   (self._name, self.MAX_NAME_LENGTH))
+
+        for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
+            if component[0] not in self.VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT:
+                raise InvalidNameError('Name component cannot start with %r' % component[0])
+
+            for char in component:
+                if char not in self.VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT:
+                    raise InvalidNameError('Name component cannot contain %r' % char)
 
         version_valid = (0 <= self._version.major <= self.MAX_VERSION_NUMBER) and\
                         (0 <= self._version.minor <= self.MAX_VERSION_NUMBER) and\
                         ((self._version.major + self._version.minor) > 0)
 
         if not version_valid:
-            raise ValueError('Invalid version numbers: %r', self._version)
+            raise InvalidVersionError('Invalid version numbers: %r', self._version)
 
     @property
     def name(self) -> str:
