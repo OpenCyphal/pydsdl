@@ -59,7 +59,7 @@ class DSDLDefinition:
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
-        self._name = CompoundType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])
+        self._name = CompoundType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])  # type: str
 
     @property
     def name(self) -> str:
