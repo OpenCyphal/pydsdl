@@ -37,6 +37,18 @@ class InvalidVersionError(TypeParameterError):
     pass
 
 
+class ConstantTypeMismatchError(TypeParameterError):
+    pass
+
+
+class InvalidConstantValueError(TypeParameterError):
+    pass
+
+
+class InvalidTypeError(TypeParameterError):
+    pass
+
+
 class DataType:
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
@@ -416,19 +428,60 @@ class PaddingField(Field):
 
 
 class Constant(Attribute):
-    Value = typing.Union[float, int, str]
-
     def __init__(self,
                  data_type: DataType,
                  name: str,
-                 value: 'Constant.Value',
+                 value: typing.Union[bool, int, float, str],
                  initialization_expression: str):
         super(Constant, self).__init__(data_type, name)
-        self._value = value
         self._initialization_expression = str(initialization_expression)
 
+        # Type check
+        if isinstance(data_type, BooleanType):
+            if isinstance(value, bool):
+                self._value = bool(value)  # type: typing.Union[float, int, bool]
+            else:
+                raise InvalidConstantValueError('Invalid value for boolean constant: %r' % value)
+
+        elif isinstance(data_type, IntegerType):
+            if isinstance(value, int):
+                self._value = int(value)
+            elif isinstance(value, str):
+                if len(value) != 1:
+                    raise InvalidConstantValueError('A constant string must be exactly one character long')
+
+                if not isinstance(data_type, UnsignedIntegerType) or data_type.bit_length != 8:
+                    raise InvalidConstantValueError('Constant strings can be used only with uint8')
+
+                self._value = ord(value)
+            else:
+                raise InvalidConstantValueError('Invalid value for integer constant: %r' % value)
+
+        elif isinstance(data_type, FloatType):
+            if isinstance(value, (int, float)):     # Implicit conversion
+                self._value = float(value)
+            else:
+                raise InvalidConstantValueError('Invalid value for float constant: %r' % value)
+
+        else:
+            raise InvalidTypeError('Invalid constant type: %r' % data_type)
+
+        del value
+        assert isinstance(self._value, (bool, int, float))
+
+        # Range check
+        if not isinstance(data_type, BooleanType):
+            assert isinstance(data_type, (IntegerType, FloatType))
+            rng = data_type.inclusive_value_range
+            if not (rng.min <= self._value <= rng.max):
+                raise InvalidConstantValueError('Constant value %r exceeds the range of its data type %r' %
+                                                (self._value, data_type))
+
     @property
-    def value(self) -> 'Constant.Value':
+    def value(self) -> typing.Union[float, int, bool]:
+        assert isinstance(self.data_type, FloatType)   == isinstance(self._value, float)
+        assert isinstance(self.data_type, BooleanType) == isinstance(self._value, bool)
+        assert isinstance(self.data_type, IntegerType) == isinstance(self._value, int)
         return self._value
 
     @property

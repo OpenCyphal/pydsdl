@@ -194,13 +194,12 @@ def _make_constant_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _Gra
         except Exception as ex:
             raise DSDLSyntaxError('Could not evaluate the constant initialization expression: %s' % ex)
 
-        if not isinstance(value, (int, float, str)):
+        if not isinstance(value, (int, float, str, bool)):
             raise DSDLSyntaxError('Constant initialization expression yields unsupported type: %r' % value)
 
         if isinstance(value, str) and len(value) != 1:
             raise DSDLSyntaxError('Invalid constant character: %r' % value)
 
-        # TODO: enforce type compatibility, check ranges
         return Constant(data_type=t,
                         name=constant_name,
                         value=value,
