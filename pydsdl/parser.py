@@ -75,6 +75,7 @@ def parse_definition(definition: DSDLDefinition,
 
     if definition.has_regulated_port_id:
         checker = is_valid_regulated_subject_id if len(attribute_collections) == 1 else is_valid_regulated_service_id
+        assert isinstance(definition.regulated_port_id, int)
         if not checker(definition.regulated_port_id, definition.root_namespace):
             raise InvalidRegulatedPortIDError('Regulated port ID %r is not valid' % definition.regulated_port_id,
                                               path=definition.file_path)
