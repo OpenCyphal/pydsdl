@@ -304,10 +304,10 @@ def _construct_type(cast_mode: typing.Optional[str],
     g.add_rule(r'uint(\d\d?)$', lambda bw: UnsignedIntegerType(int(bw), get_cast_mode()))
 
     if allow_compound:
-        # TODO: match only correct names, add tests
-        g.add_rule(r'([a-zA-Z0-9_\.]+?)\.(\d{1,3})(?:.(\d{1,3}))?$',
-                   lambda name, v_mj, v_mn:
-                       construct_compound(name, int(v_mj), None if v_mn is None else int(v_mn)))
+        g.add_rule(r'((?:[a-zA-Z_][a-zA-Z0-9_]*?\.)+?)(\d{1,3})(?:.(\d{1,3}))?$',
+                   lambda name, v_mj, v_mn: construct_compound(name.strip('.'),
+                                                               int(v_mj),
+                                                               None if v_mn is None else int(v_mn)))
 
     try:
         t = g.match(type_name)
