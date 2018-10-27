@@ -125,6 +125,13 @@ class RegulatedPortIDCollisionError(InvalidDefinitionError):
         super(RegulatedPortIDCollisionError, self).__init__(text=text, path=str(path))
 
 
+class InvalidRegulatedPortIDError(InvalidDefinitionError):
+    """
+    Raised when the specified regulated port ID is invalid.
+    """
+    pass
+
+
 class NamespaceNameCollisionError(InvalidDefinitionError):
     """
     Raised when there is more than one namespace under the same name.

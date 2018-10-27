@@ -8,6 +8,7 @@ import typing
 import logging
 import inspect
 from .error import ParseError, InternalError, DSDLSyntaxError, DSDLSemanticError, UndefinedDataTypeError
+from .error import InvalidRegulatedPortIDError
 from .dsdl_definition import DSDLDefinition
 from .data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType, DataType
 from .data_type import ArrayType, StaticArrayType, DynamicArrayType, CompoundType, UnionType, StructureType
@@ -52,6 +53,7 @@ def parse_definition(definition: DSDLDefinition,
         is_deprecated = True
 
     def on_assert(directive_expression: str) -> None:
+        # TODO: IMPLEMENT
         raise NotImplementedError('Assertion directives are not yet implemented')
 
     directive_handlers = {
@@ -70,6 +72,12 @@ def parse_definition(definition: DSDLDefinition,
         raise
     except Exception as ex:  # pragma: no cover
         raise InternalError(culprit=ex, path=definition.file_path)
+
+    if definition.has_regulated_port_id:
+        checker = is_valid_regulated_subject_id if len(attribute_collections) == 1 else is_valid_regulated_service_id
+        if not checker(definition.regulated_port_id, definition.root_namespace):
+            raise InvalidRegulatedPortIDError('Regulated port ID %r is not valid' % definition.regulated_port_id,
+                                              path=definition.file_path)
 
     if len(attribute_collections) == 1:
         ac = attribute_collections[-1]

@@ -6,10 +6,7 @@
 import os
 import typing
 from .error import FileNameFormatError
-from .data_type import Version
-
-
-NAMESPACE_SEPARATOR = '.'
+from .data_type import Version, CompoundType
 
 
 class DSDLDefinition:
@@ -62,7 +59,7 @@ class DSDLDefinition:
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
-        self._name = NAMESPACE_SEPARATOR.join(namespace_components + [str(short_name)])
+        self._name = CompoundType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])
 
     @property
     def name(self) -> str:
@@ -72,7 +69,7 @@ class DSDLDefinition:
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(NAMESPACE_SEPARATOR)
+        return self._name.split(CompoundType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -82,7 +79,7 @@ class DSDLDefinition:
     @property
     def namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return NAMESPACE_SEPARATOR.join(self.name_components[:-1])
+        return CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1])
 
     @property
     def root_namespace(self) -> str:
