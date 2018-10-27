@@ -255,7 +255,11 @@ def _make_directive_rule(handlers: typing.Dict[str, _DirectiveHandler]) -> _Gram
         else:
             han()                           # type: ignore
 
-    return _GrammarRule(r'\s*@([a-zA-Z0-9_]+)\s*',  # TODO: finalize
+    # The fact that the DSDL grammar is so simple allows us to get by with ridiculously simple expressions here.
+    # We just take everything between the directive itself and either the end of the line or the first comment
+    # and treat it as the expression (to be handled later). Strings are not allowed inside the expression,
+    # which simplifies handling greatly.
+    return _GrammarRule(r'\s*@([a-zA-Z0-9_]+)\s*([^#]+?)?\s*(?:#.*)?$',
                         process)
 
 
@@ -411,6 +415,26 @@ def _unittest_regexp() -> None:
     validate(_make_constant_rule([]).regexp,
              "\tuint8 NAME = '#'# comment",
              (None, 'uint8', 'NAME', "'#'"))
+
+    validate(_make_directive_rule({}).regexp,
+             "@directive",
+             ('directive', None))
+
+    validate(_make_directive_rule({}).regexp,
+             " @directive # hello world",
+             ('directive', None))
+
+    validate(_make_directive_rule({}).regexp,
+             " @directive a + b == c # hello world",
+             ('directive', 'a + b == c'))
+
+    validate(_make_directive_rule({}).regexp,
+             " @directive a+b==c#hello world",
+             ('directive', 'a+b==c'))
+
+    validate(_make_directive_rule({}).regexp,
+             " @directive a+b==c",
+             ('directive', 'a+b==c'))
 
     re_empty = _make_empty_rule().regexp
     validate(re_empty, '', ())
