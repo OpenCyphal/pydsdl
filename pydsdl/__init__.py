@@ -6,7 +6,7 @@
 import sys
 from .version import __version__, __license__
 from . import _parser_test
-from .namespace_crawler import parse_namespace
+from .namespace_parser import parse_namespace
 from . import data_type
 
 

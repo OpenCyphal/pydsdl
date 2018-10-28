@@ -18,6 +18,7 @@ Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
 
 class TypeParameterError(ValueError):
+    """This exception is not related to parsing errors, so it does not inherit from the same root."""
     pass
 
 

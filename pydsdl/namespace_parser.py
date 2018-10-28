@@ -9,9 +9,8 @@ import logging
 import fnmatch
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
-from .parser import parse_definition
-from .error import ParseError, InternalError, FileNameFormatError
-from .error import RegulatedPortIDCollisionError, NamespaceNameCollisionError, NestedRootNamespaceError
+from .dsdl_parser import parse_definition
+from .parse_error import ParseError, InternalError, InvalidDefinitionError
 
 
 DSDL_FILE_GLOB = '*.uavcan'
@@ -19,6 +18,34 @@ DSDL_FILE_GLOB = '*.uavcan'
 
 _logger = logging.getLogger(__name__)
 _LOG_LIST_ITEM_PREFIX = ' ' * 4
+
+
+class NamespaceNameCollisionError(InvalidDefinitionError):
+    """
+    Raised when there is more than one namespace under the same name.
+    This may occur if there are identically named namespaces located in different directories.
+    """
+    def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
+        text = 'The name of this namespace conflicts with: %r' % colliding_paths
+        super(NamespaceNameCollisionError, self).__init__(text=text, path=str(path))
+
+
+class NestedRootNamespaceError(InvalidDefinitionError):
+    """
+    Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
+    """
+    def __init__(self, *, outer_path: str, nested_paths: typing.Iterable[str]):
+        text = 'The following namespaces are nested inside this one, which is not permitted: %r' % nested_paths
+        super(NestedRootNamespaceError, self).__init__(text=text, path=str(outer_path))
+
+
+class RegulatedPortIDCollisionError(InvalidDefinitionError):
+    """
+    Raised when there is more than one definition using the same regulated port ID.
+    """
+    def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
+        text = 'The regulated port ID of this definition is also used in: %r' % colliding_paths
+        super(RegulatedPortIDCollisionError, self).__init__(text=text, path=str(path))
 
 
 def parse_namespace(root_namespace_directory: str,
@@ -200,6 +227,7 @@ def _unittest_parse_namespace_faults() -> None:
 
 def _unittest_dsdl_definition_constructor() -> None:
     import tempfile
+    from .dsdl_definition import FileNameFormatError
 
     directory = tempfile.TemporaryDirectory()
     root_ns_dir = os.path.join(directory.name, 'foo')

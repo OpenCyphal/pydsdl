@@ -7,8 +7,7 @@ import re
 import typing
 import logging
 import inspect
-from .error import ParseError, InternalError, DSDLSyntaxError, DSDLSemanticError, UndefinedDataTypeError
-from .error import InvalidRegulatedPortIDError
+from .parse_error import ParseError, InternalError, InvalidDefinitionError
 from .dsdl_definition import DSDLDefinition
 from .data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType, DataType
 from .data_type import ArrayType, StaticArrayType, DynamicArrayType, CompoundType, UnionType, StructureType
@@ -16,6 +15,22 @@ from .data_type import ServiceType, Attribute, Field, PaddingField, Constant, Pr
 from .data_type import TypeParameterError
 from .port_id_ranges import is_valid_regulated_service_id, is_valid_regulated_subject_id
 from .regular_grammar_matcher import RegularGrammarMatcher, InvalidGrammarError, GrammarConstructHandler
+
+
+class DSDLSyntaxError(InvalidDefinitionError):
+    pass
+
+
+class SemanticError(InvalidDefinitionError):
+    pass
+
+
+class UndefinedDataTypeError(SemanticError):
+    pass
+
+
+class InvalidRegulatedPortIDError(InvalidDefinitionError):
+    pass
 
 
 _GrammarRule = typing.NamedTuple('GrammarRule', [
@@ -136,7 +151,7 @@ def _evaluate(definition_text:          str,
             else:
                 assert False
         except TypeParameterError as ex:
-            raise DSDLSemanticError(str(ex), line=line_number)
+            raise SemanticError(str(ex), line=line_number)
         except ParseError as ex:  # pragma: no cover
             ex.set_error_location_if_unknown(line=line_number)
             raise
@@ -234,7 +249,7 @@ def _make_padding_rule() -> _GrammarRule:
 def _make_service_response_marker_rule(attribute_collections: typing.List[_AttributeCollection]) -> _GrammarRule:
     def process() -> None:
         if len(attribute_collections) > 1:
-            raise DSDLSemanticError('Duplicate service response marker')
+            raise SemanticError('Duplicate service response marker')
         else:
             attribute_collections.append(_AttributeCollection())
             assert len(attribute_collections) == 2
@@ -249,17 +264,17 @@ def _make_directive_rule(handlers: typing.Dict[str, _DirectiveHandler]) -> _Gram
         try:
             han = handlers[directive_name]
         except KeyError:
-            raise DSDLSemanticError('Unknown directive: %r' % directive_name)
+            raise SemanticError('Unknown directive: %r' % directive_name)
 
         num_parameters = len(inspect.signature(han).parameters)
         assert 0 <= num_parameters <= 1, 'Invalid directive handler'
         expression_required = num_parameters > 0
 
         if expression_required and not directive_expression:
-            raise DSDLSemanticError('Directive %r requires an expression' % directive_name)
+            raise SemanticError('Directive %r requires an expression' % directive_name)
 
         if directive_expression and not expression_required:
-            raise DSDLSemanticError('Directive %r does not expect an expression' % directive_name)
+            raise SemanticError('Directive %r does not expect an expression' % directive_name)
 
         _logger.debug('Executing directive %r with expression %r', directive_name, directive_expression)
         if expression_required:
@@ -293,7 +308,7 @@ def _construct_type(cast_mode: typing.Optional[str],
 
     def construct_compound(name: str, v_major: int, v_minor: typing.Optional[int]) -> CompoundType:
         if cast_mode is not None:
-            raise DSDLSemanticError('Cast mode cannot be specified for compound data types')
+            raise SemanticError('Cast mode cannot be specified for compound data types')
 
         matching_name = list(filter(lambda x: x.name == name, lookup_definitions))
         if not matching_name:

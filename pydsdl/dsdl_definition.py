@@ -5,8 +5,16 @@
 
 import os
 import typing
-from .error import FileNameFormatError
+from .parse_error import InvalidDefinitionError
 from .data_type import Version, CompoundType
+
+
+class FileNameFormatError(InvalidDefinitionError):
+    """
+    Raised when a DSDL definition file is named incorrectly.
+    """
+    def __init__(self, text: str, path: str):
+        super(FileNameFormatError, self).__init__(text=text, path=str(path))
 
 
 class DSDLDefinition:

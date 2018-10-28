@@ -6,7 +6,7 @@
 import os
 import typing
 import tempfile
-from .parser import parse_definition
+from .dsdl_parser import parse_definition
 from .dsdl_definition import DSDLDefinition
 
 
