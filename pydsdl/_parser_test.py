@@ -8,7 +8,7 @@ import typing
 import tempfile
 from .dsdl_parser import parse_definition
 from .dsdl_definition import DSDLDefinition
-from .data_type import StructureType, UnionType, ServiceType, ArrayType
+from .data_type import StructureType, UnionType, ServiceType, ArrayType, FloatType
 
 
 _DIRECTORY = None       # type: typing.Optional[tempfile.TemporaryDirectory]
@@ -158,6 +158,7 @@ def _unittest_simple() -> None:
 
     assert len(req.constants) == 0
     assert len(req.fields) == 3
+    assert req.number_of_variants == 3
     assert req.deprecated
     assert not req.has_regulated_port_id
     assert req.version == (0, 1)
@@ -195,3 +196,35 @@ def _unittest_simple() -> None:
     assert isinstance(t, StructureType)
     assert t.name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
+
+    union = _define(
+        'another/Union.5.9.uavcan',
+        '''
+        @union
+        truncated float16 PI = 3.1415926535897932384626433
+        uint8 a
+        vendor.nested.Empty.255[5] b
+        truncated bool [ <= 255 ] c
+        '''
+    )
+
+    p = parse_definition(union, [
+        empty_old,
+        empty_new,
+    ])
+
+    assert p.name == 'another.Union'
+    assert p.version == (5, 9)
+    assert p.regulated_port_id is None
+    assert not p.has_regulated_port_id
+    assert not p.deprecated
+    assert isinstance(p, UnionType)
+    assert p.number_of_variants == 3
+    assert len(p.constants) == 1
+    assert p.constants[0].name == 'PI'
+    assert str(p.constants[0].data_type) == 'truncated float16'
+    assert p.bit_length_range == (2, 2 + 8 + 255)
+    assert len(p.fields) == 3
+    assert str(p.fields[0]) == 'saturated uint8 a'
+    assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
+    assert str(p.fields[2]) == 'truncated bool[<=255] c'
