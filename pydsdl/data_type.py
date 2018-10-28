@@ -545,6 +545,9 @@ class CompoundType(DataType):
                                    (self._name, self.MAX_NAME_LENGTH))
 
         for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
+            if not component:
+                raise InvalidNameError('Name component cannot be empty')
+
             if component[0] not in self.VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT:
                 raise InvalidNameError('Name component cannot start with %r' % component[0])
 

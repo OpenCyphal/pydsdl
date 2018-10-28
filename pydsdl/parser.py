@@ -31,6 +31,9 @@ _DirectiveHandler = typing.Union[
 ]
 
 
+_COMPOUND_ATTRIBUTE_TYPE_REGEXP = r'((?:[a-zA-Z_][a-zA-Z0-9_]*?\.)+?)(\d{1,3})(?:.(\d{1,3}))?$'
+
+
 class _AttributeCollection:
     def __init__(self) -> None:
         self.attributes = []   # type: typing.List[Attribute]
@@ -40,32 +43,34 @@ class _AttributeCollection:
 _logger = logging.getLogger(__name__)
 
 
-def parse_definition(definition: DSDLDefinition,
-                     lookup_definitions: typing.List[DSDLDefinition]) -> CompoundType:
+def parse_definition(definition:         DSDLDefinition,
+                     lookup_definitions: typing.Sequence[DSDLDefinition]) -> CompoundType:
+    _logger.info('Parsing definition %r', definition)
+
     attribute_collections = [_AttributeCollection()]
     is_deprecated = False
 
-    def on_union() -> None:
+    def mark_as_union() -> None:
         attribute_collections[-1].is_union = True
 
-    def on_deprecated() -> None:
+    def mark_deprecated() -> None:
         nonlocal is_deprecated
         is_deprecated = True
 
-    def on_assert(directive_expression: str) -> None:
+    def assert_expression(directive_expression: str) -> None:
         # TODO: IMPLEMENT
         raise NotImplementedError('Assertion directives are not yet implemented')
 
     directive_handlers = {
-        'union':      on_union,
-        'deprecated': on_deprecated,
-        'assert':     on_assert,
+        'union':      mark_as_union,
+        'deprecated': mark_deprecated,
+        'assert':     assert_expression,
     }   # type: typing.Dict[str, _DirectiveHandler]
 
     try:
         _evaluate(definition.text,
                   attribute_collections,
-                  lookup_definitions,
+                  list(lookup_definitions),
                   directive_handlers)
     except ParseError as ex:  # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
@@ -125,6 +130,7 @@ def _evaluate(definition_text:          str,
             output = grammar.match(line_text)
             if isinstance(output, Attribute):
                 attribute_collections[-1].attributes.append(output)
+                _logger.debug('Attribute constructed successfully: %r --> %r', line_text, output)
             elif output is None:
                 pass
             else:
@@ -206,9 +212,6 @@ def _make_constant_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _Gra
         if not isinstance(value, (int, float, str, bool)):
             raise DSDLSyntaxError('Constant initialization expression yields unsupported type: %r' % value)
 
-        if isinstance(value, str) and len(value) != 1:
-            raise DSDLSyntaxError('Invalid constant character: %r' % value)
-
         return Constant(data_type=t,
                         name=constant_name,
                         value=value,
@@ -258,6 +261,7 @@ def _make_directive_rule(handlers: typing.Dict[str, _DirectiveHandler]) -> _Gram
         if directive_expression and not expression_required:
             raise DSDLSemanticError('Directive %r does not expect an expression' % directive_name)
 
+        _logger.debug('Executing directive %r with expression %r', directive_name, directive_expression)
         if expression_required:
             assert directive_expression
             han(directive_expression)       # type: ignore
@@ -325,17 +329,18 @@ def _construct_type(cast_mode: typing.Optional[str],
     g.add_rule(r'uint(\d\d?)$', lambda bw: UnsignedIntegerType(int(bw), get_cast_mode()))
 
     if allow_compound:
-        g.add_rule(r'((?:[a-zA-Z_][a-zA-Z0-9_]*?\.)+?)(\d{1,3})(?:.(\d{1,3}))?$',
+        g.add_rule(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
                    lambda name, v_mj, v_mn: construct_compound(name.strip('.'),
                                                                int(v_mj),
                                                                None if v_mn is None else int(v_mn)))
-
     try:
         t = g.match(type_name)
-        assert isinstance(t, DataType)
-        return t
     except InvalidGrammarError:
         raise DSDLSyntaxError('Invalid type declaration: ' + type_name)
+    else:
+        assert isinstance(t, DataType)
+        _logger.debug('Type constructed successfully: %r --> %r', type_name, t)
+        return t
 
 
 def _evaluate_expression(expression: str) -> typing.Any:
@@ -456,3 +461,47 @@ def _unittest_regexp() -> None:
     validate(re_empty, ' "#" ', None)
     validate(re_empty, '"#"', None)
     validate(re_empty, "'#'", None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node.Heartbeat.1.2',
+             ('uavcan.node.Heartbeat.', '1', '2'))
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node.Heartbeat.1',
+             ('uavcan.node.Heartbeat.', '1', None))
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'Heartbeat.1',
+             ('Heartbeat.', '1', None))
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'a1.123',
+             ('a1.', '123', None))
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'a1.123.234',
+             ('a1.', '123', '234'))
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.1node.Heartbeat.1.2',
+             None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node..Heartbeat.1.2',
+             None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node.Heartbeat..1.2',
+             None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node.Heartbeat.1..2',
+             None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node.Heartbeat.1.2.',
+             None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'uavcan.node-Heartbeat.1.2',
+             None)

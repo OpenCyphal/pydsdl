@@ -79,7 +79,7 @@ class DSDLDefinition:
     @property
     def namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1])
+        return str(CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
