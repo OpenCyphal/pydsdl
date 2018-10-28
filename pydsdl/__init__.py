@@ -5,6 +5,9 @@
 
 import sys
 from .version import __version__, __license__
+from . import _parser_test
+from .namespace_crawler import parse_namespace
+from . import data_type
 
 
 if sys.version_info[:2] < (3, 5):   # pragma: no cover
