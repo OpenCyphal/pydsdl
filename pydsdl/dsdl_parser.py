@@ -94,36 +94,43 @@ def parse_definition(definition:         DSDLDefinition,
         raise InternalError(culprit=ex, path=definition.file_path)
 
     if definition.has_regulated_port_id:
-        checker = is_valid_regulated_subject_id if len(attribute_collections) == 1 else is_valid_regulated_service_id
+        if len(attribute_collections) == 1:
+            checker = is_valid_regulated_subject_id
+        else:
+            checker = is_valid_regulated_service_id
+
         assert isinstance(definition.regulated_port_id, int)
         if not checker(definition.regulated_port_id, definition.root_namespace):
             raise InvalidRegulatedPortIDError('Regulated port ID %r is not valid' % definition.regulated_port_id,
                                               path=definition.file_path)
 
-    if len(attribute_collections) == 1:
-        ac = attribute_collections[-1]
-        if ac.is_union:
-            return UnionType(name=definition.name,
-                             version=definition.version,
-                             attributes=ac.attributes,
-                             deprecated=is_deprecated,
-                             regulated_port_id=definition.regulated_port_id)
-        else:
-            return StructureType(name=definition.name,
+    try:
+        if len(attribute_collections) == 1:
+            ac = attribute_collections[-1]
+            if ac.is_union:
+                return UnionType(name=definition.name,
                                  version=definition.version,
                                  attributes=ac.attributes,
                                  deprecated=is_deprecated,
                                  regulated_port_id=definition.regulated_port_id)
-    else:
-        req, resp = attribute_collections       # type: _AttributeCollection, _AttributeCollection
-        return ServiceType(name=definition.name,
-                           version=definition.version,
-                           request_attributes=req.attributes,
-                           response_attributes=resp.attributes,
-                           request_is_union=req.is_union,
-                           response_is_union=resp.is_union,
-                           deprecated=is_deprecated,
-                           regulated_port_id=definition.regulated_port_id)
+            else:
+                return StructureType(name=definition.name,
+                                     version=definition.version,
+                                     attributes=ac.attributes,
+                                     deprecated=is_deprecated,
+                                     regulated_port_id=definition.regulated_port_id)
+        else:
+            req, resp = attribute_collections       # type: _AttributeCollection, _AttributeCollection
+            return ServiceType(name=definition.name,
+                               version=definition.version,
+                               request_attributes=req.attributes,
+                               response_attributes=resp.attributes,
+                               request_is_union=req.is_union,
+                               response_is_union=resp.is_union,
+                               deprecated=is_deprecated,
+                               regulated_port_id=definition.regulated_port_id)
+    except TypeParameterError as ex:
+        raise SemanticError(str(ex), path=definition.file_path)
 
 
 def _evaluate(definition:               DSDLDefinition,
@@ -152,13 +159,22 @@ def _evaluate(definition:               DSDLDefinition,
                 pass
             else:       # pragma: no cover
                 assert False
+        except InvalidGrammarError:
+            raise DSDLSyntaxError('Syntax error',
+                                  path=definition.file_path,
+                                  line=line_number)
         except TypeParameterError as ex:
-            raise SemanticError(str(ex), line=line_number)
+            raise SemanticError(str(ex),
+                                path=definition.file_path,
+                                line=line_number)
         except ParseError as ex:  # pragma: no cover
-            ex.set_error_location_if_unknown(line=line_number)
+            ex.set_error_location_if_unknown(path=definition.file_path,
+                                             line=line_number)
             raise
         except Exception as ex:  # pragma: no cover
-            raise InternalError(culprit=ex, line=line_number)
+            raise InternalError(culprit=ex,
+                                path=definition.file_path,
+                                line=line_number)
 
 
 def _make_scalar_field_rule(referer_namespace:  str,
@@ -169,7 +185,6 @@ def _make_scalar_field_rule(referer_namespace:  str,
         t = _construct_type(referer_namespace=referer_namespace,
                             cast_mode=cast_mode,
                             type_name=type_name,
-                            allow_compound=True,
                             lookup_definitions=lookup_definitions)
         return Field(t, field_name)
 
@@ -190,12 +205,9 @@ def _make_array_field_rule(referer_namespace:  str,
         e = _construct_type(referer_namespace=referer_namespace,
                             cast_mode=cast_mode,
                             type_name=type_name,
-                            allow_compound=True,
                             lookup_definitions=lookup_definitions)
-        try:
-            size = int(size_specifier)
-        except ValueError:
-            raise DSDLSyntaxError('Invalid array size specifier')
+        # The size specifier is guaranteed to be a valid integer, see the regular expression
+        size = int(size_specifier, 0)
 
         if not mode_specifier:
             t = StaticArrayType(element_type=e, size=size)              # type: ArrayType
@@ -225,15 +237,13 @@ def _make_constant_rule(referer_namespace:  str,
         t = _construct_type(referer_namespace=referer_namespace,
                             cast_mode=cast_mode,
                             type_name=type_name,
-                            allow_compound=False,                       # Compound types can't be constants
                             lookup_definitions=lookup_definitions)
         try:
             value = _evaluate_expression(initialization_expression)
+        except SyntaxError as ex:
+            raise DSDLSyntaxError('Malformed initialization expression: %s' % ex)
         except Exception as ex:
-            raise DSDLSyntaxError('Could not evaluate the constant initialization expression: %s' % ex)
-
-        if not isinstance(value, (int, float, str, bool)):
-            raise SemanticError('Constant initialization expression yields unsupported type: %r' % value)
+            raise SemanticError('Could not evaluate the constant initialization expression: %s' % ex)
 
         return Constant(data_type=t,
                         name=constant_name,
@@ -244,7 +254,7 @@ def _make_constant_rule(referer_namespace:  str,
                         r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s+'            # Type name
                         r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Constant name
                         r'\s*=\s*'                                  # Assignment
-                        r"((?:'[^']')|(?:[+\-\.0-9a-fA-Fox]+))"     # Initialization expression: int, str, float
+                        r"((?:'[^']')|(?:[+\-\.0-9a-zA-Z_]+))"      # Initialization expression
                         r'\s*(?:#.*)?$',                            # End of the line
                         constructor)
 
@@ -306,7 +316,6 @@ def _make_empty_rule() -> _GrammarRule:
 def _construct_type(referer_namespace:  str,
                     cast_mode:          typing.Optional[str],
                     type_name:          str,
-                    allow_compound:     bool,
                     lookup_definitions: typing.List[DSDLDefinition]) -> DataType:
     assert referer_namespace == referer_namespace.strip().strip(CompoundType.NAME_COMPONENT_SEPARATOR).strip()
 
@@ -359,12 +368,10 @@ def _construct_type(referer_namespace:  str,
     g.add_rule(r'float(\d\d?)$', lambda bw: FloatType(int(bw), get_cast_mode()))
     g.add_rule(r'int(\d\d?)$', lambda bw: SignedIntegerType(int(bw), get_cast_mode()))
     g.add_rule(r'uint(\d\d?)$', lambda bw: UnsignedIntegerType(int(bw), get_cast_mode()))
-
-    if allow_compound:
-        g.add_rule(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
-                   lambda name, v_mj, v_mn: construct_compound(name.strip('.'),
-                                                               int(v_mj),
-                                                               None if v_mn is None else int(v_mn)))
+    g.add_rule(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+               lambda name, v_mj, v_mn: construct_compound(name.strip('.'),
+                                                           int(v_mj),
+                                                           None if v_mn is None else int(v_mn)))
     try:
         t = g.match(type_name)
     except InvalidGrammarError:
@@ -380,8 +387,8 @@ def _evaluate_expression(expression: str) -> typing.Any:
         'locals': None,
         'globals': None,
         '__builtins__': None,
-        'true': 1,
-        'false': 0,
+        'true': True,
+        'false': False,
         'offset': None,             # TODO: offset
     }
     return eval(expression, env)

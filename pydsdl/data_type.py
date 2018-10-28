@@ -50,6 +50,10 @@ class InvalidTypeError(TypeParameterError):
     pass
 
 
+class AttributeNameCollision(TypeParameterError):
+    pass
+
+
 class DataType:
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
@@ -435,7 +439,7 @@ class Constant(Attribute):
     def __init__(self,
                  data_type: DataType,
                  name: str,
-                 value: typing.Union[bool, int, float, str],
+                 value: typing.Any,
                  initialization_expression: str):
         super(Constant, self).__init__(data_type, name)
         self._initialization_expression = str(initialization_expression)
@@ -451,27 +455,31 @@ class Constant(Attribute):
             if isinstance(value, int):
                 self._value = int(value)
             elif isinstance(value, str):
-                if len(value) != 1:
-                    raise InvalidConstantValueError('A constant string must be exactly one character long')
+                if len(value.encode('utf8')) != 1:
+                    raise InvalidConstantValueError('A constant string must be exactly one ASCII character long')
 
                 if not isinstance(data_type, UnsignedIntegerType) or data_type.bit_length != 8:
                     raise InvalidConstantValueError('Constant strings can be used only with uint8')
 
-                self._value = ord(value)
+                self._value = ord(value.encode('utf8'))
             else:
-                raise InvalidConstantValueError('Invalid value for integer constant: %r' % value)
+                raise InvalidConstantValueError('Invalid value type for integer constant: %r' % value)
 
         elif isinstance(data_type, FloatType):
-            if isinstance(value, (int, float)):     # Implicit conversion
+            # Remember, bool is a subtype of int
+            if isinstance(value, (int, float)) and not isinstance(value, bool):  # Implicit conversion
                 self._value = float(value)
             else:
-                raise InvalidConstantValueError('Invalid value for float constant: %r' % value)
+                raise InvalidConstantValueError('Invalid value type for float constant: %r' % value)
 
         else:
             raise InvalidTypeError('Invalid constant type: %r' % data_type)
 
         del value
         assert isinstance(self._value, (bool, int, float))
+        assert isinstance(self.data_type, FloatType)   == isinstance(self._value, float)
+        assert isinstance(self.data_type, BooleanType) == isinstance(self._value, bool)
+        # Note that bool is a subclass of int, so we don't check against IntegerType
 
         # Range check
         if not isinstance(data_type, BooleanType):
@@ -483,9 +491,6 @@ class Constant(Attribute):
 
     @property
     def value(self) -> typing.Union[float, int, bool]:
-        assert isinstance(self.data_type, FloatType)   == isinstance(self._value, float)
-        assert isinstance(self.data_type, BooleanType) == isinstance(self._value, bool)
-        assert isinstance(self.data_type, IntegerType) == isinstance(self._value, int)
         return self._value
 
     @property
@@ -497,7 +502,7 @@ class Constant(Attribute):
 
     def __repr__(self) -> str:
         return 'Constant(data_type=%r, name=%r, value=%r, initialization_expression=%r)' % \
-            (self.data_type, self.name, self.value, self.initialization_expression)
+            (self.data_type, self.name, self._value, self._initialization_expression)
 
 
 def _unittest_attribute() -> None:
@@ -565,6 +570,13 @@ class CompoundType(DataType):
 
         if not version_valid:
             raise InvalidVersionError('Invalid version numbers: %r', self._version)
+
+        used_names = set()      # type: typing.Set[str]
+        for a in self._attributes:
+            if a.name in used_names:
+                raise AttributeNameCollision('Multiple attributes under the same name: %r' % a.name)
+            else:
+                used_names.add(a.name)
 
     @property
     def name(self) -> str:

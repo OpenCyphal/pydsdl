@@ -6,9 +6,10 @@
 import os
 import typing
 import tempfile
-from .dsdl_parser import parse_definition
-from .dsdl_definition import DSDLDefinition
-from .data_type import StructureType, UnionType, ServiceType, ArrayType, FloatType
+from .dsdl_parser import parse_definition, InvalidRegulatedPortIDError, SemanticError, DSDLSyntaxError
+from .dsdl_parser import UndefinedDataTypeError
+from .dsdl_definition import DSDLDefinition, FileNameFormatError
+from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType, AttributeNameCollision
 
 
 _DIRECTORY = None       # type: typing.Optional[tempfile.TemporaryDirectory]
@@ -228,3 +229,129 @@ def _unittest_simple() -> None:
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
     assert str(p.fields[2]) == 'truncated bool[<=255] c'
+
+
+@_in_n_out
+def _unittest_error() -> None:
+    from pytest import raises
+
+    def standalone(rel_path: str, definition: str) -> CompoundType:
+        return parse_definition(_define(rel_path, definition), [])
+
+    with raises(InvalidRegulatedPortIDError):
+        standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
+
+    with raises(InvalidRegulatedPortIDError):
+        standalone('vendor/10000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
+
+    with raises(SemanticError, match='.*Multiple attributes under the same name.*'):
+        standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
+
+    with raises(SemanticError, match='.*tagged union cannot contain less than.*'):
+        standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
+
+    assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
+                      'bool BOOLEAN = false').constants[0].name == 'BOOLEAN'
+    with raises(SemanticError, match='.*Invalid value for boolean constant.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = 0')   # Should be false
+
+    with raises(SemanticError, match='.*Could not evaluate.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = undefined_identifier')
+
+    with raises(DSDLSyntaxError):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = -')
+
+    with raises(SemanticError, match='.*exceeds the range.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'uint10 INTEGRAL = 2000')
+
+    with raises(SemanticError, match='.*character.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint8 CH = '\u0451'")
+
+    with raises(SemanticError, match='.*uint8.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint9 CH = 'q'")
+
+    with raises(SemanticError, match='.*uint8.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 'q'")
+
+    with raises(SemanticError, match='.*type.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.0")
+
+    with raises(SemanticError, match='.*type.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = true")
+
+    with raises(SemanticError, match='.*type.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = 't'")
+
+    with raises(DSDLSyntaxError):
+        standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]')
+
+    with raises(SemanticError, match='.*ray size.*'):
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array')
+
+    with raises(SemanticError, match='.*ray size.*'):
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
+
+    with raises(SemanticError, match='.*service response marker.*'):
+        standalone('vendor/service/A.1.0.uavcan', 'bool request\n---\nbool response\n---\nbool again')
+
+    with raises(SemanticError, match='.*known directive.*'):
+        standalone('vendor/directive/A.1.0.uavcan', '@sho_tse_take')
+
+    with raises(SemanticError, match='.*requires an expression.*'):
+        standalone('vendor/directive/A.1.0.uavcan', '@assert')
+
+    with raises(SemanticError, match='.*does not expect an expression.*'):
+        standalone('vendor/directive/A.1.0.uavcan', '@union worker')
+
+    with raises(SemanticError, match='.*version number.*'):
+        standalone('vendor/version/A.0.0.uavcan', '')
+
+    with raises(SemanticError, match='.*version number.*'):
+        standalone('vendor/version/A.0.256.uavcan', '')
+
+    with raises(FileNameFormatError):
+        standalone('vendor/version/A.0..256.uavcan', '')
+
+    with raises(SemanticError, match='.*version number.*'):
+        standalone('vendor/version/A.256.0.uavcan', '')
+
+    with raises(SemanticError, match='.*cannot be specified for compound.*'):
+        standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
+
+    with raises(UndefinedDataTypeError, match='.*[Nn]o type named.*'):
+        standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
+
+    with raises(UndefinedDataTypeError, match='.*[Nn]o suitable major version'):
+        parse_definition(
+            _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+            ]
+        )
+
+    with raises(UndefinedDataTypeError, match='.*[Nn]o suitable minor version'):
+        parse_definition(
+            _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type.1.1.uavcan', ''),
+            ]
+        )
+
+    with raises(DSDLSyntaxError, match='.*Invalid type declaration.*'):
+        parse_definition(
+            _define('vendor/types/A.1.0.uavcan', 'int128 field'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type.1.1.uavcan', ''),
+            ]
+        )
+
+    with raises(SemanticError, match='.*type.*'):
+        parse_definition(
+            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type.1 VALUE = 123'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type.1.1.uavcan', ''),
+            ]
+        )
