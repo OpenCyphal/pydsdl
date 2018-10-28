@@ -49,7 +49,7 @@ class RegularGrammarMatcher:
             match = re.match(regexp, text)
             if match:
                 captured = match.groups()
-                _logger.debug('Text %r matches %r producing %r', text, regexp, captured)
+                _logger.debug('Text %r produced %r matching this: %s', text, captured, regexp.pattern)
                 return handler(*captured)
 
         raise InvalidGrammarError('Invalid grammar: %s' % text)

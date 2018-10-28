@@ -83,7 +83,7 @@ def parse_definition(definition:         DSDLDefinition,
     }   # type: typing.Dict[str, _DirectiveHandler]
 
     try:
-        _evaluate(definition.text,
+        _evaluate(definition,
                   attribute_collections,
                   list(lookup_definitions),
                   directive_handlers)
@@ -126,20 +126,22 @@ def parse_definition(definition:         DSDLDefinition,
                            regulated_port_id=definition.regulated_port_id)
 
 
-def _evaluate(definition_text:          str,
+def _evaluate(definition:               DSDLDefinition,
               attribute_collections:    typing.List[_AttributeCollection],
               lookup_definitions:       typing.List[DSDLDefinition],
               directive_handlers:       typing.Dict[str, _DirectiveHandler]) -> None:
+    ns = definition.namespace
+
     grammar = RegularGrammarMatcher()
-    grammar.add_rule(*_make_scalar_field_rule(lookup_definitions))
-    grammar.add_rule(*_make_array_field_rule(lookup_definitions))
-    grammar.add_rule(*_make_constant_rule(lookup_definitions))
+    grammar.add_rule(*_make_scalar_field_rule(ns, lookup_definitions))
+    grammar.add_rule(*_make_array_field_rule(ns, lookup_definitions))
+    grammar.add_rule(*_make_constant_rule(ns, lookup_definitions))
     grammar.add_rule(*_make_padding_rule())
     grammar.add_rule(*_make_service_response_marker_rule(attribute_collections))
     grammar.add_rule(*_make_directive_rule(directive_handlers))
     grammar.add_rule(*_make_empty_rule())
 
-    for line_index, line_text in enumerate(definition_text.splitlines(keepends=False)):
+    for line_index, line_text in enumerate(definition.text.splitlines(keepends=False)):
         line_number = line_index + 1
         try:
             output = grammar.match(line_text)
@@ -148,7 +150,7 @@ def _evaluate(definition_text:          str,
                 _logger.debug('Attribute constructed successfully: %r --> %r', line_text, output)
             elif output is None:
                 pass
-            else:
+            else:       # pragma: no cover
                 assert False
         except TypeParameterError as ex:
             raise SemanticError(str(ex), line=line_number)
@@ -159,11 +161,13 @@ def _evaluate(definition_text:          str,
             raise InternalError(culprit=ex, line=line_number)
 
 
-def _make_scalar_field_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _GrammarRule:
+def _make_scalar_field_rule(referer_namespace:  str,
+                            lookup_definitions: typing.List[DSDLDefinition]) -> _GrammarRule:
     def constructor(cast_mode: typing.Optional[str],
                     type_name: str,
                     field_name: str) -> Field:
-        t = _construct_type(cast_mode=cast_mode,
+        t = _construct_type(referer_namespace=referer_namespace,
+                            cast_mode=cast_mode,
                             type_name=type_name,
                             allow_compound=True,
                             lookup_definitions=lookup_definitions)
@@ -176,13 +180,15 @@ def _make_scalar_field_rule(lookup_definitions: typing.List[DSDLDefinition]) -> 
                         constructor)
 
 
-def _make_array_field_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _GrammarRule:
+def _make_array_field_rule(referer_namespace:  str,
+                           lookup_definitions: typing.List[DSDLDefinition]) -> _GrammarRule:
     def constructor(cast_mode: typing.Optional[str],
                     type_name: str,
                     mode_specifier: typing.Optional[str],
                     size_specifier: str,
                     field_name: str) -> Field:
-        e = _construct_type(cast_mode=cast_mode,
+        e = _construct_type(referer_namespace=referer_namespace,
+                            cast_mode=cast_mode,
                             type_name=type_name,
                             allow_compound=True,
                             lookup_definitions=lookup_definitions)
@@ -197,7 +203,7 @@ def _make_array_field_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _
             t = DynamicArrayType(element_type=e, max_size=size - 1)
         elif mode_specifier == '<=':
             t = DynamicArrayType(element_type=e, max_size=size)
-        else:
+        else:   # pragma: no cover
             raise InternalError('Choo choo bitches')
 
         return Field(t, field_name)
@@ -210,12 +216,14 @@ def _make_array_field_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _
                         constructor)
 
 
-def _make_constant_rule(lookup_definitions: typing.List[DSDLDefinition]) -> _GrammarRule:
+def _make_constant_rule(referer_namespace:  str,
+                        lookup_definitions: typing.List[DSDLDefinition]) -> _GrammarRule:
     def constructor(cast_mode: typing.Optional[str],
                     type_name: str,
                     constant_name: str,
                     initialization_expression: str) -> Constant:
-        t = _construct_type(cast_mode=cast_mode,
+        t = _construct_type(referer_namespace=referer_namespace,
+                            cast_mode=cast_mode,
                             type_name=type_name,
                             allow_compound=False,                       # Compound types can't be constants
                             lookup_definitions=lookup_definitions)
@@ -254,7 +262,7 @@ def _make_service_response_marker_rule(attribute_collections: typing.List[_Attri
             attribute_collections.append(_AttributeCollection())
             assert len(attribute_collections) == 2
 
-    return _GrammarRule(r'---\s*(?:#.*)?$',
+    return _GrammarRule(r'\s*---\s*(?:#.*)?$',
                         process)
 
 
@@ -295,10 +303,13 @@ def _make_empty_rule() -> _GrammarRule:
     return _GrammarRule(r'\s*(?:#.*)?$', lambda: None)
 
 
-def _construct_type(cast_mode: typing.Optional[str],
-                    type_name: str,
-                    allow_compound: bool,
+def _construct_type(referer_namespace:  str,
+                    cast_mode:          typing.Optional[str],
+                    type_name:          str,
+                    allow_compound:     bool,
                     lookup_definitions: typing.List[DSDLDefinition]) -> DataType:
+    assert referer_namespace == referer_namespace.strip().strip(CompoundType.NAME_COMPONENT_SEPARATOR).strip()
+
     def get_cast_mode() -> PrimitiveType.CastMode:
         return {
             'truncated': PrimitiveType.CastMode.TRUNCATED,
@@ -309,6 +320,12 @@ def _construct_type(cast_mode: typing.Optional[str],
     def construct_compound(name: str, v_major: int, v_minor: typing.Optional[int]) -> CompoundType:
         if cast_mode is not None:
             raise SemanticError('Cast mode cannot be specified for compound data types')
+
+        if CompoundType.NAME_COMPONENT_SEPARATOR not in name:
+            # Namespace not specified, this means that we're using relative reference
+            absolute_name = CompoundType.NAME_COMPONENT_SEPARATOR.join([referer_namespace, name])  # type: str
+            _logger.debug('Relative reference: %r --> %r', name, absolute_name)
+            name = absolute_name
 
         matching_name = list(filter(lambda x: x.name == name, lookup_definitions))
         if not matching_name:
@@ -330,7 +347,7 @@ def _construct_type(cast_mode: typing.Optional[str],
                                              'Requested minor version %d, found: %r' %
                                              (name, v_minor, matching_major))
 
-        if len(matching_minor) != 1:
+        if len(matching_minor) != 1:    # pragma: no cover
             raise InternalError('Unexpected ambiguity: %r' % matching_minor)
 
         definition = matching_minor[0]
@@ -381,67 +398,67 @@ def _unittest_regexp() -> None:
         else:
             assert match is None
 
-    validate(_make_scalar_field_rule([]).regexp,
+    validate(_make_scalar_field_rule('', []).regexp,
              'saturated uint8 value',
              ('saturated', 'uint8', 'value'))
 
     # This is not the intended behavior, but a side effect of the regular grammar we're using
-    validate(_make_scalar_field_rule([]).regexp,
+    validate(_make_scalar_field_rule('', []).regexp,
              'saturated uint8',
              (None, 'saturated', 'uint8'))
 
-    validate(_make_scalar_field_rule([]).regexp,
+    validate(_make_scalar_field_rule('', []).regexp,
              ' namespace.nested.TypeName.0.1  _0  # comment',
              (None, 'namespace.nested.TypeName.0.1', '_0'))
 
-    validate(_make_array_field_rule([]).regexp,
+    validate(_make_array_field_rule('', []).regexp,
              'namespace.nested.TypeName.0.1[123] _0',
              (None, 'namespace.nested.TypeName.0.1', None, '123', '_0'))
 
-    validate(_make_array_field_rule([]).regexp,
+    validate(_make_array_field_rule('', []).regexp,
              '  namespace.nested.TypeName.0.1  [   123  ]  _# comment',
              (None, 'namespace.nested.TypeName.0.1', None, '123', '_'))
 
-    validate(_make_array_field_rule([]).regexp,
+    validate(_make_array_field_rule('', []).regexp,
              'truncated type[<123] _0',
              ('truncated', 'type', '<', '123', '_0'))
 
-    validate(_make_array_field_rule([]).regexp,
+    validate(_make_array_field_rule('', []).regexp,
              'truncated type[<=123] _0',
              ('truncated', 'type', '<=', '123', '_0'))
 
-    validate(_make_array_field_rule([]).regexp,
+    validate(_make_array_field_rule('', []).regexp,
              ' truncated type  [ <= 123 ] _0',
              ('truncated', 'type', '<=', '123', '_0'))
 
     validate(_make_padding_rule().regexp, 'void1', ('1',))
     validate(_make_padding_rule().regexp, ' void64 ', ('64',))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              'uint8 NAME = 123',
              (None, 'uint8', 'NAME', '123'))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              'uint8 NAME = +123.456e+123',
              (None, 'uint8', 'NAME', '+123.456e+123'))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              'uint8 NAME = -0xabcdef',
              (None, 'uint8', 'NAME', '-0xabcdef'))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              'uint8 NAME = -0o123456',
              (None, 'uint8', 'NAME', '-0o123456'))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              ' uint8 NAME=123#comment',
              (None, 'uint8', 'NAME', '123'))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              " uint8 NAME='#'",
              (None, 'uint8', 'NAME', "'#'"))
 
-    validate(_make_constant_rule([]).regexp,
+    validate(_make_constant_rule('', []).regexp,
              "\tuint8 NAME = '#'# comment",
              (None, 'uint8', 'NAME', "'#'"))
 
@@ -464,6 +481,12 @@ def _unittest_regexp() -> None:
     validate(_make_directive_rule({}).regexp,
              " @directive a+b==c",
              ('directive', 'a+b==c'))
+
+    validate(_make_service_response_marker_rule([]).regexp, "---", ())
+    validate(_make_service_response_marker_rule([]).regexp, "\t---", ())
+    validate(_make_service_response_marker_rule([]).regexp, "---  ", ())
+    validate(_make_service_response_marker_rule([]).regexp, " ---  # whatever", ())
+    validate(_make_service_response_marker_rule([]).regexp, "---#whatever", ())
 
     re_empty = _make_empty_rule().regexp
     validate(re_empty, '', ())

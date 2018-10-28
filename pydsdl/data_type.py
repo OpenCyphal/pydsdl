@@ -58,10 +58,10 @@ class DataType:
     """
 
     @property
-    def bit_length_range(self) -> BitLengthRange:
+    def bit_length_range(self) -> BitLengthRange:   # pragma: no cover
         raise NotImplementedError
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
 
@@ -107,7 +107,7 @@ class PrimitiveType(DataType):
             self.CastMode.TRUNCATED: 'truncated',
         }[self.cast_mode]
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
     def __repr__(self) -> str:
@@ -128,7 +128,7 @@ class ArithmeticType(PrimitiveType):
                  cast_mode: PrimitiveType.CastMode):
         super(ArithmeticType, self).__init__(bit_length, cast_mode)
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
 
@@ -142,10 +142,10 @@ class IntegerType(ArithmeticType):
             raise InvalidBitLengthError('Bit length of integer types cannot be less than 2')
 
     @property
-    def inclusive_value_range(self) -> IntegerValueRange:
+    def inclusive_value_range(self) -> IntegerValueRange:   # pragma: no cover
         raise NotImplementedError
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
 
@@ -227,6 +227,9 @@ def _unittest_primitive() -> None:
         SignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
 
     with raises(InvalidBitLengthError):
+        SignedIntegerType(0, PrimitiveType.CastMode.SATURATED)
+
+    with raises(InvalidBitLengthError):
         UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
 
     with raises(InvalidBitLengthError):
@@ -291,10 +294,10 @@ class ArrayType(DataType):
         return self._element_type
 
     @property
-    def bit_length_range(self) -> BitLengthRange:
+    def bit_length_range(self) -> BitLengthRange:   # pragma: no cover
         raise NotImplementedError
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
 
@@ -596,7 +599,7 @@ class CompoundType(DataType):
         return self.regulated_port_id is not None
 
     @property
-    def bit_length_range(self) -> BitLengthRange:
+    def bit_length_range(self) -> BitLengthRange:   # pragma: no cover
         raise NotImplementedError
 
     def __str__(self) -> str:
