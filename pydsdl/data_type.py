@@ -6,6 +6,7 @@
 import enum
 import string
 import typing
+from .port_id_ranges import is_valid_regulated_subject_id, is_valid_regulated_service_id
 
 
 BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)])
@@ -51,6 +52,10 @@ class InvalidTypeError(TypeParameterError):
 
 
 class AttributeNameCollision(TypeParameterError):
+    pass
+
+
+class InvalidRegulatedPortIDError(TypeParameterError):
     pass
 
 
@@ -546,8 +551,12 @@ class CompoundType(DataType):
         self._deprecated = bool(deprecated)
         self._regulated_port_id = None if regulated_port_id is None else int(regulated_port_id)
 
+        # Name check
         if not self._name:
             raise InvalidNameError('Name cannot be empty')
+
+        if self.NAME_COMPONENT_SEPARATOR not in self._name:
+            raise InvalidNameError('Root namespace is not specified')
 
         if len(self._name) > self.MAX_NAME_LENGTH:
             raise InvalidNameError('Name is too long: %r is longer than %d characters' %
@@ -564,6 +573,7 @@ class CompoundType(DataType):
                 if char not in self.VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT:
                     raise InvalidNameError('Name component cannot contain %r' % char)
 
+        # Version check
         version_valid = (0 <= self._version.major <= self.MAX_VERSION_NUMBER) and\
                         (0 <= self._version.minor <= self.MAX_VERSION_NUMBER) and\
                         ((self._version.major + self._version.minor) > 0)
@@ -571,6 +581,7 @@ class CompoundType(DataType):
         if not version_valid:
             raise InvalidVersionError('Invalid version numbers: %r', self._version)
 
+        # Attribute check
         used_names = set()      # type: typing.Set[str]
         for a in self._attributes:
             if a.name in used_names:
@@ -578,9 +589,41 @@ class CompoundType(DataType):
             else:
                 used_names.add(a.name)
 
+        # Port ID check
+        port_id = self._regulated_port_id
+        if port_id is not None:
+            assert port_id is not None
+            if isinstance(self, ServiceType):
+                if not is_valid_regulated_service_id(port_id, self.root_namespace):
+                    raise InvalidRegulatedPortIDError('Regulated service ID %r is not valid' % port_id)
+            else:
+                if not is_valid_regulated_subject_id(port_id, self.root_namespace):
+                    raise InvalidRegulatedPortIDError('Regulated subject ID %r is not valid' % port_id)
+
     @property
     def name(self) -> str:
+        """The full name, e.g., uavcan.node.Heartbeat"""
         return self._name
+
+    @property
+    def name_components(self) -> typing.List[str]:
+        """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
+        return self._name.split(CompoundType.NAME_COMPONENT_SEPARATOR)
+
+    @property
+    def short_name(self) -> str:
+        """The last component of the full name, e.g., Heartbeat of uavcan.node.Heartbeat"""
+        return self.name_components[-1]
+
+    @property
+    def namespace(self) -> str:
+        """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
+        return str(CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+
+    @property
+    def root_namespace(self) -> str:
+        """The first component of the full name, e.g., uavcan of uavcan.node.Heartbeat"""
+        return self.name_components[0]
 
     @property
     def version(self) -> Version:
@@ -716,3 +759,43 @@ class ServiceType(CompoundType):
     def bit_length_range(self) -> BitLengthRange:
         """This data type is not directly serializable, so we always return zero."""
         return BitLengthRange(0, 0)
+
+
+def _unittest_compound_types() -> None:
+    from pytest import raises
+
+    def try_name(name: str) -> CompoundType:
+        return CompoundType(name=name,
+                            version=Version(0, 1),
+                            attributes=[],
+                            deprecated=False,
+                            regulated_port_id=None)
+
+    with raises(InvalidNameError, match='(?i).*empty.*'):
+        try_name('')
+
+    with raises(InvalidNameError, match='(?i).*root namespace.*'):
+        try_name('Type')
+
+    with raises(InvalidNameError, match='(?i).*long.*'):
+        try_name('namespace.another.deeper.' * 10 + 'LongTypeName')
+
+    with raises(InvalidNameError, match='(?i).*component.*empty.*'):
+        try_name('namespace.ns..Type')
+
+    with raises(InvalidNameError, match='(?i).*component.*empty.*'):
+        try_name('.namespace.ns.Type')
+
+    with raises(InvalidNameError, match='(?i).*cannot start with.*'):
+        try_name('namespace.0ns.Type')
+
+    with raises(InvalidNameError, match='(?i).*cannot start with.*'):
+        try_name('namespace.ns.0Type')
+
+    with raises(InvalidNameError, match='(?i).*cannot contain.*'):
+        try_name('namespace.n-s.Type')
+
+    assert try_name('root.nested.Type').name == 'root.nested.Type'
+    assert try_name('root.nested.Type').namespace == 'root.nested'
+    assert try_name('root.nested.Type').root_namespace == 'root'
+    assert try_name('root.nested.Type').short_name == 'Type'

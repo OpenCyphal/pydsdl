@@ -6,7 +6,7 @@
 import os
 import typing
 import tempfile
-from .dsdl_parser import parse_definition, InvalidRegulatedPortIDError, SemanticError, DSDLSyntaxError
+from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError
 from .dsdl_parser import UndefinedDataTypeError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
 from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType, AttributeNameCollision
@@ -238,10 +238,10 @@ def _unittest_error() -> None:
     def standalone(rel_path: str, definition: str) -> CompoundType:
         return parse_definition(_define(rel_path, definition), [])
 
-    with raises(InvalidRegulatedPortIDError):
+    with raises(SemanticError, match='(?i).*subject ID.*'):
         standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
-    with raises(InvalidRegulatedPortIDError):
+    with raises(SemanticError, match='(?i).*service ID.*'):
         standalone('vendor/10000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
     with raises(SemanticError, match='.*Multiple attributes under the same name.*'):
