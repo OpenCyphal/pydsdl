@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import re
 import enum
 import string
 import typing
@@ -20,6 +21,14 @@ Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
 _VALID_FIRST_CHARACTERS_OF_NAME = string.ascii_letters + '_'
 _VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + string.digits
+
+# Disallowed name patterns apply to any part of any name, e.g.,
+# an attribute name, a namespace component, type name, etc.
+_DISALLOWED_NAME_PATTERNS = [
+    r'(?i)(bool|uint|int|void|float)\d*$',
+    r'(?i)(saturated|truncated)$',
+    r'(?i)(con|prn|aux|nul|com\d?|lpt\d?)$',
+]
 
 
 class TypeParameterError(ValueError):
@@ -426,7 +435,7 @@ class Attribute:
         self._name = str(name)
 
         if not skip_name_check:
-            _check_name_or_namespace_component(self._name)
+            _check_name(self._name)
 
     @property
     def data_type(self) -> DataType:
@@ -571,7 +580,7 @@ class CompoundType(DataType):
                                    (self._name, self.MAX_NAME_LENGTH))
 
         for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
-            _check_name_or_namespace_component(component)
+            _check_name(component)
 
         # Version check
         version_valid = (0 <= self._version.major <= self.MAX_VERSION_NUMBER) and\
@@ -765,7 +774,7 @@ class ServiceType(CompoundType):
         return BitLengthRange(0, 0)
 
 
-def _check_name_or_namespace_component(name: str) -> None:
+def _check_name(name: str) -> None:
     if not name:
         raise InvalidNameError('Name or namespace component cannot be empty')
 
@@ -775,6 +784,10 @@ def _check_name_or_namespace_component(name: str) -> None:
     for char in name:
         if char not in _VALID_CONTINUATION_CHARACTERS_OF_NAME:
             raise InvalidNameError('Name or namespace component cannot contain %r' % char)
+
+    for pat in _DISALLOWED_NAME_PATTERNS:
+        if re.match(pat, name):
+            raise InvalidNameError('Disallowed name: %r matches the following pattern: %s' % (name, pat))
 
 
 def _unittest_compound_types() -> None:
@@ -834,15 +847,27 @@ def _unittest_compound_types() -> None:
                   deprecated=False,
                   regulated_port_id=None)
 
-    _check_name_or_namespace_component('abc')
-    _check_name_or_namespace_component('_abc')
-    _check_name_or_namespace_component('abc0')
+    _check_name('abc')
+    _check_name('_abc')
+    _check_name('abc0')
 
     with raises(InvalidNameError):
-        _check_name_or_namespace_component('0abc')
+        _check_name('0abc')
 
     with raises(InvalidNameError):
-        _check_name_or_namespace_component('a-bc')
+        _check_name('a-bc')
 
     with raises(InvalidNameError):
-        _check_name_or_namespace_component('')
+        _check_name('')
+
+    with raises(InvalidNameError):
+        _check_name('truncated')
+
+    with raises(InvalidNameError):
+        _check_name('COM1')
+
+    with raises(InvalidNameError):
+        _check_name('Aux')
+
+    with raises(InvalidNameError):
+        _check_name('float128')
