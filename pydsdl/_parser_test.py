@@ -244,10 +244,10 @@ def _unittest_error() -> None:
     with raises(SemanticError, match='(?i).*service ID.*'):
         standalone('vendor/10000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
-    with raises(SemanticError, match='.*Multiple attributes under the same name.*'):
+    with raises(SemanticError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
 
-    with raises(SemanticError, match='.*tagged union cannot contain less than.*'):
+    with raises(SemanticError, match='(?i).*tagged union cannot contain less than.*'):
         standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
@@ -255,16 +255,16 @@ def _unittest_error() -> None:
     with raises(SemanticError, match='.*Invalid value for boolean constant.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = 0')   # Should be false
 
-    with raises(SemanticError, match='.*Could not evaluate.*'):
+    with raises(SemanticError, match='(?i).*could not evaluate.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = undefined_identifier')
 
     with raises(DSDLSyntaxError):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = -')
 
-    with raises(SemanticError, match='.*exceeds the range.*'):
+    with raises(SemanticError, match='(?i).*exceeds the range.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'uint10 INTEGRAL = 2000')
 
-    with raises(SemanticError, match='.*character.*'):
+    with raises(SemanticError, match='(?i).*character.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint8 CH = '\u0451'")
 
     with raises(SemanticError, match='.*uint8.*'):
@@ -273,55 +273,55 @@ def _unittest_error() -> None:
     with raises(SemanticError, match='.*uint8.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 'q'")
 
-    with raises(SemanticError, match='.*type.*'):
+    with raises(SemanticError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.0")
 
-    with raises(SemanticError, match='.*type.*'):
+    with raises(SemanticError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = true")
 
-    with raises(SemanticError, match='.*type.*'):
+    with raises(SemanticError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = 't'")
 
     with raises(DSDLSyntaxError):
         standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]')
 
-    with raises(SemanticError, match='.*ray size.*'):
+    with raises(SemanticError, match='(?i).*array size.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array')
 
-    with raises(SemanticError, match='.*ray size.*'):
+    with raises(SemanticError, match='(?i).*array size.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
 
-    with raises(SemanticError, match='.*service response marker.*'):
+    with raises(SemanticError, match='(?i).*service response marker.*'):
         standalone('vendor/service/A.1.0.uavcan', 'bool request\n---\nbool response\n---\nbool again')
 
-    with raises(SemanticError, match='.*known directive.*'):
+    with raises(SemanticError, match='(?i).*unknown directive.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@sho_tse_take')
 
-    with raises(SemanticError, match='.*requires an expression.*'):
+    with raises(SemanticError, match='(?i).*requires an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@assert')
 
-    with raises(SemanticError, match='.*does not expect an expression.*'):
+    with raises(SemanticError, match='(?i).*does not expect an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@union worker')
 
-    with raises(SemanticError, match='.*version number.*'):
+    with raises(SemanticError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.0.uavcan', '')
 
-    with raises(SemanticError, match='.*version number.*'):
+    with raises(SemanticError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.256.uavcan', '')
 
     with raises(FileNameFormatError):
         standalone('vendor/version/A.0..256.uavcan', '')
 
-    with raises(SemanticError, match='.*version number.*'):
+    with raises(SemanticError, match='(?i).*version number.*'):
         standalone('vendor/version/A.256.0.uavcan', '')
 
-    with raises(SemanticError, match='.*cannot be specified for compound.*'):
+    with raises(SemanticError, match='(?i).*cannot be specified for compound.*'):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
 
-    with raises(UndefinedDataTypeError, match='.*[Nn]o type named.*'):
+    with raises(UndefinedDataTypeError, match='(?i).*no type named.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(UndefinedDataTypeError, match='.*[Nn]o suitable major version'):
+    with raises(UndefinedDataTypeError, match='(?i).*no suitable major version'):
         parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
             [
@@ -329,7 +329,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(UndefinedDataTypeError, match='.*[Nn]o suitable minor version'):
+    with raises(UndefinedDataTypeError, match='(?i).*no suitable minor version'):
         parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
             [
@@ -338,7 +338,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(DSDLSyntaxError, match='.*Invalid type declaration.*'):
+    with raises(DSDLSyntaxError, match='(?i).*Invalid type declaration.*'):
         parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'int128 field'),
             [
@@ -347,7 +347,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(SemanticError, match='.*type.*'):
+    with raises(SemanticError, match='(?i).*type.*'):
         parse_definition(
             _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type.1 VALUE = 123'),
             [
@@ -355,3 +355,10 @@ def _unittest_error() -> None:
                 _define('ns/Type.1.1.uavcan', ''),
             ]
         )
+
+    with raises(SemanticError, match='(?i).*circular.*'):
+        defs = [
+            _define('vendor/c_dep/A.1.0.uavcan', 'B.1 b'),
+            _define('vendor/c_dep/B.1.0.uavcan', 'A.1 b'),
+        ]
+        parse_definition(defs[0], defs)

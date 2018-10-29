@@ -56,6 +56,9 @@ _logger = logging.getLogger(__name__)
 
 def parse_definition(definition:         DSDLDefinition,
                      lookup_definitions: typing.Sequence[DSDLDefinition]) -> CompoundType:
+    if len(inspect.stack()) > 100:
+        raise SemanticError('Circular dependency')
+
     _logger.info('Parsing definition %r', definition)
 
     attribute_collections = [_AttributeCollection()]
