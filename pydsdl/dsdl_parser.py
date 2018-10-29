@@ -56,9 +56,6 @@ _logger = logging.getLogger(__name__)
 
 def parse_definition(definition:         DSDLDefinition,
                      lookup_definitions: typing.Sequence[DSDLDefinition]) -> CompoundType:
-    if len(inspect.stack()) > 100:
-        raise SemanticError('Circular dependency')
-
     _logger.info('Parsing definition %r', definition)
 
     attribute_collections = [_AttributeCollection()]
@@ -348,7 +345,13 @@ def _construct_type(referer_namespace:  str,
             raise InternalError('Unexpected ambiguity: %r' % matching_minor)
 
         definition = matching_minor[0]
-        return parse_definition(definition, lookup_definitions)
+
+        # Remove all versions of the same type from lookup definitions to prevent circular dependencies
+        lookup_definitions_without_circular_dependencies = [
+            x for x in lookup_definitions if x.name != definition.name
+        ]
+
+        return parse_definition(definition, lookup_definitions_without_circular_dependencies)
 
     g = RegularGrammarMatcher()
     g.add_rule(r'bool$', lambda: BooleanType(get_cast_mode()))

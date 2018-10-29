@@ -356,9 +356,9 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(SemanticError, match='(?i).*circular.*'):
+    with raises(UndefinedDataTypeError):
         defs = [
-            _define('vendor/c_dep/A.1.0.uavcan', 'B.1 b'),
-            _define('vendor/c_dep/B.1.0.uavcan', 'A.1 b'),
+            _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1 b'),
+            _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1 b'),
         ]
         parse_definition(defs[0], defs)
