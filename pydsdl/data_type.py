@@ -18,6 +18,10 @@ FloatValueRange = typing.NamedTuple('RealValueRange', [('min', float), ('max', f
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
 
+_VALID_FIRST_CHARACTERS_OF_NAME = string.ascii_letters + '_'
+_VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + string.digits
+
+
 class TypeParameterError(ValueError):
     """This exception is not related to parsing errors, so it does not inherit from the same root."""
     pass
@@ -56,6 +60,10 @@ class AttributeNameCollision(TypeParameterError):
 
 
 class InvalidRegulatedPortIDError(TypeParameterError):
+    pass
+
+
+class MalformedUnionError(TypeParameterError):
     pass
 
 
@@ -412,9 +420,13 @@ def _unittest_dynamic_array() -> None:
 class Attribute:
     def __init__(self,
                  data_type: DataType,
-                 name: str):
+                 name: str,
+                 skip_name_check: bool=False):
         self._data_type = data_type
         self._name = str(name)
+
+        if not skip_name_check:
+            _check_name_or_namespace_component(self._name)
 
     @property
     def data_type(self) -> DataType:
@@ -437,7 +449,7 @@ class Field(Attribute):
 
 class PaddingField(Field):
     def __init__(self, data_type: DataType):
-        super(PaddingField, self).__init__(data_type, '')
+        super(PaddingField, self).__init__(data_type, '', skip_name_check=True)
 
 
 class Constant(Attribute):
@@ -532,12 +544,8 @@ def _unittest_attribute() -> None:
 
 class CompoundType(DataType):
     MAX_NAME_LENGTH = 63
-
     MAX_VERSION_NUMBER = 255
-
     NAME_COMPONENT_SEPARATOR = '.'
-    VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT = string.ascii_letters + '_'
-    VALID_CONTINUATION_CHARACTERS_OF_NAME_COMPONENT = VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT + string.digits
 
     def __init__(self,
                  name:              str,
@@ -553,7 +561,7 @@ class CompoundType(DataType):
 
         # Name check
         if not self._name:
-            raise InvalidNameError('Name cannot be empty')
+            raise InvalidNameError('Compound type name cannot be empty')
 
         if self.NAME_COMPONENT_SEPARATOR not in self._name:
             raise InvalidNameError('Root namespace is not specified')
@@ -563,15 +571,7 @@ class CompoundType(DataType):
                                    (self._name, self.MAX_NAME_LENGTH))
 
         for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
-            if not component:
-                raise InvalidNameError('Name component cannot be empty')
-
-            if component[0] not in self.VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT:
-                raise InvalidNameError('Name component cannot start with %r' % component[0])
-
-            for char in component:
-                if char not in self.VALID_FIRST_CHARACTERS_OF_NAME_COMPONENT:
-                    raise InvalidNameError('Name component cannot contain %r' % char)
+            _check_name_or_namespace_component(component)
 
         # Version check
         version_valid = (0 <= self._version.major <= self.MAX_VERSION_NUMBER) and\
@@ -689,8 +689,12 @@ class UnionType(CompoundType):
                                         regulated_port_id=regulated_port_id)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
-            raise InvalidNumberOfElementsError('A tagged union cannot contain less than %d variants' %
-                                               self.MIN_NUMBER_OF_VARIANTS)
+            raise MalformedUnionError('A tagged union cannot contain less than %d variants' %
+                                      self.MIN_NUMBER_OF_VARIANTS)
+
+        for a in attributes:
+            if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
+                raise MalformedUnionError('Padding fields not allowed in unions')
 
     @property
     def number_of_variants(self) -> int:
@@ -761,6 +765,18 @@ class ServiceType(CompoundType):
         return BitLengthRange(0, 0)
 
 
+def _check_name_or_namespace_component(name: str) -> None:
+    if not name:
+        raise InvalidNameError('Name or namespace component cannot be empty')
+
+    if name[0] not in _VALID_FIRST_CHARACTERS_OF_NAME:
+        raise InvalidNameError('Name or namespace component cannot start with %r' % name[0])
+
+    for char in name:
+        if char not in _VALID_CONTINUATION_CHARACTERS_OF_NAME:
+            raise InvalidNameError('Name or namespace component cannot contain %r' % char)
+
+
 def _unittest_compound_types() -> None:
     from pytest import raises
 
@@ -799,3 +815,34 @@ def _unittest_compound_types() -> None:
     assert try_name('root.nested.Type').namespace == 'root.nested'
     assert try_name('root.nested.Type').root_namespace == 'root'
     assert try_name('root.nested.Type').short_name == 'Type'
+
+    with raises(MalformedUnionError, match='.*variants.*'):
+        UnionType(name='a.A',
+                  version=Version(0, 1),
+                  attributes=[],
+                  deprecated=False,
+                  regulated_port_id=None)
+
+    with raises(MalformedUnionError, match='(?i).*padding.*'):
+        UnionType(name='a.A',
+                  version=Version(0, 1),
+                  attributes=[
+                      Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
+                      Field(SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'b'),
+                      PaddingField(VoidType(16)),
+                  ],
+                  deprecated=False,
+                  regulated_port_id=None)
+
+    _check_name_or_namespace_component('abc')
+    _check_name_or_namespace_component('_abc')
+    _check_name_or_namespace_component('abc0')
+
+    with raises(InvalidNameError):
+        _check_name_or_namespace_component('0abc')
+
+    with raises(InvalidNameError):
+        _check_name_or_namespace_component('a-bc')
+
+    with raises(InvalidNameError):
+        _check_name_or_namespace_component('')

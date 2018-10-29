@@ -9,7 +9,7 @@ import tempfile
 from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError
 from .dsdl_parser import UndefinedDataTypeError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
-from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType, AttributeNameCollision
+from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType
 
 
 _DIRECTORY = None       # type: typing.Optional[tempfile.TemporaryDirectory]
