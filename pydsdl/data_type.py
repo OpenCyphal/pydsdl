@@ -794,14 +794,14 @@ class UnionType(CompoundType):
         return len(self.fields)
 
     @property
-    def union_tag_bit_length(self) -> int:
+    def tag_bit_length(self) -> int:
         return (self.number_of_variants - 1).bit_length()
 
     @property
     def bit_length_range(self) -> BitLengthRange:
         blr = [f.data_type.bit_length_range for f in self.fields]
-        return BitLengthRange(min=self.union_tag_bit_length + min([b.min for b in blr]),
-                              max=self.union_tag_bit_length + max([b.max for b in blr]))
+        return BitLengthRange(min=self.tag_bit_length + min([b.min for b in blr]),
+                              max=self.tag_bit_length + max([b.max for b in blr]))
 
     @property
     def bit_length_values(self) -> typing.Set[int]:
@@ -812,7 +812,7 @@ class UnionType(CompoundType):
         for f in self.fields:
             combinations |= f.data_type.bit_length_values
 
-        return set(map(lambda c: self.union_tag_bit_length + c, combinations))
+        return set(map(lambda c: self.tag_bit_length + c, combinations))
 
 
 class StructureType(CompoundType):
