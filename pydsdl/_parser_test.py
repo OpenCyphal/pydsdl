@@ -362,3 +362,27 @@ def _unittest_error() -> None:
             _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1 b'),
         ]
         parse_definition(defs[0], defs)
+
+    with raises(SemanticError, match='(?i).*union directive.*'):
+        parse_definition(
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2 field\n@union'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+            ]
+        )
+
+    with raises(SemanticError, match='(?i).*deprecated directive.*'):
+        parse_definition(
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2 field\n@deprecated'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+            ]
+        )
+
+    with raises(SemanticError, match='(?i).*deprecated directive.*'):
+        parse_definition(
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2 field\n---\n@deprecated'),
+            [
+                _define('ns/Type.2.0.uavcan', ''),
+            ]
+        )
