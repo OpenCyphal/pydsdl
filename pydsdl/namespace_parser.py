@@ -9,7 +9,7 @@ import logging
 import fnmatch
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
-from .dsdl_parser import parse_definition
+from .dsdl_parser import parse_definition, PrintDirectiveOutputHandler
 from .parse_error import ParseError, InternalError, InvalidDefinitionError
 
 
@@ -26,7 +26,7 @@ class NamespaceNameCollisionError(InvalidDefinitionError):
     This may occur if there are identically named namespaces located in different directories.
     """
     def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
-        text = 'The name of this namespace conflicts with: %r' % colliding_paths
+        text = 'The name of this namespace conflicts with: %r' % list(colliding_paths)
         super(NamespaceNameCollisionError, self).__init__(text=text, path=str(path))
 
 
@@ -35,7 +35,7 @@ class NestedRootNamespaceError(InvalidDefinitionError):
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
     """
     def __init__(self, *, outer_path: str, nested_paths: typing.Iterable[str]):
-        text = 'The following namespaces are nested inside this one, which is not permitted: %r' % nested_paths
+        text = 'The following namespaces are nested inside this one, which is not permitted: %r' % list(nested_paths)
         super(NestedRootNamespaceError, self).__init__(text=text, path=str(outer_path))
 
 
@@ -44,12 +44,14 @@ class RegulatedPortIDCollisionError(InvalidDefinitionError):
     Raised when there is more than one definition using the same regulated port ID.
     """
     def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
-        text = 'The regulated port ID of this definition is also used in: %r' % colliding_paths
+        text = 'The regulated port ID of this definition is also used in: %r' % list(colliding_paths)
         super(RegulatedPortIDCollisionError, self).__init__(text=text, path=str(path))
 
 
-def parse_namespace(root_namespace_directory: str,
-                    lookup_directories: typing.Iterable[str]) -> typing.List[CompoundType]:
+def parse_namespace(root_namespace_directory:       str,
+                    lookup_directories:             typing.Iterable[str],
+                    print_directive_output_handler: typing.Optional[PrintDirectiveOutputHandler]=None) -> \
+        typing.List[CompoundType]:
     """
     Parse all DSDL definitions in the specified root namespace directory.
 
@@ -62,6 +64,10 @@ def parse_namespace(root_namespace_directory: str,
                                         a path to the standard root namespace "uavcan", otherwise the types defined in
                                         the vendor-specific namespace won't be able to use data types from the standard
                                         namespace.
+
+    :param print_directive_output_handler:  If provided, this callable will be invoked when a @print directive is
+                                            encountered. If not provided, print directives will not produce any output
+                                            except for the log (at the INFO level).
 
     :return: A list of CompoundType.
 
@@ -96,7 +102,9 @@ def parse_namespace(root_namespace_directory: str,
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     # Parse the constructed definitions
-    types = _parse_namespace_definitions(target_dsdl_definitions, lookup_dsdl_definitions)
+    types = _parse_namespace_definitions(target_dsdl_definitions,
+                                         lookup_dsdl_definitions,
+                                         print_directive_output_handler)
 
     # Note that we check for collisions in the parsed namespace only.
     # We intentionally ignore (do not check for) possible collisions in the lookup directories,
@@ -105,14 +113,16 @@ def parse_namespace(root_namespace_directory: str,
     # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
     # by the third party.
     _ensure_no_regulated_port_id_collisions(types)
-
-    # TODO: versioning constraints check
+    _ensure_major_version_binary_compatibility(types)
+    _ensure_correct_regulated_port_id_versioning(types)
 
     return types
 
 
 def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition],
-                                 lookup_definitions: typing.List[DSDLDefinition]) -> typing.List[CompoundType]:
+                                 lookup_definitions: typing.List[DSDLDefinition],
+                                 print_handler:      typing.Optional[PrintDirectiveOutputHandler]) -> \
+        typing.List[CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
     Allow the target definitions to use the lookup definitions within themselves.
@@ -123,7 +133,9 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
     types = []  # type: typing.List[CompoundType]
     for tdd in target_definitions:
         try:
-            parsed = parse_definition(tdd, lookup_definitions)
+            parsed = parse_definition(tdd,
+                                      lookup_definitions,
+                                      print_handler=print_handler)
         except ParseError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
@@ -148,6 +160,14 @@ def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) ->
                         if a.regulated_port_id == b.regulated_port_id:
                             raise RegulatedPortIDCollisionError(path=a.source_file_path,
                                                                 colliding_paths=[b.source_file_path])
+
+
+def _ensure_major_version_binary_compatibility(types: typing.List[CompoundType]) -> None:
+    pass    # TODO: IMPLEMENT
+
+
+def _ensure_correct_regulated_port_id_versioning(types: typing.List[CompoundType]) -> None:
+    pass    # TODO: IMPLEMENT
 
 
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:

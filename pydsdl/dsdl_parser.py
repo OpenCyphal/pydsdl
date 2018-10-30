@@ -35,7 +35,7 @@ class UndefinedDataTypeError(SemanticError):
 
 # Arguments: emitting definition, line number, value to print
 # The lines are numbered starting from one
-PrintHandler = typing.Callable[[DSDLDefinition, int, typing.Any], None]
+PrintDirectiveOutputHandler = typing.Callable[[DSDLDefinition, int, typing.Any], None]
 
 
 _GrammarRule = typing.NamedTuple('GrammarRule', [
@@ -95,7 +95,7 @@ _logger = logging.getLogger(__name__)
 
 def parse_definition(definition:         DSDLDefinition,
                      lookup_definitions: typing.Sequence[DSDLDefinition],
-                     print_handler:      typing.Optional[PrintHandler]=None) -> CompoundType:
+                     print_handler:      typing.Optional[PrintDirectiveOutputHandler]=None) -> CompoundType:
     _logger.info('Parsing definition %r', definition)
 
     attribute_collections = [_AttributeCollection()]
