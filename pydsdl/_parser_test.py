@@ -79,6 +79,8 @@ def _unittest_simple() -> None:
     print('Parsed:', p)
     assert isinstance(p, StructureType)
     assert p.name == 'vendor.nested.Abc'
+    assert p.source_file_path.endswith('vendor/nested/58000.Abc.1.2.uavcan')
+    assert p.source_file_path == abc.file_path
     assert p.regulated_port_id == 58000
     assert p.deprecated
     assert p.version == (1, 2)

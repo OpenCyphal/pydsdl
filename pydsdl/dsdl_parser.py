@@ -199,13 +199,15 @@ def parse_definition(definition:         DSDLDefinition,
                                  version=definition.version,
                                  attributes=ac.attributes,
                                  deprecated=is_deprecated,
-                                 regulated_port_id=definition.regulated_port_id)    # type: CompoundType
+                                 regulated_port_id=definition.regulated_port_id,
+                                 source_file_path=definition.file_path)    # type: CompoundType
             else:
                 tout = StructureType(name=definition.name,
                                      version=definition.version,
                                      attributes=ac.attributes,
                                      deprecated=is_deprecated,
-                                     regulated_port_id=definition.regulated_port_id)
+                                     regulated_port_id=definition.regulated_port_id,
+                                     source_file_path=definition.file_path)
 
             assert isinstance(tout, (StructureType, UnionType))
             ac.execute_postponed_expressions(tout)
@@ -218,7 +220,8 @@ def parse_definition(definition:         DSDLDefinition,
                                request_is_union=req.is_union,
                                response_is_union=res.is_union,
                                deprecated=is_deprecated,
-                               regulated_port_id=definition.regulated_port_id)
+                               regulated_port_id=definition.regulated_port_id,
+                               source_file_path=definition.file_path)
 
             assert isinstance(tout, ServiceType)
             for ac, dt in [
