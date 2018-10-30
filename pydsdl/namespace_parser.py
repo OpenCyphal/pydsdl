@@ -73,9 +73,9 @@ def parse_namespace(root_namespace_directory: str,
     # Normalize paths
     root_namespace_directory = os.path.abspath(root_namespace_directory)
     lookup_directories = list(map(lambda d: str(os.path.abspath(d)), lookup_directories))
-    _logger.info('Lookup directories are listed below:')
+    _logger.debug('Lookup directories are listed below:')
     for a in lookup_directories:
-        _logger.info(_LOG_LIST_ITEM_PREFIX + a)
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
     # Check the namespaces
     _ensure_no_nested_root_namespaces(lookup_directories)
@@ -106,6 +106,8 @@ def parse_namespace(root_namespace_directory: str,
     # by the third party.
     _ensure_no_regulated_port_id_collisions(types)
 
+    # TODO: versioning constraints check
+
     return types
 
 
@@ -122,10 +124,10 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
     for tdd in target_definitions:
         try:
             parsed = parse_definition(tdd, lookup_definitions)
-        except ParseError as ex:
+        except ParseError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
-        except Exception as ex:
+        except Exception as ex:     # pragma: no cover
             raise InternalError(culprit=ex, path=tdd.file_path) from ex
         else:
             types.append(parsed)
@@ -144,8 +146,8 @@ def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) ->
                 if isinstance(a, ServiceType) == isinstance(b, ServiceType):
                     if a.has_regulated_port_id and b.has_regulated_port_id:
                         if a.regulated_port_id == b.regulated_port_id:
-                            # TODO: IMPLEMENT THE PATH EXTRACTION LOGIC
-                            raise RegulatedPortIDCollisionError(path='FIXME PLEASE', colliding_paths=[])
+                            raise RegulatedPortIDCollisionError(path=a.source_file_path,
+                                                                colliding_paths=[b.source_file_path])
 
 
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:
@@ -191,9 +193,9 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
         for filename in fnmatch.filter(filenames, DSDL_FILE_GLOB):
             source_file_paths.append(os.path.join(root, filename))
 
-    _logger.info('DSDL files in the namespace dir %r are listed below:', root_namespace_path)
+    _logger.debug('DSDL files in the namespace dir %r are listed below:', root_namespace_path)
     for a in source_file_paths:
-        _logger.info(_LOG_LIST_ITEM_PREFIX + a)
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
     output = []  # type: typing.List[DSDLDefinition]
     for fp in source_file_paths:
@@ -201,6 +203,75 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
         output.append(dsdl_def)
 
     return output
+
+
+def _unittest_parse_namespace() -> None:
+    from pytest import raises
+    import tempfile
+    directory = tempfile.TemporaryDirectory()
+
+    def _define(rel_path: str, text: str) -> None:
+        path = os.path.join(directory.name, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(text)
+
+    _define(
+        'zubax/First.1.0.uavcan',
+        """
+        uint8[<256] a
+        @assert offset.min == 8
+        @assert offset.max == 2048
+        """
+    )
+
+    _define(
+        'zubax/58001.Message.1.0.uavcan',
+        """
+        void6
+        zubax.First.1[<=2] a
+        @assert offset.min == 8
+        @assert offset.max == 4104
+        """
+    )
+
+    _define(
+        'zubax/nested/300.Spartans.30.0.uavcan',
+        """
+        @deprecated
+        @union
+        float16 small
+        float32 just_right
+        float64 woah
+        ---
+        """
+    )
+
+    _define('zubax/nested/300.Spartans.30.0.txt', 'completely unrelated stuff')
+    _define('zubax/300.Spartans.30.0', 'completely unrelated stuff')
+
+    parsed = parse_namespace(
+        os.path.join(directory.name, 'zubax'),
+        []
+    )
+    print(parsed)
+    assert len(parsed) == 3
+    assert 'zubax.First' in [x.name for x in parsed]
+    assert 'zubax.Message' in [x.name for x in parsed]
+    assert 'zubax.nested.Spartans' in [x.name for x in parsed]
+
+    _define(
+        'zubax/colliding/300.Iceberg.30.0.uavcan',
+        """
+        ---
+        """
+    )
+
+    with raises(RegulatedPortIDCollisionError):
+        parse_namespace(
+            os.path.join(directory.name, 'zubax'),
+            []
+        )
 
 
 def _unittest_parse_namespace_faults() -> None:
