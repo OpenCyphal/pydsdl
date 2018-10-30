@@ -7,7 +7,7 @@ import os
 import typing
 import tempfile
 from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError
-from .dsdl_parser import UndefinedDataTypeError
+from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
 from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType
 
@@ -464,3 +464,124 @@ def _unittest_print() -> None:
     assert printed_items[0].name == 'ns.ComplexOffset'
     assert printed_items[1] == 3
     assert printed_items[2] == {4, 12, 20, 28, 36}
+
+
+@_in_n_out
+def _unittest_assert() -> None:
+    from pytest import raises
+
+    parse_definition(
+        _define(
+            'ns/A.1.0.uavcan',
+            '''
+            @assert offset == {0}
+            @assert offset.min == offset.max
+            Array.1[2] bar
+            @assert offset == {4, 12, 20, 28, 36}
+            @assert offset.min == 4
+            @assert offset.max == 36
+            @assert offset % 4 == {0}
+            @assert offset % 8 == {4}
+            @assert offset % 10 == {4, 2, 0, 8, 6}
+            @assert offset * 2 == {8, 24, 40, 56, 72}
+            @assert 2 * offset == {8, 24, 40, 56, 72}
+            @assert offset / 4 == {1, 3, 5, 7, 9}
+            @assert offset - 4 == {0, 8, 16, 24, 32}
+            @assert offset + 4 == {8, 16, 24, 32, 40}
+            uint64 big
+            @assert offset - 64 == {4, 12, 20, 28, 36}
+            @assert offset.min == 68
+            @assert offset.max == 100  # 36 + 64
+            @assert offset == offset
+            '''),
+        [
+            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
+        ]
+    )
+
+    with raises(SemanticError, match='(?i).*invalid operand.*'):
+        parse_definition(
+            _define(
+                'ns/B.1.0.uavcan',
+                '''
+                uint64 big
+                @assert offset == {64}
+                @assert offset + 1.0 == {64}
+                '''),
+            []
+        )
+
+    with raises(SemanticError, match='(?i).*cannot be compared.*'):
+        parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                '''
+                uint64 big
+                @assert offset == 64
+                '''),
+            []
+        )
+
+    parse_definition(
+        _define(
+            'ns/D.1.0.uavcan',
+            '''
+            @union
+            float32 a
+            uint64 b
+            @assert offset == {33, 65}
+            '''),
+        []
+    )
+
+    parse_definition(
+        _define(
+            'ns/E.1.0.uavcan',
+            '''
+            @union
+            uint8 A = 0
+            float32 a
+            uint8 B = 1
+            uint64 b
+            uint8 C = 2
+            @assert offset == {33, 65}
+            uint8 D = 3
+            '''),
+        []
+    )
+
+    with raises(SemanticError, match='(?i).*unions.*'):
+        parse_definition(
+            _define(
+                'ns/F.1.0.uavcan',
+                '''
+                @union
+                @assert offset.min == 33
+                float32 a
+                uint64 b
+                @assert offset == {33, 65}
+                '''),
+            []
+        )
+
+    with raises(AssertionCheckFailureError):
+        parse_definition(
+            _define(
+                'ns/G.1.0.uavcan',
+                '''
+                float32 a
+                @assert offset.min == 8
+                '''),
+            []
+        )
+
+    with raises(SemanticError, match='(?i).*yield a boolean.*'):
+        parse_definition(
+            _define(
+                'ns/H.1.0.uavcan',
+                '''
+                float32 a
+                @assert offset.min
+                '''),
+            []
+        )

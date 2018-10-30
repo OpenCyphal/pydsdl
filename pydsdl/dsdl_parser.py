@@ -7,6 +7,7 @@ import re
 import typing
 import logging
 import inspect
+import operator
 from .parse_error import ParseError, InternalError, InvalidDefinitionError
 from .dsdl_definition import DSDLDefinition
 from .data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType, DataType
@@ -180,7 +181,7 @@ def parse_definition(definition:         DSDLDefinition,
             elif output is None:
                 pass
 
-            else:
+            else:   # pragma: no cover
                 assert False, 'Unexpected output'
 
     except ParseError as ex:  # pragma: no cover
@@ -227,6 +228,7 @@ def parse_definition(definition:         DSDLDefinition,
                 assert isinstance(dt, (StructureType, UnionType))
                 ac.execute_postponed_expressions(dt)
 
+        assert isinstance(tout, CompoundType)
         return tout
     except TypeParameterError as ex:
         raise SemanticError(str(ex), path=definition.file_path)
@@ -494,7 +496,7 @@ class _OffsetValue:
                     self._set_cache = self._data_type.get_field_offset_values(field_index=self._next_field_index)
                 elif isinstance(self._data_type, UnionType):
                     raise SemanticError('Inter-field min/max offset is not defined for unions')
-                else:
+                else:   # pragma: no cover
                     assert False, 'Ill-defined offset'
 
         assert len(self._set_cache) > 0, 'Empty BLV sets are forbidden'
@@ -508,18 +510,43 @@ class _OffsetValue:
     def max(self) -> int:
         return max(self._set)   # Can be optimized for the case when next_field_index == len(fields)
 
+    def _do_element_wise(self,
+                         element_operator: typing.Callable[[int, int], int],
+                         right_hand_operand: int) -> typing.Set[int]:
+        if isinstance(right_hand_operand, int):
+            return set(map(lambda x: element_operator(x, right_hand_operand), self._set))
+        else:
+            raise SemanticError('Invalid operand %r' % right_hand_operand)
+
     def __eq__(self, other: typing.Any) -> bool:
         if isinstance(other, set):
             return other == self._set
-        elif isinstance(other, int):
-            return (self._set == {other}) if len(self._set) == 1 else False
         elif isinstance(other, _OffsetValue):
             return self._set == other._set
         else:
             raise SemanticError('Offset cannot be compared against %r' % other)
 
+    def __mod__(self, other: int) -> typing.Set[int]:
+        return self._do_element_wise(operator.mod, other)
+
+    def __add__(self, other: int) -> typing.Set[int]:
+        return self._do_element_wise(operator.add, other)
+
+    def __sub__(self, other: int) -> typing.Set[int]:
+        return self._do_element_wise(operator.sub, other)
+
+    def __mul__(self, other: int) -> typing.Set[int]:
+        return self._do_element_wise(operator.mul, other)
+
+    def __truediv__(self, other: int) -> typing.Set[int]:
+        """Floor division using the true division syntax"""
+        return self._do_element_wise(operator.floordiv, other)
+
+    __rmul__ = __mul__
+    __radd__ = __add__
+
     def __str__(self) -> str:
-        return str(self._set or '{}')   # Empty BLV sets are forbidden, but we handle that anyway
+        return str(self._set or '{}')
 
     __repr__ = __str__
 
