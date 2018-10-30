@@ -92,10 +92,11 @@ class DataType:
     def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         """
         A set of all possible bit length values for the encoded representation of the data type.
+        With complex data types, a full bit length set estimation may lead to a combinatorial explosion.
+        This property must never return an empty set.
         The following invariants hold:
         >>> self.bit_length_range.min == min(self.bit_length_values)
         >>> self.bit_length_range.max == max(self.bit_length_values)
-        The full bit length set estimation may lead to a combinatorial explosion.
         """
         raise NotImplementedError
 
@@ -824,15 +825,29 @@ class StructureType(CompoundType):
 
     @property
     def bit_length_values(self) -> typing.Set[int]:
+        return self.get_field_offset_values(field_index=len(self.fields))
+
+    def get_field_offset_values(self, field_index: int) -> typing.Set[int]:
+        """
+        This function is mostly useful for field alignment and offset checks.
+        :param field_index: Limits the output set as if the structure were to end before the
+                            specified field index. If set to len(self.fields), makes the function
+                            behave as the bit_length_values property.
+        """
+        if not (0 <= field_index <= len(self.fields)):      # pragma: no cover
+            raise ValueError('Invalid field index: %d' % field_index)
+
         # As far as bit length combinations are concerned, structures are similar to static arrays.
         # Please refer to the bit length computation method for static arrays for reference.
         # The difference here is that the length value sets are not homogeneous across fields, as they
         # can be of different types, which sets structures apart from arrays. So instead of looking for
         # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
         # For large structures with dynamic arrays this can be very computationally expensive.
-        blv_sets = [x.data_type.bit_length_values for x in self.fields]
+        blv_sets = [x.data_type.bit_length_values for x in self.fields[:field_index]]
         combinations = itertools.product(*blv_sets)
-        return set(map(sum, combinations))
+
+        # The property protocol prohibits empty sets at the output
+        return set(map(sum, combinations)) or {0}
 
 
 class ServiceType(CompoundType):
@@ -885,8 +900,8 @@ class ServiceType(CompoundType):
 
     @property
     def bit_length_values(self) -> typing.Set[int]:
-        """This data type is not directly serializable, so we always return an empty set."""
-        return set()
+        """This data type is not directly serializable, so we always return zero. Empty sets are forbidden."""
+        return {0}
 
 
 def _check_name(name: str) -> None:
@@ -1029,6 +1044,8 @@ def _unittest_compound_types() -> None:
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
     ]).bit_length_values == {32}
+
+    assert try_struct_fields([]).bit_length_values == {0}   # Empty sets forbidden
 
     assert try_struct_fields([
         outer,

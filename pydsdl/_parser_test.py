@@ -144,7 +144,7 @@ def _unittest_simple() -> None:
     assert p.deprecated
     assert p.version == (0, 1)
     assert p.bit_length_range == (0, 0)     # This is because it's a service
-    assert p.bit_length_values == set()     # Same thing
+    assert p.bit_length_values == {0}       # Same thing
     assert not p.constants
 
     assert len(p.fields) == 2
@@ -387,3 +387,80 @@ def _unittest_error() -> None:
                 _define('ns/Type.2.0.uavcan', ''),
             ]
         )
+
+
+@_in_n_out
+def _unittest_print() -> None:
+    printed_items = None    # type: typing.Optional[typing.Tuple[DSDLDefinition, int, typing.Any]]
+
+    def print_handler(definition: DSDLDefinition, line_number: int, value: typing.Any) -> None:
+        nonlocal printed_items
+        printed_items = definition, line_number, value
+
+    parse_definition(
+        _define(
+            'ns/A.1.0.uavcan',
+            '''# line number 1
+            # line number 2
+            @print 2 + 2 == 4   # line number 3
+            # line number 4
+            '''),
+        [],
+        print_handler=print_handler
+    )
+    assert printed_items
+    assert printed_items[0].name == 'ns.A'
+    assert printed_items[1] == 3
+    assert printed_items[2]
+
+    parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], print_handler=print_handler)
+    assert printed_items
+    assert printed_items[0].name == 'ns.B'
+    assert printed_items[1] == 1
+    assert not printed_items[2]
+
+    parse_definition(
+        _define(
+            'ns/Offset.1.0.uavcan',
+            '''@print offset    # Not recorded
+            uint8 a
+            @print offset
+            '''),
+        [],
+        print_handler=print_handler
+    )
+    assert printed_items
+    assert printed_items[0].name == 'ns.Offset'
+    assert printed_items[1] == 3
+    assert printed_items[2] == {8}
+
+    # The nested type has the following set: {2, 10, 18}.
+    # We can have up to two elements of that type, so what we get can be expressed graphically as follows:
+    #    A   B | +
+    # ---------+------
+    #    2   2 |  4
+    #   10   2 | 12
+    #   18   2 | 20
+    #    2  10 | 12
+    #   10  10 | 20
+    #   18  10 | 28
+    #    2  18 | 20
+    #   10  18 | 28
+    #   18  18 | 36
+    # If we were to remove duplicates, we end up with: {4, 12, 20, 28, 36}
+    parse_definition(
+        _define(
+            'ns/ComplexOffset.1.0.uavcan',
+            '''
+            Array.1[2] bar
+            @print offset
+            '''),
+        [
+            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
+        ],
+        print_handler=print_handler
+    )
+    assert printed_items
+    assert printed_items[0].name == 'ns.ComplexOffset'
+    assert printed_items[1] == 3
+    assert printed_items[2] == {4, 12, 20, 28, 36}

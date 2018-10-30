@@ -13,7 +13,6 @@ from .data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, Floa
 from .data_type import ArrayType, StaticArrayType, DynamicArrayType, CompoundType, UnionType, StructureType
 from .data_type import ServiceType, Attribute, Field, PaddingField, Constant, PrimitiveType
 from .data_type import TypeParameterError
-from .port_id_ranges import is_valid_regulated_service_id, is_valid_regulated_subject_id
 from .regular_grammar_matcher import RegularGrammarMatcher, InvalidGrammarError, GrammarConstructHandler
 
 
@@ -25,8 +24,17 @@ class SemanticError(InvalidDefinitionError):
     pass
 
 
+class AssertionCheckFailureError(SemanticError):
+    pass
+
+
 class UndefinedDataTypeError(SemanticError):
     pass
+
+
+# Arguments: emitting definition, line number, value to print
+# The lines are numbered starting from one
+PrintHandler = typing.Callable[[DSDLDefinition, int, typing.Any], None]
 
 
 _GrammarRule = typing.NamedTuple('GrammarRule', [
@@ -35,27 +43,58 @@ _GrammarRule = typing.NamedTuple('GrammarRule', [
 ])
 
 
-# Accepts raw unevaluated expression as string if specified
-_DirectiveHandler = typing.Union[
-    typing.Callable[[], None],
-    typing.Callable[[str], None],
-]
+class _ServiceResponseMarkerPlaceholder:
+    pass
+
+
+class _DirectivePlaceholder:
+    def __init__(self,
+                 directive: str,
+                 expression: typing.Optional[str]) -> None:
+        self.directive = directive
+        self.expression = expression
 
 
 _COMPOUND_ATTRIBUTE_TYPE_REGEXP = r'((?:[a-zA-Z_][a-zA-Z0-9_]*?\.)+?)(\d{1,3})(?:.(\d{1,3}))?$'
 
 
 class _AttributeCollection:
+    class _PostponedExpression:
+        def __init__(self,
+                     next_attribute_index: int,
+                     expression_text: str,
+                     validator: typing.Callable[[typing.Any], None]):
+            self.next_attribute_index = int(next_attribute_index)
+            self.expression_text = str(expression_text)
+            self.validator = validator
+            _logger.debug('Registering new postponed assertion check before attribute #%d: %s',
+                          self.next_attribute_index, self.expression_text)
+
     def __init__(self) -> None:
-        self.attributes = []   # type: typing.List[Attribute]
+        self.attributes = []    # type: typing.List[Attribute]
         self.is_union = False
+        self._expressions = []  # type: typing.List['_AttributeCollection._PostponedExpression']
+
+    def add_postponed_expression(self,
+                                 expression_text: str,
+                                 validator: typing.Callable[[typing.Any], None]) -> None:
+        self._expressions.append(self._PostponedExpression(len(self.attributes),
+                                                           expression_text,
+                                                           validator))
+
+    def execute_postponed_expressions(self, data_type: typing.Union[StructureType, UnionType]) -> None:
+        for pe in self._expressions:
+            offset = _OffsetValue(data_type, pe.next_attribute_index)
+            result = _evaluate_expression(pe.expression_text, offset=offset)
+            pe.validator(result)
 
 
 _logger = logging.getLogger(__name__)
 
 
 def parse_definition(definition:         DSDLDefinition,
-                     lookup_definitions: typing.Sequence[DSDLDefinition]) -> CompoundType:
+                     lookup_definitions: typing.Sequence[DSDLDefinition],
+                     print_handler:      typing.Optional[PrintHandler]=None) -> CompoundType:
     _logger.info('Parsing definition %r', definition)
 
     attribute_collections = [_AttributeCollection()]
@@ -74,24 +113,80 @@ def parse_definition(definition:         DSDLDefinition,
 
         is_deprecated = True
 
-    def assert_expression(directive_expression: str) -> None:
-        # TODO: IMPLEMENT
-        raise NotImplementedError('Assertion directives are not yet implemented')
+    def assert_expression(expression: str) -> None:
+        def validator(result: typing.Any) -> None:
+            if isinstance(result, bool):
+                if not result:
+                    raise AssertionCheckFailureError('Assertion check failed on %r' % expression)
+            else:
+                raise SemanticError('Assertion check expressions must yield a boolean; %r yields %r' %
+                                    (expression, result))
 
-    directive_handlers = {
-        'union':      mark_as_union,
-        'deprecated': mark_deprecated,
-        'assert':     assert_expression,
-    }   # type: typing.Dict[str, _DirectiveHandler]
+        attribute_collections[-1].add_postponed_expression(expression, validator)
+
+    def make_print_expression_handler(ln: int) -> typing.Callable[[str], None]:
+        # An extra closure is needed to capture the line number
+        def fun(expression: str) -> None:
+            def validator(result: typing.Any) -> None:
+                _logger.info('@print: %s:%d: %r' % (definition.file_path, ln, result))
+                if print_handler:
+                    print_handler(definition, ln, result)
+
+            attribute_collections[-1].add_postponed_expression(expression, validator)
+
+        return fun
 
     try:
-        _evaluate(definition,
-                  attribute_collections,
-                  list(lookup_definitions),
-                  directive_handlers)
+        for line_number, output in _evaluate(definition, list(lookup_definitions)):
+            if isinstance(output, Attribute):
+                attribute_collections[-1].attributes.append(output)
+
+            elif isinstance(output, _ServiceResponseMarkerPlaceholder):
+                if len(attribute_collections) > 1:
+                    raise SemanticError('Duplicate service response marker')
+                else:
+                    attribute_collections.append(_AttributeCollection())
+                    assert len(attribute_collections) == 2
+
+            elif isinstance(output, _DirectivePlaceholder):
+                try:
+                    handler = {
+                        'union':      mark_as_union,
+                        'deprecated': mark_deprecated,
+                        'assert':     assert_expression,
+                        'print':      make_print_expression_handler(line_number),
+                    }[output.directive]
+                except KeyError:
+                    raise SemanticError('Unknown directive: %r' % output.directive)
+                else:
+                    num_parameters = len(inspect.signature(handler).parameters)  # type: ignore
+                    assert 0 <= num_parameters <= 1, 'Invalid directive handler'
+                    expression_required = num_parameters > 0
+
+                    if expression_required and not output.expression:
+                        raise SemanticError('Directive %r requires an expression' % output.directive)
+
+                    if output.expression and not expression_required:
+                        raise SemanticError('Directive %r does not expect an expression' % output.directive)
+
+                    _logger.debug('Executing directive %r with expression %r',
+                                  output.directive, output.expression)
+                    if expression_required:
+                        assert output.expression
+                        handler(output.expression)  # type: ignore
+                    else:
+                        handler()  # type: ignore
+
+            elif output is None:
+                pass
+
+            else:
+                assert False, 'Unexpected output'
+
     except ParseError as ex:  # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
         raise
+
     except Exception as ex:  # pragma: no cover
         raise InternalError(culprit=ex, path=definition.file_path)
 
@@ -99,35 +194,52 @@ def parse_definition(definition:         DSDLDefinition,
         if len(attribute_collections) == 1:
             ac = attribute_collections[-1]
             if ac.is_union:
-                return UnionType(name=definition.name,
+                tout = UnionType(name=definition.name,
                                  version=definition.version,
                                  attributes=ac.attributes,
                                  deprecated=is_deprecated,
-                                 regulated_port_id=definition.regulated_port_id)
+                                 regulated_port_id=definition.regulated_port_id)    # type: CompoundType
             else:
-                return StructureType(name=definition.name,
+                tout = StructureType(name=definition.name,
                                      version=definition.version,
                                      attributes=ac.attributes,
                                      deprecated=is_deprecated,
                                      regulated_port_id=definition.regulated_port_id)
+
+            assert isinstance(tout, (StructureType, UnionType))
+            ac.execute_postponed_expressions(tout)
         else:
-            req, resp = attribute_collections       # type: _AttributeCollection, _AttributeCollection
-            return ServiceType(name=definition.name,
+            req, res = attribute_collections       # type: _AttributeCollection, _AttributeCollection
+            tout = ServiceType(name=definition.name,
                                version=definition.version,
                                request_attributes=req.attributes,
-                               response_attributes=resp.attributes,
+                               response_attributes=res.attributes,
                                request_is_union=req.is_union,
-                               response_is_union=resp.is_union,
+                               response_is_union=res.is_union,
                                deprecated=is_deprecated,
                                regulated_port_id=definition.regulated_port_id)
+
+            assert isinstance(tout, ServiceType)
+            for ac, dt in [
+                (req, tout.request_type),
+                (res, tout.response_type),
+            ]:
+                assert isinstance(dt, (StructureType, UnionType))
+                ac.execute_postponed_expressions(dt)
+
+        return tout
     except TypeParameterError as ex:
         raise SemanticError(str(ex), path=definition.file_path)
+    except ParseError as ex:  # pragma: no cover
+        ex.set_error_location_if_unknown(path=definition.file_path)
+        raise
 
 
-def _evaluate(definition:               DSDLDefinition,
-              attribute_collections:    typing.List[_AttributeCollection],
-              lookup_definitions:       typing.List[DSDLDefinition],
-              directive_handlers:       typing.Dict[str, _DirectiveHandler]) -> None:
+def _evaluate(definition: DSDLDefinition, lookup_definitions: typing.List[DSDLDefinition]) -> \
+        typing.Iterable[typing.Tuple[int, typing.Union[None,
+                                                       Attribute,
+                                                       _ServiceResponseMarkerPlaceholder,
+                                                       _DirectivePlaceholder]]]:
     ns = definition.namespace
 
     grammar = RegularGrammarMatcher()
@@ -135,21 +247,15 @@ def _evaluate(definition:               DSDLDefinition,
     grammar.add_rule(*_make_array_field_rule(ns, lookup_definitions))
     grammar.add_rule(*_make_constant_rule(ns, lookup_definitions))
     grammar.add_rule(*_make_padding_rule())
-    grammar.add_rule(*_make_service_response_marker_rule(attribute_collections))
-    grammar.add_rule(*_make_directive_rule(directive_handlers))
+    grammar.add_rule(*_make_service_response_marker_rule())
+    grammar.add_rule(*_make_directive_rule())
     grammar.add_rule(*_make_empty_rule())
 
     for line_index, line_text in enumerate(definition.text.splitlines(keepends=False)):
         line_number = line_index + 1
         try:
             output = grammar.match(line_text)
-            if isinstance(output, Attribute):
-                attribute_collections[-1].attributes.append(output)
-                _logger.debug('Attribute constructed successfully: %r --> %r', line_text, output)
-            elif output is None:
-                pass
-            else:       # pragma: no cover
-                assert False
+            yield line_number, output
         except InvalidGrammarError:
             raise DSDLSyntaxError('Syntax error',
                                   path=definition.file_path,
@@ -255,49 +361,18 @@ def _make_padding_rule() -> _GrammarRule:
                         lambda bw: PaddingField(VoidType(int(bw))))
 
 
-def _make_service_response_marker_rule(attribute_collections: typing.List[_AttributeCollection]) -> _GrammarRule:
-    def process() -> None:
-        if len(attribute_collections) > 1:
-            raise SemanticError('Duplicate service response marker')
-        else:
-            attribute_collections.append(_AttributeCollection())
-            assert len(attribute_collections) == 2
-
+def _make_service_response_marker_rule() -> _GrammarRule:
     return _GrammarRule(r'\s*---\s*(?:#.*)?$',
-                        process)
+                        lambda: _ServiceResponseMarkerPlaceholder())
 
 
-def _make_directive_rule(handlers: typing.Dict[str, _DirectiveHandler]) -> _GrammarRule:
-    def process(directive_name: str,
-                directive_expression: typing.Optional[str]) -> None:
-        try:
-            han = handlers[directive_name]
-        except KeyError:
-            raise SemanticError('Unknown directive: %r' % directive_name)
-
-        num_parameters = len(inspect.signature(han).parameters)
-        assert 0 <= num_parameters <= 1, 'Invalid directive handler'
-        expression_required = num_parameters > 0
-
-        if expression_required and not directive_expression:
-            raise SemanticError('Directive %r requires an expression' % directive_name)
-
-        if directive_expression and not expression_required:
-            raise SemanticError('Directive %r does not expect an expression' % directive_name)
-
-        _logger.debug('Executing directive %r with expression %r', directive_name, directive_expression)
-        if expression_required:
-            assert directive_expression
-            han(directive_expression)       # type: ignore
-        else:
-            han()                           # type: ignore
-
+def _make_directive_rule() -> _GrammarRule:
     # The fact that the DSDL grammar is so simple allows us to get by with ridiculously simple expressions here.
     # We just take everything between the directive itself and either the end of the line or the first comment
     # and treat it as the expression (to be handled later). Strings are not allowed inside the expression,
     # which simplifies handling greatly.
     return _GrammarRule(r'\s*@([a-zA-Z0-9_]+)\s*([^#]+?)?\s*(?:#.*)?$',
-                        process)
+                        lambda d, e: _DirectivePlaceholder(d, e))
 
 
 def _make_empty_rule() -> _GrammarRule:
@@ -379,16 +454,74 @@ def _construct_type(referer_namespace:  str,
         return t
 
 
-def _evaluate_expression(expression: str) -> typing.Any:
+def _evaluate_expression(expression: str, **context: typing.Any) -> typing.Any:
     env = {
         'locals': None,
         'globals': None,
         '__builtins__': None,
         'true': True,
         'false': False,
-        'offset': None,             # TODO: offset
     }
+    env.update(context)
     return eval(expression, env)
+
+
+class _OffsetValue:
+    def __init__(self,
+                 data_type: CompoundType,
+                 next_attribute_index: int):
+        self._data_type = data_type
+
+        self._next_field_index = 0
+        for i, a in enumerate(self._data_type.attributes[:next_attribute_index]):
+            if isinstance(a, Field):
+                self._next_field_index += 1
+
+        assert next_attribute_index >= self._next_field_index
+        _logger.debug('Index conversion: attribute #%d --> field #%d for %r',
+                      next_attribute_index, self._next_field_index, data_type)
+
+        self._set_cache = None      # type: typing.Optional[typing.Set[int]]
+
+    @property
+    def _set(self) -> typing.Set[int]:
+        # We're using lazy evaluation because not every expression uses the offset value
+        if self._set_cache is None:
+            if self._next_field_index >= len(self._data_type.fields):
+                self._set_cache = set(self._data_type.bit_length_values)
+            else:
+                if isinstance(self._data_type, StructureType):
+                    self._set_cache = self._data_type.get_field_offset_values(field_index=self._next_field_index)
+                elif isinstance(self._data_type, UnionType):
+                    raise SemanticError('Inter-field min/max offset is not defined for unions')
+                else:
+                    assert False, 'Ill-defined offset'
+
+        assert len(self._set_cache) > 0, 'Empty BLV sets are forbidden'
+        return self._set_cache
+
+    @property
+    def min(self) -> int:
+        return min(self._set)   # Can be optimized for the case when next_field_index == len(fields)
+
+    @property
+    def max(self) -> int:
+        return max(self._set)   # Can be optimized for the case when next_field_index == len(fields)
+
+    def __eq__(self, other: typing.Any) -> bool:
+        if isinstance(other, set):
+            return other == self._set
+        elif isinstance(other, int):
+            return (self._set == {other}) if len(self._set) == 1 else False
+        elif isinstance(other, _OffsetValue):
+            return self._set == other._set
+        else:
+            raise SemanticError('Offset cannot be compared against %r' % other)
+
+    def __str__(self) -> str:
+        return str(self._set or '{}')   # Empty BLV sets are forbidden, but we handle that anyway
+
+    __repr__ = __str__
 
 
 def _unittest_regexp() -> None:
@@ -466,31 +599,31 @@ def _unittest_regexp() -> None:
              "\tuint8 NAME = '#'# comment",
              (None, 'uint8', 'NAME', "'#'"))
 
-    validate(_make_directive_rule({}).regexp,
+    validate(_make_directive_rule().regexp,
              "@directive",
              ('directive', None))
 
-    validate(_make_directive_rule({}).regexp,
+    validate(_make_directive_rule().regexp,
              " @directive # hello world",
              ('directive', None))
 
-    validate(_make_directive_rule({}).regexp,
+    validate(_make_directive_rule().regexp,
              " @directive a + b == c # hello world",
              ('directive', 'a + b == c'))
 
-    validate(_make_directive_rule({}).regexp,
+    validate(_make_directive_rule().regexp,
              " @directive a+b==c#hello world",
              ('directive', 'a+b==c'))
 
-    validate(_make_directive_rule({}).regexp,
+    validate(_make_directive_rule().regexp,
              " @directive a+b==c",
              ('directive', 'a+b==c'))
 
-    validate(_make_service_response_marker_rule([]).regexp, "---", ())
-    validate(_make_service_response_marker_rule([]).regexp, "\t---", ())
-    validate(_make_service_response_marker_rule([]).regexp, "---  ", ())
-    validate(_make_service_response_marker_rule([]).regexp, " ---  # whatever", ())
-    validate(_make_service_response_marker_rule([]).regexp, "---#whatever", ())
+    validate(_make_service_response_marker_rule().regexp, "---", ())
+    validate(_make_service_response_marker_rule().regexp, "\t---", ())
+    validate(_make_service_response_marker_rule().regexp, "---  ", ())
+    validate(_make_service_response_marker_rule().regexp, " ---  # whatever", ())
+    validate(_make_service_response_marker_rule().regexp, "---#whatever", ())
 
     re_empty = _make_empty_rule().regexp
     validate(re_empty, '', ())
