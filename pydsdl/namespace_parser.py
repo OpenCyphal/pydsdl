@@ -99,7 +99,7 @@ def parse_namespace(root_namespace_directory:       str,
 
     :return: A list of CompoundType.
 
-    :raises: ParseError, OSError (if directories do not exist or unaccesible)
+    :raises: ParseError, OSError (if directories do not exist or inaccessible)
     """
     # Add the own root namespace to the set of lookup directories, remove duplicates
     lookup_directories = list(set(list(lookup_directories) + [root_namespace_directory]))
@@ -315,7 +315,9 @@ def _unittest_dsdl_definition_constructor() -> None:
     os.mkdir(os.path.join(root_ns_dir, 'nested'))
 
     def touchy(relative_path: str) -> None:
-        with open(os.path.join(root_ns_dir, relative_path), 'w') as f:
+        p = os.path.join(root_ns_dir, relative_path)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w') as f:
             f.write('# TEST TEXT')
 
     def discard(relative_path: str) -> None:
@@ -401,3 +403,22 @@ def _unittest_dsdl_definition_constructor() -> None:
         discard('nested/Malformed.uavcan')
     else:       # pragma: no cover
         assert False
+
+    _construct_dsdl_definitions_from_namespace(root_ns_dir)  # making sure all errors are cleared
+
+    touchy('nested/super.bad/Unreachable.1.0.uavcan')
+    try:
+        _construct_dsdl_definitions_from_namespace(root_ns_dir)
+    except FileNameFormatError as ex:
+        print(ex)
+    else:       # pragma: no cover
+        assert False
+
+    try:
+        _construct_dsdl_definitions_from_namespace(root_ns_dir + '/nested/super.bad')
+    except FileNameFormatError as ex:
+        print(ex)
+    else:       # pragma: no cover
+        assert False
+
+    discard('nested/super.bad/Unreachable.1.0.uavcan')

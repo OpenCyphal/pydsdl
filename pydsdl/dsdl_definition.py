@@ -33,6 +33,10 @@ class DSDLDefinition:
         with open(self._file_path) as f:
             self._text = str(f.read())
 
+        # Checking the sanity of the root directory path - can't contain separators
+        if CompoundType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
+            raise FileNameFormatError('Invalid namespace name', path=root_namespace_path)
+
         # Determining the relative path within the root namespace directory
         relative_path = str(os.path.join(os.path.split(root_namespace_path)[-1],
                                          os.path.relpath(self._file_path, root_namespace_path)))
@@ -67,6 +71,10 @@ class DSDLDefinition:
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
+        for nc in namespace_components:
+            if CompoundType.NAME_COMPONENT_SEPARATOR in nc:
+                raise FileNameFormatError('Invalid name for namespace component', path=self._file_path)
+
         self._name = CompoundType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])  # type: str
 
     @property
