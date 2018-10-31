@@ -5,7 +5,7 @@
 
 import sys
 from .version import __version__, __license__
-from . import _parser_test
+from . import _non_intrusive_test
 from .namespace_parser import parse_namespace
 from . import data_type
 
