@@ -907,14 +907,12 @@ class ServiceType(CompoundType):
         return self._response_type
 
     @property
-    def bit_length_range(self) -> BitLengthRange:
-        """This data type is not directly serializable, so we always return zero."""
-        return BitLengthRange(0, 0)
+    def bit_length_range(self) -> BitLengthRange:       # pragma: no cover
+        raise NotImplementedError('Service types are not directly serializable. Use either request or response.')
 
     @property
-    def bit_length_values(self) -> typing.Set[int]:
-        """This data type is not directly serializable, so we always return zero. Empty sets are forbidden."""
-        return {0}
+    def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
+        raise NotImplementedError('Service types are not directly serializable. Use either request or response.')
 
 
 def _check_name(name: str) -> None:

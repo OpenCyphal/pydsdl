@@ -7,6 +7,7 @@ import os
 import typing
 import logging
 import fnmatch
+from collections import defaultdict
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
 from .dsdl_parser import parse_definition, PrintDirectiveOutputHandler
@@ -46,6 +47,39 @@ class RegulatedPortIDCollisionError(InvalidDefinitionError):
     def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
         text = 'The regulated port ID of this definition is also used in: %r' % list(colliding_paths)
         super(RegulatedPortIDCollisionError, self).__init__(text=text, path=str(path))
+
+
+class VersionsNotBitCompatibleError(InvalidDefinitionError):
+    """
+    Raised when the versioning requirements are not met.
+    """
+    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
+        text = 'This definition is not bit-compatible with: %r' % list(incompatible_paths)
+        super(VersionsNotBitCompatibleError, self).__init__(text=text, path=str(path))
+
+
+class MultipleDefinitionsUnderSameVersionError(InvalidDefinitionError):
+    """
+    For example:
+        Type.1.0.uavcan
+        58000.Type.1.0.uavcan
+        58001.Type.1.0.uavcan
+    """
+    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
+        text = 'Other definitions under the same version: %r' % list(incompatible_paths)
+        super(MultipleDefinitionsUnderSameVersionError, self).__init__(text=text, path=str(path))
+
+
+class VersionsOfDifferentKindError(InvalidDefinitionError):
+    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
+        text = 'This definition is not of the same kind as: %r' % list(incompatible_paths)
+        super(VersionsOfDifferentKindError, self).__init__(text=text, path=str(path))
+
+
+class MinorVersionRegulatedPortIDError(InvalidDefinitionError):
+    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
+        text = 'Regulated port ID versioning error: %r' % list(incompatible_paths)
+        super(MinorVersionRegulatedPortIDError, self).__init__(text=text, path=str(path))
 
 
 def parse_namespace(root_namespace_directory:       str,
@@ -113,8 +147,7 @@ def parse_namespace(root_namespace_directory:       str,
     # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
     # by the third party.
     _ensure_no_regulated_port_id_collisions(types)
-    _ensure_major_version_binary_compatibility(types)
-    _ensure_correct_regulated_port_id_versioning(types)
+    _ensure_minor_version_compatibility(types)
 
     return types
 
@@ -154,7 +187,8 @@ def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) ->
     """
     for a in types:
         for b in types:
-            if a.name != b.name:
+            rpid_must_be_different = (a.name != b.name) or (a.version.major != b.version.major)
+            if rpid_must_be_different:
                 if isinstance(a, ServiceType) == isinstance(b, ServiceType):
                     if a.has_regulated_port_id and b.has_regulated_port_id:
                         if a.regulated_port_id == b.regulated_port_id:
@@ -162,12 +196,58 @@ def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) ->
                                                                 colliding_paths=[b.source_file_path])
 
 
-def _ensure_major_version_binary_compatibility(types: typing.List[CompoundType]) -> None:
-    pass    # TODO: IMPLEMENT
+def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> None:
+    by_name = defaultdict(list)  # type: typing.DefaultDict[str, typing.List[CompoundType]]
+    for t in types:
+        by_name[t.name].append(t)
 
+    for name, definitions in by_name.items():
+        by_major = defaultdict(list)    # type: typing.DefaultDict[int, typing.List[CompoundType]]
+        for t in definitions:
+            by_major[t.version.major].append(t)
 
-def _ensure_correct_regulated_port_id_versioning(types: typing.List[CompoundType]) -> None:
-    pass    # TODO: IMPLEMENT
+        for subject_to_check in by_major.values():
+            _logger.debug('Minor version compatibility check amongst: %s', [str(x) for x in subject_to_check])
+            for a in subject_to_check:
+                for b in subject_to_check:
+                    if a is b:
+                        continue
+
+                    assert a.version.major == b.version.major
+                    assert a.name == b.name
+
+                    # Version collision
+                    if a.version.minor == b.version.minor:
+                        raise MultipleDefinitionsUnderSameVersionError(path=a.source_file_path,
+                                                                       incompatible_paths=[b.source_file_path])
+
+                    # Must be of the same kind: both messages or both services
+                    if isinstance(a, ServiceType) != isinstance(b, ServiceType):
+                        raise VersionsOfDifferentKindError(path=a.source_file_path,
+                                                           incompatible_paths=[b.source_file_path])
+
+                    # Must be bit-compatible
+                    if isinstance(a, ServiceType):
+                        assert isinstance(b, ServiceType)
+                        ok = (a.request_type.bit_length_values  == b.request_type.bit_length_values) and \
+                             (a.response_type.bit_length_values == b.response_type.bit_length_values)
+                    else:
+                        ok = a.bit_length_values == b.bit_length_values
+
+                    if not ok:
+                        raise VersionsNotBitCompatibleError(path=a.source_file_path,
+                                                            incompatible_paths=[b.source_file_path])
+
+                    # Must use either the same RPID, or the older one should not have an RPID
+                    if a.has_regulated_port_id == b.has_regulated_port_id:
+                        if a.regulated_port_id != b.regulated_port_id:
+                            raise MinorVersionRegulatedPortIDError(path=a.source_file_path,
+                                                                   incompatible_paths=[b.source_file_path])
+                    else:
+                        ok = a.has_regulated_port_id if a.version.minor > b.version.minor else b.has_regulated_port_id
+                        if not ok:
+                            raise MinorVersionRegulatedPortIDError(path=a.source_file_path,
+                                                                   incompatible_paths=[b.source_file_path])
 
 
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:
@@ -292,6 +372,224 @@ def _unittest_parse_namespace() -> None:
             os.path.join(directory.name, 'zubax'),
             []
         )
+
+
+def _unittest_parse_namespace_versioning() -> None:
+    from pytest import raises
+    import tempfile
+    import glob
+    directory = tempfile.TemporaryDirectory()
+
+    def _define(rel_path: str, text: str) -> None:
+        path = os.path.join(directory.name, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(text)
+
+    def _undefine_glob(rel_path_glob: str) -> None:
+        path = os.path.join(directory.name, rel_path_glob)
+        for g in glob.glob(path):
+            os.remove(g)
+
+    _define(
+        'ns/Spartans.30.0.uavcan',
+        """
+        @deprecated
+        @union
+        float16 small
+        float32 just_right
+        float64 woah
+        ---
+        """
+    )
+
+    _define(
+        'ns/Spartans.30.1.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        int32 just_right
+        float64[1] woah
+        ---
+        """
+    )
+
+    parsed = parse_namespace(
+        os.path.join(directory.name, 'ns'),
+        []
+    )
+    print(parsed)
+    assert len(parsed) == 2
+
+    _define(
+        'ns/Spartans.30.2.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        int32 just_right
+        float64[<=1] woah
+        ---
+        """
+    )
+
+    with raises(VersionsNotBitCompatibleError):
+        parse_namespace(
+            os.path.join(directory.name, 'ns'),
+            []
+        )
+
+    _define(
+        'ns/Spartans.30.2.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        int32 just_right
+        float64[1] woah
+        """
+    )
+
+    with raises(VersionsOfDifferentKindError):
+        parse_namespace(
+            os.path.join(directory.name, 'ns'),
+            []
+        )
+
+    _undefine_glob('ns/Spartans.30.[01].uavcan')
+
+    _define(
+        'ns/Spartans.30.0.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[1] woah
+        """
+    )
+
+    parsed = parse_namespace(
+        os.path.join(directory.name, 'ns'),
+        []
+    )
+    print(parsed)
+    assert len(parsed) == 2
+
+    _define(
+        'ns/Spartans.30.1.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[<=1] woah
+        """
+    )
+
+    with raises(VersionsNotBitCompatibleError):
+        parse_namespace(
+            os.path.join(directory.name, 'ns'),
+            []
+        )
+
+    _define(
+        'ns/Spartans.30.1.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        int64 woah
+        """
+    )
+
+    _define(
+        'ns/59000.Spartans.30.2.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        int32 just_right
+        float64[1] woah
+        """
+    )
+
+    with raises(MultipleDefinitionsUnderSameVersionError):
+        parse_namespace(os.path.join(directory.name, 'ns'), [])
+
+    _undefine_glob('ns/Spartans.30.2.uavcan')
+
+    parsed = parse_namespace(
+        os.path.join(directory.name, 'ns'),
+        []
+    )
+    assert len(parsed) == 3
+
+    _undefine_glob('ns/Spartans.30.0.uavcan')
+    _define(
+        'ns/59000.Spartans.30.0.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[1] woah
+        """
+    )
+
+    with raises(MinorVersionRegulatedPortIDError):
+        parse_namespace(os.path.join(directory.name, 'ns'), [])
+
+    _undefine_glob('ns/Spartans.30.1.uavcan')
+    _define(
+        'ns/59000.Spartans.30.1.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[1] woah
+        """
+    )
+
+    parsed = parse_namespace(
+        os.path.join(directory.name, 'ns'),
+        []
+    )
+    assert len(parsed) == 3
+
+    _undefine_glob('ns/59000.Spartans.30.1.uavcan')
+    _define(
+        'ns/59001.Spartans.30.1.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[1] woah
+        """
+    )
+
+    with raises(MinorVersionRegulatedPortIDError):
+        parse_namespace(os.path.join(directory.name, 'ns'), [])
+
+    # Adding new major version under the same RPID
+    _undefine_glob('ns/59001.Spartans.30.1.uavcan')
+    _define(
+        'ns/59000.Spartans.31.0.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[1] woah
+        """
+    )
+
+    with raises(RegulatedPortIDCollisionError):
+        parse_namespace(os.path.join(directory.name, 'ns'), [])
 
 
 def _unittest_parse_namespace_faults() -> None:

@@ -145,8 +145,6 @@ def _unittest_simple() -> None:
     assert p.regulated_port_id == 300
     assert p.deprecated
     assert p.version == (0, 1)
-    assert p.bit_length_range == (0, 0)     # This is because it's a service
-    assert p.bit_length_values == {0}       # Same thing
     assert not p.constants
 
     assert len(p.fields) == 2
