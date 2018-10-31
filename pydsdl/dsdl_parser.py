@@ -513,9 +513,9 @@ class _OffsetValue:
     def max(self) -> int:
         return max(self._set)   # Can be optimized for the case when next_field_index == len(fields)
 
-    def _do_element_wise(self,
-                         element_operator: typing.Callable[[int, int], int],
-                         right_hand_operand: int) -> typing.Set[int]:
+    def _do_elementwise(self,
+                        element_operator: typing.Callable[[int, int], int],
+                        right_hand_operand: int) -> typing.Set[int]:
         if isinstance(right_hand_operand, int):
             return set(map(lambda x: element_operator(x, right_hand_operand), self._set))
         else:
@@ -530,23 +530,36 @@ class _OffsetValue:
             raise SemanticError('Offset cannot be compared against %r' % other)
 
     def __mod__(self, other: int) -> typing.Set[int]:
-        return self._do_element_wise(operator.mod, other)
+        return self._do_elementwise(operator.mod, other)
 
     def __add__(self, other: int) -> typing.Set[int]:
-        return self._do_element_wise(operator.add, other)
+        return self._do_elementwise(operator.add, other)
 
     def __sub__(self, other: int) -> typing.Set[int]:
-        return self._do_element_wise(operator.sub, other)
+        return self._do_elementwise(operator.sub, other)
 
     def __mul__(self, other: int) -> typing.Set[int]:
-        return self._do_element_wise(operator.mul, other)
+        return self._do_elementwise(operator.mul, other)
 
     def __truediv__(self, other: int) -> typing.Set[int]:
         """Floor division using the true division syntax"""
-        return self._do_element_wise(operator.floordiv, other)
+        return self._do_elementwise(operator.floordiv, other)
 
     __rmul__ = __mul__
     __radd__ = __add__
+
+    # We can't rely on functools.total_order because we use unconventional elementwise operators
+    def __lt__(self, other: int) -> bool:
+        return all(self._do_elementwise(operator.lt, other))
+
+    def __le__(self, other: int) -> bool:
+        return all(self._do_elementwise(operator.le, other))
+
+    def __gt__(self, other: int) -> bool:
+        return all(self._do_elementwise(operator.gt, other))
+
+    def __ge__(self, other: int) -> bool:
+        return all(self._do_elementwise(operator.ge, other))
 
     def __str__(self) -> str:
         return str(self._set or '{}')

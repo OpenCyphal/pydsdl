@@ -492,6 +492,12 @@ def _unittest_assert() -> None:
             @assert offset - 64 == {4, 12, 20, 28, 36}
             @assert offset.min == 68
             @assert offset.max == 100  # 36 + 64
+            @assert offset.max <= 100
+            @assert offset.max < 101
+            @assert offset <= 100
+            @assert offset < 101
+            @assert offset >= 68
+            @assert offset > 67
             @assert offset == offset
             '''),
         [
