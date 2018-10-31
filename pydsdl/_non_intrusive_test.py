@@ -11,7 +11,7 @@ from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
 from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType
 from .namespace_parser import parse_namespace, RegulatedPortIDCollisionError, VersionsOfDifferentKindError
-from .namespace_parser import VersionsNotBitCompatibleError, MultipleDefinitionsUnderSameVersionError
+from .namespace_parser import MinorVersionsNotBitCompatibleError, MultipleDefinitionsUnderSameVersionError
 from .namespace_parser import MinorVersionRegulatedPortIDError, NestedRootNamespaceError, NamespaceNameCollisionError
 
 
@@ -725,7 +725,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """
     )
 
-    with raises(VersionsNotBitCompatibleError):
+    with raises(MinorVersionsNotBitCompatibleError):
         parse_namespace(
             os.path.join(directory.name, 'ns'),
             []
@@ -779,7 +779,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """
     )
 
-    with raises(VersionsNotBitCompatibleError):
+    with raises(MinorVersionsNotBitCompatibleError):
         parse_namespace(
             os.path.join(directory.name, 'ns'),
             []

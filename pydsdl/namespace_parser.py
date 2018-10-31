@@ -26,36 +26,29 @@ class NamespaceNameCollisionError(InvalidDefinitionError):
     Raised when there is more than one namespace under the same name.
     This may occur if there are identically named namespaces located in different directories.
     """
-    def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
-        text = 'The name of this namespace conflicts with: %r' % list(colliding_paths)
-        super(NamespaceNameCollisionError, self).__init__(text=text, path=str(path))
+    pass
 
 
 class NestedRootNamespaceError(InvalidDefinitionError):
     """
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
     """
-    def __init__(self, *, outer_path: str, nested_paths: typing.Iterable[str]):
-        text = 'The following namespaces are nested inside this one, which is not permitted: %r' % list(nested_paths)
-        super(NestedRootNamespaceError, self).__init__(text=text, path=str(outer_path))
+    pass
 
 
 class RegulatedPortIDCollisionError(InvalidDefinitionError):
     """
-    Raised when there is more than one definition using the same regulated port ID.
+    Raised when there is more than one data type, or different major versions of the same data type
+    using the same regulated port ID.
     """
-    def __init__(self, *, path: str, colliding_paths: typing.Iterable[str]):
-        text = 'The regulated port ID of this definition is also used in: %r' % list(colliding_paths)
-        super(RegulatedPortIDCollisionError, self).__init__(text=text, path=str(path))
+    pass
 
 
-class VersionsNotBitCompatibleError(InvalidDefinitionError):
+class MinorVersionsNotBitCompatibleError(InvalidDefinitionError):
     """
-    Raised when the versioning requirements are not met.
+    Raised when definitions under the same major version are not bit-compatible.
     """
-    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
-        text = 'This definition is not bit-compatible with: %r' % list(incompatible_paths)
-        super(VersionsNotBitCompatibleError, self).__init__(text=text, path=str(path))
+    pass
 
 
 class MultipleDefinitionsUnderSameVersionError(InvalidDefinitionError):
@@ -65,21 +58,22 @@ class MultipleDefinitionsUnderSameVersionError(InvalidDefinitionError):
         58000.Type.1.0.uavcan
         58001.Type.1.0.uavcan
     """
-    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
-        text = 'Other definitions under the same version: %r' % list(incompatible_paths)
-        super(MultipleDefinitionsUnderSameVersionError, self).__init__(text=text, path=str(path))
+    pass
 
 
 class VersionsOfDifferentKindError(InvalidDefinitionError):
-    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
-        text = 'This definition is not of the same kind as: %r' % list(incompatible_paths)
-        super(VersionsOfDifferentKindError, self).__init__(text=text, path=str(path))
+    """
+    Definitions that share the same name but are of different kinds.
+    """
+    pass
 
 
 class MinorVersionRegulatedPortIDError(InvalidDefinitionError):
-    def __init__(self, *, path: str, incompatible_paths: typing.Iterable[str]):
-        text = 'Regulated port ID versioning error: %r' % list(incompatible_paths)
-        super(MinorVersionRegulatedPortIDError, self).__init__(text=text, path=str(path))
+    """
+    Different regulated port ID under the same major version, or a regulated port ID was removed under the same
+    major version.
+    """
+    pass
 
 
 def parse_namespace(root_namespace_directory:       str,
@@ -181,10 +175,6 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
 
 
 def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) -> None:
-    """
-    Simply raises a RegulatedPortIDCollisionError if at least two types of the same kind (messages/services
-    are orthogonal) use the same regulated port ID.
-    """
     for a in types:
         for b in types:
             rpid_must_be_different = (a.name != b.name) or (a.version.major != b.version.major)
@@ -192,8 +182,10 @@ def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) ->
                 if isinstance(a, ServiceType) == isinstance(b, ServiceType):
                     if a.has_regulated_port_id and b.has_regulated_port_id:
                         if a.regulated_port_id == b.regulated_port_id:
-                            raise RegulatedPortIDCollisionError(path=a.source_file_path,
-                                                                colliding_paths=[b.source_file_path])
+                            raise RegulatedPortIDCollisionError(
+                                'The regulated port ID of this definition is also used in %r' % b.source_file_path,
+                                path=a.source_file_path
+                            )
 
 
 def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> None:
@@ -218,13 +210,17 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
 
                     # Version collision
                     if a.version.minor == b.version.minor:
-                        raise MultipleDefinitionsUnderSameVersionError(path=a.source_file_path,
-                                                                       incompatible_paths=[b.source_file_path])
+                        raise MultipleDefinitionsUnderSameVersionError(
+                            'This definition shares its version number with %r' % b.source_file_path,
+                            path=a.source_file_path
+                        )
 
                     # Must be of the same kind: both messages or both services
                     if isinstance(a, ServiceType) != isinstance(b, ServiceType):
-                        raise VersionsOfDifferentKindError(path=a.source_file_path,
-                                                           incompatible_paths=[b.source_file_path])
+                        raise VersionsOfDifferentKindError(
+                            'This definition is not of the same kind as %r' % b.source_file_path,
+                            path=a.source_file_path
+                        )
 
                     # Must be bit-compatible
                     if isinstance(a, ServiceType):
@@ -235,37 +231,39 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                         ok = a.bit_length_values == b.bit_length_values
 
                     if not ok:
-                        raise VersionsNotBitCompatibleError(path=a.source_file_path,
-                                                            incompatible_paths=[b.source_file_path])
+                        raise MinorVersionsNotBitCompatibleError(
+                            'This definition is not bit-compatible with %r' % b.source_file_path,
+                            path=a.source_file_path
+                        )
 
                     # Must use either the same RPID, or the older one should not have an RPID
                     if a.has_regulated_port_id == b.has_regulated_port_id:
                         if a.regulated_port_id != b.regulated_port_id:
-                            raise MinorVersionRegulatedPortIDError(path=a.source_file_path,
-                                                                   incompatible_paths=[b.source_file_path])
+                            raise MinorVersionRegulatedPortIDError(
+                                'Different regulated port ID values under the same version %r' % b.source_file_path,
+                                path=a.source_file_path
+                            )
                     else:
-                        ok = a.has_regulated_port_id if a.version.minor > b.version.minor else b.has_regulated_port_id
-                        if not ok:
-                            raise MinorVersionRegulatedPortIDError(path=a.source_file_path,
-                                                                   incompatible_paths=[b.source_file_path])
+                        must_have = a if a.version.minor > b.version.minor else b
+                        if not must_have.has_regulated_port_id:
+                            raise MinorVersionRegulatedPortIDError(
+                                'Regulated port ID cannot be removed under the same major version',
+                                path=must_have.source_file_path
+                            )
 
 
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:
-    """
-    Simply raises a NestedRootNamespaceError if one root namespace contains another one.
-    """
     directories = list(sorted([str(os.path.abspath(x)) for x in set(directories)]))
     for a in directories:
         for b in directories:
             if (a != b) and a.startswith(b):
-                raise NestedRootNamespaceError(outer_path=b, nested_paths=[a])
+                raise NestedRootNamespaceError(
+                    'The following namespace is nested inside this one, which is not permitted: %r' % a,
+                    path=b
+                )
 
 
 def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> None:
-    """
-    Simply raises a NamespaceNameCollisionError if at least two namespaces share the same name.
-    The same directory can be listed several times without causing any errors.
-    """
     def get_namespace_name(d: str) -> str:
         return os.path.split(d)[-1]
 
@@ -273,7 +271,8 @@ def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> N
     for a in directories:
         for b in directories:
             if (a != b) and get_namespace_name(a) == get_namespace_name(b):
-                raise NamespaceNameCollisionError(path=a, colliding_paths=b)
+                raise NamespaceNameCollisionError('The name of this namespace conflicts with %r' % b,
+                                                  path=a)
 
 
 def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[DSDLDefinition]:
