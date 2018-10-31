@@ -99,7 +99,7 @@ def parse_namespace(root_namespace_directory:       str,
 
     :return: A list of CompoundType.
 
-    :raises: ParseError
+    :raises: ParseError, OSError (if directories do not exist or unaccesible)
     """
     # Add the own root namespace to the set of lookup directories, remove duplicates
     lookup_directories = list(set(list(lookup_directories) + [root_namespace_directory]))
