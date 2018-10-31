@@ -106,3 +106,6 @@ venv.bak/
 # IDE
 .idea/
 .xml
+
+# Project-specific testing environment
+.dsdl-test/
