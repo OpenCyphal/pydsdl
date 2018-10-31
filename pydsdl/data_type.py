@@ -676,7 +676,7 @@ class CompoundType(DataType):
         # Attribute check
         used_names = set()      # type: typing.Set[str]
         for a in self._attributes:
-            if a.name in used_names:
+            if a.name and a.name in used_names:
                 raise AttributeNameCollision('Multiple attributes under the same name: %r' % a.name)
             else:
                 used_names.add(a.name)
