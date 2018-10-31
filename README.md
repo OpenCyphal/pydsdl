@@ -21,7 +21,114 @@ Make sure that it works by importing it: `import pydsdl`.
 
 ## Usage
 
-CBL
+### Library API
+
+The library API is very simple and contains only the following entities
+(read their documentation for usage information, e.g., `help(pydsdl.data_type.CompoundType)`):
+
+* The main function `pydsdl.parse_namespace()`.
+* Data type model defined in the module `pydsdl.data_type`.
+* Parsing error exceptions defined in the module `pydsdl.parse_error`.
+
+#### The main function `parse_namespace`
+
+The application invokes the function `pydsdl.parse_namespace()`.
+It returns a list of top-level compound type definitions found in the provided namespace.
+If errors are found, a corresponding exception will be raised (see below).
+
+The function has an optional callable argument that will be invoked when the parser encounters a
+`@print <expression>` directive in a definition.
+The callable is provided with the value to print (which can have an arbitrary type, whatever the expression
+has yielded upon its evaluation) and the location of the print statement for diagnostic purposes.
+If the function is not provided, `@print` statements will not produce any output besides the log,
+but their expressions will be evaluated nevertheless (and a failed evaluation will still be treated as a fatal error).
+
+#### Data type model
+
+Data types are represented as one of the following types defined in `pydsdl.data_type`,
+all rooted in the common ancestor `DataType`:
+
+* `DataType`
+  * `VoidType` - e.g., `void16`
+  * `PrimitiveType`
+    * `BooleanType` - e.g., `bool`
+    * `ArithmeticType`
+      * `FloatType` - e.g., `float16`
+      * `IntegerType`
+        * `SignedIntegerType` - e.g., `int16`
+        * `UnsignedIntegerType` - e.g., `uint32`
+  * `ArrayType`
+    * `StaticArrayType` - e.g., `uint8[256]`
+    * `DynamicArrayType` - e.g., `uint8[<256]`
+  * `CompoundType` - see below
+    * `UnionType` - message types or nested structures
+    * `StructureType` - message types or nested structures
+    * `ServiceType` - service types
+
+The `ServiceType` is a special case: unlike other types, it can't be serialized directly;
+rather, it contains two pseudo-fields: `request` and `response`, which contain the request and the
+response structure of the service type, respectively.
+
+The user application should not instantiate data type classes directly,
+as their instantiation protocol uses a different error model internally,
+and since that is not a part of the library API, it may change in incompatible ways arbitrarily.
+
+Every data type (i.e., the `DataType` root class) has the following properties
+(althouth they are inaccessible for `ServiceType`):
+
+* `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
+which represent the minimum and the maximum possible bit length of an encoded representation.
+* `bit_length_values: Set[int]` - this property performs a bit length combination analysis on the data type and
+returns a full set of bit lengths of all possible valid encoded representations of the data type.
+Due to the involved computations, invoking this property can be expensive, so use with care.
+
+Instances of `CompoundType` (and its derivatives) contain *attributes*.
+Per the specification, an attribute can be a field or a constant.
+The corresponding data model is shown below:
+
+* `Attribute`
+  * `Field` - e.g., `uavcan.node.Heartbeat.1 data`
+    * `PaddingField` - e.g., `void5` (the name is always empty)
+  * `Constant` - e.g., `uint16 VALUE = 0x1234`
+
+#### Error model
+
+The root exception types defined in `pydsdl.parse_error` are used to represent errors occuring during the
+parsing process:
+
+* `ParseError` - contains properties `path:str` and `line:int`, both of which are optional,
+which (if set) point out to the exact location where the error has occurred: the path of the file and
+the line number within the file (starting from one). If line is set, path is also set.
+  * `InternalError` - an error that occurred within the parser itself, at no fault of the parsed definition.
+  * `InvalidDefinitionError` - represents a problem with the parsed definition.
+This type is inherited by a dozen of specialized error exception classes; however, the class hierarchy beneath
+this type is unstable and should not be used by the application directly.
+
+### Example
+
+```python
+import sys
+import pydsdl
+
+try:
+    compound_types = pydsdl.parse_namespace('path/to/root_namespace', ['path/to/dependencies'])
+except pydsdl.parse_error.InvalidDefinitionError as ex:
+    print(ex, file=sys.stderr)                      # The DSDL definition is invalid
+except pydsdl.parse_error.InternalError as ex:
+    print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
+else:
+    for t in compound_types:
+        if isinstance(t, pydsdl.data_type.ServiceType):
+            blr, blv = 0, {0}
+        else:
+            blr, blv = t.bit_length_range, t.bit_length_values
+        # The above is because service types are not directly serializable (see the UAVCAN specification)
+        print(t.name, t.version, t.regulated_port_id, t.deprecated, blr, len(blv))
+        for f in t.fields:
+            print('\t', str(f.data_type), f.name)
+        for c in t.constants:
+            print('\t', str(c.data_type), c.name, '=', str(c.value))
+```
 
 ## Development
 
@@ -42,6 +149,8 @@ This is enforced statically with MyPy.
 Ensure compatibility with Python 3.5 and all newer versions.
 
 ### Writing tests
+
+100% coverage is required.
 
 Write unit tests as functions without arguments prefixed with `_unittest_`.
 Test functions should be located as close as possible to the tested code,
