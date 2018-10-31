@@ -225,8 +225,8 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                     # Must be bit-compatible
                     if isinstance(a, ServiceType):
                         assert isinstance(b, ServiceType)
-                        ok = (a.request_type.bit_length_values  == b.request_type.bit_length_values) and \
-                             (a.response_type.bit_length_values == b.response_type.bit_length_values)
+                        ok = a.request_type.is_bit_compatible_with(b.request_type) and \
+                            a.response_type.is_bit_compatible_with(b.response_type)
                     else:
                         ok = a.bit_length_values == b.bit_length_values
 

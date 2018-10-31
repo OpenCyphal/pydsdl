@@ -692,6 +692,17 @@ class CompoundType(DataType):
                 if not is_valid_regulated_subject_id(port_id, self.root_namespace):
                     raise InvalidRegulatedPortIDError('Regulated subject ID %r is not valid' % port_id)
 
+    def is_bit_compatible_with(self, other: 'CompoundType') -> bool:
+        """
+        Checks for bit compatibility between two data types.
+        The current implementation uses a relaxed simplified check that may yield a false-negative,
+        but never a false-positive; i.e., it may fail to detect an incompatibility, but it is guaranteed
+        to never report two data types as incompatible if they are compatible.
+        The implementation may be updated in the future to use a strict check as defined in the specification
+        while keeping the same API, so beware.
+        """
+        return self.bit_length_values == other.bit_length_values
+
     @property
     def name(self) -> str:
         """The full name, e.g., uavcan.node.Heartbeat"""
