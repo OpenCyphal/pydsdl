@@ -21,4 +21,4 @@ matrix:
       script:
         - ./test.sh
         - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
-        - ./test_namespace dsdl-test/uavcan
+        - ./test_namespace.py dsdl-test/uavcan
