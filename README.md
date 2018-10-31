@@ -19,6 +19,12 @@ add its root to the Python import lookup paths, and you're ready to roll.
 
 Make sure that it works by importing it: `import pydsdl`.
 
+## Features
+
+Supports all DSDL features defined in the UAVCAN specification,
+and performs all mandatory static definition validity checks.
+Additionally, checks for bit compatibility for data type definitions under the same major version.
+
 ## Usage
 
 ### Library API
