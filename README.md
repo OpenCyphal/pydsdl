@@ -104,6 +104,13 @@ the line number within the file (starting from one). If line is set, path is als
 This type is inherited by a dozen of specialized error exception classes; however, the class hierarchy beneath
 this type is unstable and should not be used by the application directly.
 
+Converting a `ParseError` (or derived) object to `str` yields an error message in a conventional error format
+suitable for error parsers of most IDEs; for example:
+
+```
+uavcan/internet/udp/500.HandleIncomingPacket.0.1.uavcan:33: Error such and such
+```
+
 ### Example
 
 ```python
