@@ -85,8 +85,11 @@ class DataType:
     """
 
     @property
-    def bit_length_range(self) -> BitLengthRange:       # pragma: no cover
-        raise NotImplementedError
+    def bit_length_range(self) -> BitLengthRange:
+        # This default implementation uses BLV analysis, so it is very slow.
+        # Derived classes can redefine it as appropriate.
+        blv = self.bit_length_values
+        return BitLengthRange(min(blv), max(blv))
 
     @property
     def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
@@ -128,11 +131,6 @@ class PrimitiveType(DataType):
     def bit_length(self) -> int:
         """All primitives are of a fixed bit length, hence just one value is enough."""
         return self._bit_length
-
-    @property
-    def bit_length_range(self) -> BitLengthRange:
-        """All primitives are of a fixed bit length, hence just one value is enough."""
-        return BitLengthRange(self.bit_length, self.bit_length)
 
     @property
     def bit_length_values(self) -> typing.Set[int]:
@@ -304,10 +302,6 @@ class VoidType(DataType):
     def bit_length_values(self) -> typing.Set[int]:
         return {self._bit_length}
 
-    @property
-    def bit_length_range(self) -> BitLengthRange:
-        return BitLengthRange(self.bit_length, self.bit_length)
-
     def __str__(self) -> str:
         return 'void%d' % self.bit_length
 
@@ -340,10 +334,6 @@ class ArrayType(DataType):
     @property
     def element_type(self) -> DataType:
         return self._element_type
-
-    @property
-    def bit_length_range(self) -> BitLengthRange:       # pragma: no cover
-        raise NotImplementedError
 
     @property
     def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
@@ -762,10 +752,6 @@ class CompoundType(DataType):
         return self._source_file_path
 
     @property
-    def bit_length_range(self) -> BitLengthRange:       # pragma: no cover
-        raise NotImplementedError
-
-    @property
     def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
 
@@ -918,12 +904,8 @@ class ServiceType(CompoundType):
         return self._response_type
 
     @property
-    def bit_length_range(self) -> BitLengthRange:       # pragma: no cover
-        raise NotImplementedError('Service types are not directly serializable. Use either request or response.')
-
-    @property
     def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
-        raise NotImplementedError('Service types are not directly serializable. Use either request or response.')
+        raise TypeError('Service types are not directly serializable. Use either request or response.')
 
 
 def _check_name(name: str) -> None:
