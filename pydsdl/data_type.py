@@ -15,7 +15,7 @@ BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)
 
 IntegerValueRange = typing.NamedTuple('IntegerValueRange', [('min', int), ('max', int)])
 
-FloatValueRange = typing.NamedTuple('RealValueRange', [('min', float), ('max', float)])
+FloatValueRange = typing.NamedTuple('FloatValueRange', [('min', float), ('max', float)])
 
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
