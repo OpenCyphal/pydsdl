@@ -682,7 +682,7 @@ class CompoundType(DataType):
                 if not is_valid_regulated_subject_id(port_id, self.root_namespace):
                     raise InvalidRegulatedPortIDError('Regulated subject ID %r is not valid' % port_id)
 
-    def is_bit_compatible_with(self, other: 'CompoundType') -> bool:
+    def is_mutually_bit_compatible_with(self, other: 'CompoundType') -> bool:
         """
         Checks for bit compatibility between two data types.
         The current implementation uses a relaxed simplified check that may yield a false-negative,
