@@ -336,6 +336,14 @@ class ArrayType(DataType):
         return self._element_type
 
     @property
+    def string_like(self) -> bool:
+        """
+        Returns True if the array might contain a text string, in which case it is termed to be "string-like".
+        A string-like array is a dynamic array of uint8.
+        """
+        return False
+
+    @property
     def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
 
@@ -388,6 +396,9 @@ def _unittest_static_array() -> None:
     assert str(StaticArrayType(su8, 4)) == 'saturated uint8[4]'
     assert str(StaticArrayType(ti64, 1)) == 'truncated int64[1]'
 
+    assert not StaticArrayType(su8, 4).string_like
+    assert not StaticArrayType(ti64, 1).string_like
+
     assert StaticArrayType(su8, 4).bit_length_range == (32, 32)
     assert StaticArrayType(su8, 200).size == 200
     assert StaticArrayType(ti64, 200).element_type is ti64
@@ -415,6 +426,10 @@ class DynamicArrayType(ArrayType):
     @property
     def max_size(self) -> int:
         return self._max_size
+
+    @property
+    def string_like(self) -> bool:
+        return isinstance(self.element_type, UnsignedIntegerType) and (self.element_type.bit_length == 8)
 
     @property
     def length_prefix_bit_length(self) -> int:
@@ -454,6 +469,9 @@ def _unittest_dynamic_array() -> None:
 
     assert str(DynamicArrayType(tu8, 4))    == 'truncated uint8[<=4]'
     assert str(DynamicArrayType(si64, 255)) == 'saturated int64[<=255]'
+
+    assert DynamicArrayType(tu8, 4).string_like
+    assert not DynamicArrayType(si64, 1).string_like
 
     # Mind the length prefix!
     assert DynamicArrayType(tu8, 3).bit_length_range == (2, 26)
