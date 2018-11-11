@@ -27,6 +27,7 @@ _VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + strin
 # an attribute name, a namespace component, type name, etc.
 _DISALLOWED_NAME_PATTERNS = [
     r'(?i)(bool|uint|int|void|float)\d*$',          # Data type like names
+    r'(?i)(u?q\d+_\d+)$',                           # Fixed point data type (Q format)
     r'(?i)(saturated|truncated)$',                  # Keywords
     r'(?i)(con|prn|aux|nul|com\d?|lpt\d?)$',        # Reserved by the specification (MS Windows compatibility)
 ]
@@ -1026,6 +1027,12 @@ def _unittest_compound_types() -> None:
 
     with raises(InvalidNameError):
         _check_name('float128')
+
+    with raises(InvalidNameError):
+        _check_name('q16_8')
+
+    with raises(InvalidNameError):
+        _check_name('uq1_32')
 
     def try_union_fields(field_types: typing.List[DataType]) -> UnionType:
         atr = []
