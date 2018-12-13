@@ -3,6 +3,10 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+MAX_SUBJECT_ID = 65535
+MAX_SERVICE_ID = 511
+
+
 _STANDARD_ROOT_NAMESPACE = 'uavcan'
 
 _STANDARD_MESSAGES = 62804, 65535

@@ -8,7 +8,7 @@ import enum
 import string
 import typing
 import itertools
-from .port_id_ranges import is_valid_regulated_subject_id, is_valid_regulated_service_id
+from .port_id_ranges import MAX_SUBJECT_ID, MAX_SERVICE_ID
 
 
 BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)])
@@ -695,10 +695,10 @@ class CompoundType(DataType):
         if port_id is not None:
             assert port_id is not None
             if isinstance(self, ServiceType):
-                if not is_valid_regulated_service_id(port_id, self.root_namespace):
+                if not (0 <= port_id <= MAX_SERVICE_ID):
                     raise InvalidFixedPortIDError('Fixed service ID %r is not valid' % port_id)
             else:
-                if not is_valid_regulated_subject_id(port_id, self.root_namespace):
+                if not (0 <= port_id <= MAX_SUBJECT_ID):
                     raise InvalidFixedPortIDError('Fixed subject ID %r is not valid' % port_id)
 
     def is_mutually_bit_compatible_with(self, other: 'CompoundType') -> bool:

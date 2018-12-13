@@ -6,7 +6,7 @@
 import os
 import typing
 import tempfile
-from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError
+from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError, ConfigurationOptions
 from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
 from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType
@@ -16,6 +16,13 @@ from .namespace_parser import MinorVersionFixedPortIDError, NestedRootNamespaceE
 
 
 _DIRECTORY = None       # type: typing.Optional[tempfile.TemporaryDirectory]
+
+
+def _parse_definition(definition:         DSDLDefinition,
+                      lookup_definitions: typing.Sequence[DSDLDefinition]) -> CompoundType:
+    return parse_definition(definition,
+                            lookup_definitions,
+                            ConfigurationOptions())
 
 
 def _define(rel_path: str, text: str) -> DSDLDefinition:
@@ -78,7 +85,7 @@ def _unittest_simple() -> None:
     assert abc.full_name == 'vendor.nested.Abc'
     assert abc.version == (1, 2)
 
-    p = parse_definition(abc, [])
+    p = _parse_definition(abc, [])
     print('Parsed:', p)
     assert isinstance(p, StructureType)
     assert p.full_name == 'vendor.nested.Abc'
@@ -136,7 +143,7 @@ def _unittest_simple() -> None:
         '''
     )
 
-    p = parse_definition(service, [
+    p = _parse_definition(service, [
         abc,
         empty_new,
         empty_old,
@@ -213,7 +220,7 @@ def _unittest_simple() -> None:
         '''
     )
 
-    p = parse_definition(union, [
+    p = _parse_definition(union, [
         empty_old,
         empty_new,
     ])
@@ -239,14 +246,22 @@ def _unittest_simple() -> None:
 def _unittest_error() -> None:
     from pytest import raises
 
-    def standalone(rel_path: str, definition: str) -> CompoundType:
-        return parse_definition(_define(rel_path, definition), [])
+    def standalone(rel_path: str, definition: str, allow_unregulated: bool=False) -> CompoundType:
+        cfg = ConfigurationOptions()
+        cfg.allow_unregulated_fixed_port_id = allow_unregulated
+        return parse_definition(_define(rel_path, definition), [], cfg)
 
-    with raises(SemanticError, match='(?i).*subject ID.*'):
+    with raises(SemanticError, match='(?i).*port ID.*'):
         standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
+    with raises(SemanticError, match='(?i).*port ID.*'):
+        standalone('vendor/10.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
+
+    with raises(SemanticError, match='(?i).*subject ID.*'):
+        standalone('vendor/100000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
+
     with raises(SemanticError, match='(?i).*service ID.*'):
-        standalone('vendor/10000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
+        standalone('vendor/1000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
     with raises(SemanticError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
@@ -326,7 +341,7 @@ def _unittest_error() -> None:
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
     with raises(UndefinedDataTypeError, match='(?i).*no suitable major version'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -334,7 +349,7 @@ def _unittest_error() -> None:
         )
 
     with raises(UndefinedDataTypeError, match='(?i).*no suitable minor version'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -343,7 +358,7 @@ def _unittest_error() -> None:
         )
 
     with raises(DSDLSyntaxError, match='(?i).*Invalid type declaration.*'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'int128 field'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -352,7 +367,7 @@ def _unittest_error() -> None:
         )
 
     with raises(SemanticError, match='(?i).*type.*'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type.1.1 VALUE = 123'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -365,10 +380,10 @@ def _unittest_error() -> None:
             _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b'),
             _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b'),
         ]
-        parse_definition(defs[0], defs)
+        _parse_definition(defs[0], defs)
 
     with raises(SemanticError, match='(?i).*union directive.*'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n@union'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -376,7 +391,7 @@ def _unittest_error() -> None:
         )
 
     with raises(SemanticError, match='(?i).*deprecated directive.*'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n@deprecated'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -384,7 +399,7 @@ def _unittest_error() -> None:
         )
 
     with raises(SemanticError, match='(?i).*deprecated directive.*'):
-        parse_definition(
+        _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n---\n@deprecated'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
@@ -400,6 +415,9 @@ def _unittest_print() -> None:
         nonlocal printed_items
         printed_items = definition, line_number, value
 
+    config = ConfigurationOptions()
+    config.print_handler = print_handler
+
     parse_definition(
         _define(
             'ns/A.1.0.uavcan',
@@ -409,14 +427,14 @@ def _unittest_print() -> None:
             # line number 4
             '''),
         [],
-        print_handler=print_handler
+        config
     )
     assert printed_items
     assert printed_items[0].full_name == 'ns.A'
     assert printed_items[1] == 3
     assert printed_items[2]
 
-    parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], print_handler=print_handler)
+    parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], config)
     assert printed_items
     assert printed_items[0].full_name == 'ns.B'
     assert printed_items[1] == 1
@@ -430,7 +448,7 @@ def _unittest_print() -> None:
             @print offset
             '''),
         [],
-        print_handler=print_handler
+        config
     )
     assert printed_items
     assert printed_items[0].full_name == 'ns.Offset'
@@ -461,7 +479,7 @@ def _unittest_print() -> None:
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
         ],
-        print_handler=print_handler
+        config
     )
     assert printed_items
     assert printed_items[0].full_name == 'ns.ComplexOffset'
@@ -473,7 +491,7 @@ def _unittest_print() -> None:
 def _unittest_assert() -> None:
     from pytest import raises
 
-    parse_definition(
+    _parse_definition(
         _define(
             'ns/A.1.0.uavcan',
             '''
@@ -509,7 +527,7 @@ def _unittest_assert() -> None:
     )
 
     with raises(SemanticError, match='(?i).*invalid operand.*'):
-        parse_definition(
+        _parse_definition(
             _define(
                 'ns/B.1.0.uavcan',
                 '''
@@ -521,7 +539,7 @@ def _unittest_assert() -> None:
         )
 
     with raises(SemanticError, match='(?i).*cannot be compared.*'):
-        parse_definition(
+        _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
                 '''
@@ -531,7 +549,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    parse_definition(
+    _parse_definition(
         _define(
             'ns/D.1.0.uavcan',
             '''
@@ -543,7 +561,7 @@ def _unittest_assert() -> None:
         []
     )
 
-    parse_definition(
+    _parse_definition(
         _define(
             'ns/E.1.0.uavcan',
             '''
@@ -560,7 +578,7 @@ def _unittest_assert() -> None:
     )
 
     with raises(SemanticError, match='(?i).*unions.*'):
-        parse_definition(
+        _parse_definition(
             _define(
                 'ns/F.1.0.uavcan',
                 '''
@@ -574,7 +592,7 @@ def _unittest_assert() -> None:
         )
 
     with raises(AssertionCheckFailureError):
-        parse_definition(
+        _parse_definition(
             _define(
                 'ns/G.1.0.uavcan',
                 '''
@@ -585,7 +603,7 @@ def _unittest_assert() -> None:
         )
 
     with raises(SemanticError, match='(?i).*yield a boolean.*'):
-        parse_definition(
+        _parse_definition(
             _define(
                 'ns/H.1.0.uavcan',
                 '''

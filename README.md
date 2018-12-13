@@ -51,6 +51,9 @@ has yielded upon its evaluation) and the location of the print statement for dia
 If the function is not provided, `@print` statements will not produce any output besides the log,
 but their expressions will be evaluated nevertheless (and a failed evaluation will still be treated as a fatal error).
 
+As demanded by the specification, the parser rejects unregulated fixed port ID by default.
+To allow unregulated fixed port ID, pass the parameter `allow_unregulated_fixed_port_id` as True.
+
 #### Data type model
 
 Data types are represented as one of the following types defined in `pydsdl.data_type`,

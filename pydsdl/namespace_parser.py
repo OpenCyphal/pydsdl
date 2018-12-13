@@ -10,7 +10,7 @@ import fnmatch
 from collections import defaultdict
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
-from .dsdl_parser import parse_definition, PrintDirectiveOutputHandler
+from .dsdl_parser import parse_definition, ConfigurationOptions, PrintDirectiveOutputHandler
 from .parse_error import ParseError, InternalError, InvalidDefinitionError
 
 
@@ -76,9 +76,10 @@ class MinorVersionFixedPortIDError(InvalidDefinitionError):
     pass
 
 
-def parse_namespace(root_namespace_directory:       str,
-                    lookup_directories:             typing.Iterable[str],
-                    print_directive_output_handler: typing.Optional[PrintDirectiveOutputHandler]=None) -> \
+def parse_namespace(root_namespace_directory:        str,
+                    lookup_directories:              typing.Iterable[str],
+                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler]=None,
+                    allow_unregulated_fixed_port_id: bool=False) -> \
         typing.List[CompoundType]:
     """
     Parse all DSDL definitions in the specified root namespace directory.
@@ -96,6 +97,10 @@ def parse_namespace(root_namespace_directory:       str,
     :param print_directive_output_handler:  If provided, this callable will be invoked when a @print directive is
                                             encountered. If not provided, print directives will not produce any output
                                             except for the log (at the INFO level).
+
+    :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
+                                            This is a dangerous feature that must not be used unless you understand the
+                                            risks. The background information is provided in the UAVCAN specification.
 
     :return: A list of CompoundType.
 
@@ -130,9 +135,13 @@ def parse_namespace(root_namespace_directory:       str,
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     # Parse the constructed definitions
+    configuration_options = ConfigurationOptions()
+    configuration_options.print_handler = print_directive_output_handler
+    configuration_options.allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
+
     types = _parse_namespace_definitions(target_dsdl_definitions,
                                          lookup_dsdl_definitions,
-                                         print_directive_output_handler)
+                                         configuration_options)
 
     # Note that we check for collisions in the parsed namespace only.
     # We intentionally ignore (do not check for) possible collisions in the lookup directories,
@@ -146,9 +155,9 @@ def parse_namespace(root_namespace_directory:       str,
     return types
 
 
-def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition],
-                                 lookup_definitions: typing.List[DSDLDefinition],
-                                 print_handler:      typing.Optional[PrintDirectiveOutputHandler]) -> \
+def _parse_namespace_definitions(target_definitions:    typing.List[DSDLDefinition],
+                                 lookup_definitions:    typing.List[DSDLDefinition],
+                                 configuration_options: ConfigurationOptions) -> \
         typing.List[CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
@@ -162,7 +171,7 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
         try:
             parsed = parse_definition(tdd,
                                       lookup_definitions,
-                                      print_handler=print_handler)
+                                      configuration_options=configuration_options)
         except ParseError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
