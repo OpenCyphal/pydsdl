@@ -15,7 +15,11 @@ from .namespace_parser import MinorVersionsNotBitCompatibleError, MultipleDefini
 from .namespace_parser import MinorVersionFixedPortIDError, NestedRootNamespaceError, NamespaceNameCollisionError
 
 
-_DIRECTORY = None       # type: typing.Optional[tempfile.TemporaryDirectory]
+# Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
+#   pydsdl/_non_intrusive_test.py:18: error: Missing type parameters for generic type
+#   pydsdl/_non_intrusive_test.py: note: In function "_in_n_out":
+#   pydsdl/_non_intrusive_test.py:18: error: Missing type parameters for generic type
+_DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 
 def _parse_definition(definition:         DSDLDefinition,
