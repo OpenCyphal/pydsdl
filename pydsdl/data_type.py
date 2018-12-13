@@ -713,7 +713,7 @@ class CompoundType(DataType):
         return self.bit_length_values == other.bit_length_values
 
     @property
-    def name(self) -> str:
+    def full_name(self) -> str:
         """The full name, e.g., uavcan.node.Heartbeat"""
         return self._name
 
@@ -775,12 +775,12 @@ class CompoundType(DataType):
         raise NotImplementedError
 
     def __str__(self) -> str:
-        return '%s.%d.%d' % (self.name, self.version.major, self.version.minor)
+        return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
 
     def __repr__(self) -> str:
         return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, regulated_port_id=%r)' % \
            (self.__class__.__name__,
-            self.name,
+            self.full_name,
             self.version,
             self.fields,
             self.constants,
@@ -978,7 +978,7 @@ def _unittest_compound_types() -> None:
     with raises(InvalidNameError, match='(?i).*cannot contain.*'):
         try_name('namespace.n-s.Type')
 
-    assert try_name('root.nested.Type').name == 'root.nested.Type'
+    assert try_name('root.nested.Type').full_name == 'root.nested.Type'
     assert try_name('root.nested.Type').namespace == 'root.nested'
     assert try_name('root.nested.Type').root_namespace == 'root'
     assert try_name('root.nested.Type').short_name == 'Type'

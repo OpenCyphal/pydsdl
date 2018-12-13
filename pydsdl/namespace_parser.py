@@ -177,7 +177,7 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
 def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) -> None:
     for a in types:
         for b in types:
-            rpid_must_be_different = (a.name != b.name) or (a.version.major != b.version.major)
+            rpid_must_be_different = (a.full_name != b.full_name) or (a.version.major != b.version.major)
             if rpid_must_be_different:
                 if isinstance(a, ServiceType) == isinstance(b, ServiceType):
                     if a.has_regulated_port_id and b.has_regulated_port_id:
@@ -191,7 +191,7 @@ def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) ->
 def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> None:
     by_name = defaultdict(list)  # type: typing.DefaultDict[str, typing.List[CompoundType]]
     for t in types:
-        by_name[t.name].append(t)
+        by_name[t.full_name].append(t)
 
     for name, definitions in by_name.items():
         by_major = defaultdict(list)    # type: typing.DefaultDict[int, typing.List[CompoundType]]
@@ -206,7 +206,7 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                         continue
 
                     assert a.version.major == b.version.major
-                    assert a.name == b.name
+                    assert a.full_name == b.full_name
 
                     # Version collision
                     if a.version.minor == b.version.minor:
@@ -329,7 +329,7 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
     print(dsdl_defs)
-    lut = {x.name: x for x in dsdl_defs}    # type: typing.Dict[str, DSDLDefinition]
+    lut = {x.full_name: x for x in dsdl_defs}    # type: typing.Dict[str, DSDLDefinition]
     assert len(lut) == 3
 
     assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])

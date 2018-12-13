@@ -195,14 +195,14 @@ def parse_definition(definition:         DSDLDefinition,
         if len(attribute_collections) == 1:
             ac = attribute_collections[-1]
             if ac.is_union:
-                tout = UnionType(name=definition.name,
+                tout = UnionType(name=definition.full_name,
                                  version=definition.version,
                                  attributes=ac.attributes,
                                  deprecated=is_deprecated,
                                  regulated_port_id=definition.regulated_port_id,
                                  source_file_path=definition.file_path)    # type: CompoundType
             else:
-                tout = StructureType(name=definition.name,
+                tout = StructureType(name=definition.full_name,
                                      version=definition.version,
                                      attributes=ac.attributes,
                                      deprecated=is_deprecated,
@@ -213,7 +213,7 @@ def parse_definition(definition:         DSDLDefinition,
             ac.execute_postponed_expressions(tout)
         else:
             req, res = attribute_collections       # type: _AttributeCollection, _AttributeCollection
-            tout = ServiceType(name=definition.name,
+            tout = ServiceType(name=definition.full_name,
                                version=definition.version,
                                request_attributes=req.attributes,
                                response_attributes=res.attributes,
@@ -407,7 +407,7 @@ def _construct_type(referer_namespace:  str,
             _logger.debug('Relative reference: %r --> %r', name, absolute_name)
             name = absolute_name
 
-        matching_name = list(filter(lambda x: x.name == name, lookup_definitions))
+        matching_name = list(filter(lambda x: x.full_name == name, lookup_definitions))
         if not matching_name:
             raise UndefinedDataTypeError('No type named ' + name)
 
@@ -434,7 +434,7 @@ def _construct_type(referer_namespace:  str,
 
         # Remove all versions of the same type from lookup definitions to prevent circular dependencies
         lookup_definitions_without_circular_dependencies = [
-            x for x in lookup_definitions if x.name != definition.name
+            x for x in lookup_definitions if x.full_name != definition.full_name
         ]
 
         return parse_definition(definition, lookup_definitions_without_circular_dependencies)

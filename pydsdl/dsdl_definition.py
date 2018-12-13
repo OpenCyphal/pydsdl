@@ -78,7 +78,7 @@ class DSDLDefinition:
         self._name = CompoundType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])  # type: str
 
     @property
-    def name(self) -> str:
+    def full_name(self) -> str:
         """The full name, e.g., uavcan.node.Heartbeat"""
         return self._name
 
@@ -126,6 +126,6 @@ class DSDLDefinition:
 
     def __str__(self) -> str:
         return 'DSDLDefinition(name=%r, version=%r, regulated_port_id=%r, file_path=%r)' % \
-            (self.name, self.version, self.regulated_port_id, self.file_path)
+            (self.full_name, self.version, self.regulated_port_id, self.file_path)
 
     __repr__ = __str__

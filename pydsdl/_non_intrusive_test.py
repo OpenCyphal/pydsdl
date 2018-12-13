@@ -48,7 +48,7 @@ def _unittest_define() -> None:
     # I DON'T ALWAYS WRITE UNIT TESTS
     d = _define('uavcan/test/65000.Message.1.2.uavcan', '# empty')
     assert _DIRECTORY is not None
-    assert d.name == 'uavcan.test.Message'
+    assert d.full_name == 'uavcan.test.Message'
     assert d.version == (1, 2)
     assert d.regulated_port_id == 65000
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/test/65000.Message.1.2.uavcan')
@@ -56,7 +56,7 @@ def _unittest_define() -> None:
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
     d = _define('uavcan/Service.255.254.uavcan', '# empty 2')
-    assert d.name == 'uavcan.Service'
+    assert d.full_name == 'uavcan.Service'
     assert d.version == (255, 254)
     assert d.regulated_port_id is None
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/Service.255.254.uavcan')
@@ -75,13 +75,13 @@ def _unittest_simple() -> None:
         '''
     )
     assert abc.regulated_port_id == 58000
-    assert abc.name == 'vendor.nested.Abc'
+    assert abc.full_name == 'vendor.nested.Abc'
     assert abc.version == (1, 2)
 
     p = parse_definition(abc, [])
     print('Parsed:', p)
     assert isinstance(p, StructureType)
-    assert p.name == 'vendor.nested.Abc'
+    assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith('vendor/nested/58000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
     assert p.regulated_port_id == 58000
@@ -144,7 +144,7 @@ def _unittest_simple() -> None:
     ])
     print('Parsed:', p)
     assert isinstance(p, ServiceType)
-    assert p.name == 'another.Service'
+    assert p.full_name == 'another.Service'
     assert p.regulated_port_id == 300
     assert p.deprecated
     assert p.version == (0, 1)
@@ -156,8 +156,8 @@ def _unittest_simple() -> None:
     req, res = [x.data_type for x in p.fields]
     assert isinstance(req, UnionType)
     assert isinstance(res, StructureType)
-    assert req.name == 'another.Service.Request'
-    assert res.name == 'another.Service.Response'
+    assert req.full_name == 'another.Service.Request'
+    assert res.full_name == 'another.Service.Response'
     assert req is p.request_type
     assert res is p.response_type
 
@@ -172,17 +172,17 @@ def _unittest_simple() -> None:
 
     t = req.fields[0].data_type
     assert isinstance(t, StructureType)
-    assert t.name == 'vendor.nested.Empty'
+    assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected implicitly
 
     t = req.fields[1].data_type
     assert isinstance(t, StructureType)
-    assert t.name == 'vendor.nested.Empty'
+    assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected explicitly
 
     t = req.fields[2].data_type
     assert isinstance(t, StructureType)
-    assert t.name == 'vendor.nested.Empty'
+    assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 254)          # Selected explicitly
 
     assert len(res.constants) == 0
@@ -194,12 +194,12 @@ def _unittest_simple() -> None:
 
     t = res.fields[0].data_type
     assert isinstance(t, StructureType)
-    assert t.name == 'another.Constants'
+    assert t.full_name == 'another.Constants'
     assert t.version == (5, 0)
 
     t = res.fields[1].data_type
     assert isinstance(t, StructureType)
-    assert t.name == 'vendor.nested.Abc'
+    assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
     union = _define(
@@ -218,7 +218,7 @@ def _unittest_simple() -> None:
         empty_new,
     ])
 
-    assert p.name == 'another.Union'
+    assert p.full_name == 'another.Union'
     assert p.version == (5, 9)
     assert p.regulated_port_id is None
     assert not p.has_regulated_port_id
@@ -412,13 +412,13 @@ def _unittest_print() -> None:
         print_handler=print_handler
     )
     assert printed_items
-    assert printed_items[0].name == 'ns.A'
+    assert printed_items[0].full_name == 'ns.A'
     assert printed_items[1] == 3
     assert printed_items[2]
 
     parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], print_handler=print_handler)
     assert printed_items
-    assert printed_items[0].name == 'ns.B'
+    assert printed_items[0].full_name == 'ns.B'
     assert printed_items[1] == 1
     assert not printed_items[2]
 
@@ -433,7 +433,7 @@ def _unittest_print() -> None:
         print_handler=print_handler
     )
     assert printed_items
-    assert printed_items[0].name == 'ns.Offset'
+    assert printed_items[0].full_name == 'ns.Offset'
     assert printed_items[1] == 3
     assert printed_items[2] == {8}
 
@@ -464,7 +464,7 @@ def _unittest_print() -> None:
         print_handler=print_handler
     )
     assert printed_items
-    assert printed_items[0].name == 'ns.ComplexOffset'
+    assert printed_items[0].full_name == 'ns.ComplexOffset'
     assert printed_items[1] == 3
     assert printed_items[2] == {4, 12, 20, 28, 36}
 
@@ -647,9 +647,9 @@ def _unittest_parse_namespace() -> None:
     )
     print(parsed)
     assert len(parsed) == 3
-    assert 'zubax.First' in [x.name for x in parsed]
-    assert 'zubax.Message' in [x.name for x in parsed]
-    assert 'zubax.nested.Spartans' in [x.name for x in parsed]
+    assert 'zubax.First' in [x.full_name for x in parsed]
+    assert 'zubax.Message' in [x.full_name for x in parsed]
+    assert 'zubax.nested.Spartans' in [x.full_name for x in parsed]
 
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
