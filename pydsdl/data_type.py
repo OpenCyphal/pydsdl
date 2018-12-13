@@ -70,7 +70,7 @@ class AttributeNameCollision(TypeParameterError):
     pass
 
 
-class InvalidRegulatedPortIDError(TypeParameterError):
+class InvalidFixedPortIDError(TypeParameterError):
     pass
 
 
@@ -647,17 +647,17 @@ class CompoundType(DataType):
     NAME_COMPONENT_SEPARATOR = '.'
 
     def __init__(self,
-                 name:              str,
-                 version:           Version,
-                 attributes:        typing.Iterable[Attribute],
-                 deprecated:        bool,
-                 regulated_port_id: typing.Optional[int],
+                 name:          str,
+                 version:       Version,
+                 attributes:    typing.Iterable[Attribute],
+                 deprecated:    bool,
+                 fixed_port_id: typing.Optional[int],
                  source_file_path:  str):
         self._name = str(name).strip()
         self._version = version
         self._attributes = list(attributes)
         self._deprecated = bool(deprecated)
-        self._regulated_port_id = None if regulated_port_id is None else int(regulated_port_id)
+        self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
 
         # Name check
@@ -691,15 +691,15 @@ class CompoundType(DataType):
                 used_names.add(a.name)
 
         # Port ID check
-        port_id = self._regulated_port_id
+        port_id = self._fixed_port_id
         if port_id is not None:
             assert port_id is not None
             if isinstance(self, ServiceType):
                 if not is_valid_regulated_service_id(port_id, self.root_namespace):
-                    raise InvalidRegulatedPortIDError('Regulated service ID %r is not valid' % port_id)
+                    raise InvalidFixedPortIDError('Fixed service ID %r is not valid' % port_id)
             else:
                 if not is_valid_regulated_subject_id(port_id, self.root_namespace):
-                    raise InvalidRegulatedPortIDError('Regulated subject ID %r is not valid' % port_id)
+                    raise InvalidFixedPortIDError('Fixed subject ID %r is not valid' % port_id)
 
     def is_mutually_bit_compatible_with(self, other: 'CompoundType') -> bool:
         """
@@ -758,12 +758,12 @@ class CompoundType(DataType):
         return [a for a in self.attributes if isinstance(a, Constant)]
 
     @property
-    def regulated_port_id(self) -> typing.Optional[int]:
-        return self._regulated_port_id
+    def fixed_port_id(self) -> typing.Optional[int]:
+        return self._fixed_port_id
 
     @property
-    def has_regulated_port_id(self) -> bool:
-        return self.regulated_port_id is not None
+    def has_fixed_port_id(self) -> bool:
+        return self.fixed_port_id is not None
 
     @property
     def source_file_path(self) -> str:
@@ -778,33 +778,33 @@ class CompoundType(DataType):
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
 
     def __repr__(self) -> str:
-        return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, regulated_port_id=%r)' % \
+        return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, fixed_port_id=%r)' % \
            (self.__class__.__name__,
             self.full_name,
             self.version,
             self.fields,
             self.constants,
             self.deprecated,
-            self.regulated_port_id)
+            self.fixed_port_id)
 
 
 class UnionType(CompoundType):
     MIN_NUMBER_OF_VARIANTS = 2
 
     def __init__(self,
-                 name:              str,
-                 version:           Version,
-                 attributes:        typing.Iterable[Attribute],
-                 deprecated:        bool,
-                 regulated_port_id: typing.Optional[int],
-                 source_file_path:  str):
+                 name:             str,
+                 version:          Version,
+                 attributes:       typing.Iterable[Attribute],
+                 deprecated:       bool,
+                 fixed_port_id:    typing.Optional[int],
+                 source_file_path: str):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
                                         version=version,
                                         attributes=attributes,
                                         deprecated=deprecated,
-                                        regulated_port_id=regulated_port_id,
+                                        fixed_port_id=fixed_port_id,
                                         source_file_path=source_file_path)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
@@ -884,14 +884,14 @@ class ServiceType(CompoundType):
                  request_is_union:    bool,
                  response_is_union:   bool,
                  deprecated:          bool,
-                 regulated_port_id:   typing.Optional[int],
+                 fixed_port_id:       typing.Optional[int],
                  source_file_path:    str):
         request_meta_type = UnionType if request_is_union else StructureType
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_attributes,
                                                deprecated=deprecated,
-                                               regulated_port_id=None,
+                                               fixed_port_id=None,
                                                source_file_path='')
 
         response_meta_type = UnionType if response_is_union else StructureType
@@ -899,7 +899,7 @@ class ServiceType(CompoundType):
                                                  version=version,
                                                  attributes=response_attributes,
                                                  deprecated=deprecated,
-                                                 regulated_port_id=None,
+                                                 fixed_port_id=None,
                                                  source_file_path='')
 
         container_attributes = [
@@ -911,7 +911,7 @@ class ServiceType(CompoundType):
                                           version=version,
                                           attributes=container_attributes,
                                           deprecated=deprecated,
-                                          regulated_port_id=regulated_port_id,
+                                          fixed_port_id=fixed_port_id,
                                           source_file_path=source_file_path)
 
     @property
@@ -951,7 +951,7 @@ def _unittest_compound_types() -> None:
                             version=Version(0, 1),
                             attributes=[],
                             deprecated=False,
-                            regulated_port_id=None,
+                            fixed_port_id=None,
                             source_file_path='')
 
     with raises(InvalidNameError, match='(?i).*empty.*'):
@@ -988,7 +988,7 @@ def _unittest_compound_types() -> None:
                   version=Version(0, 1),
                   attributes=[],
                   deprecated=False,
-                  regulated_port_id=None,
+                  fixed_port_id=None,
                   source_file_path='')
 
     with raises(MalformedUnionError, match='(?i).*padding.*'):
@@ -1000,7 +1000,7 @@ def _unittest_compound_types() -> None:
                       PaddingField(VoidType(16)),
                   ],
                   deprecated=False,
-                  regulated_port_id=None,
+                  fixed_port_id=None,
                   source_file_path='')
 
     _check_name('abc')
@@ -1043,7 +1043,7 @@ def _unittest_compound_types() -> None:
                          version=Version(0, 1),
                          attributes=atr,
                          deprecated=False,
-                         regulated_port_id=None,
+                         fixed_port_id=None,
                          source_file_path='')
 
     assert try_union_fields([
@@ -1071,7 +1071,7 @@ def _unittest_compound_types() -> None:
                              version=Version(0, 1),
                              attributes=atr,
                              deprecated=False,
-                             regulated_port_id=None,
+                             fixed_port_id=None,
                              source_file_path='')
 
     assert try_struct_fields([

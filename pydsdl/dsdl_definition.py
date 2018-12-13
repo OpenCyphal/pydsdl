@@ -20,7 +20,7 @@ class FileNameFormatError(InvalidDefinitionError):
 class DSDLDefinition:
     """
     A DSDL type definition source abstracts the filesystem level details away, presenting a higher-level
-    interface that operates solely on the level of type names, namespaces, regulated identifiers, and so on.
+    interface that operates solely on the level of type names, namespaces, fixed identifiers, and so on.
     Upper layers that operate on top of this abstraction do not concern themselves with the file system at all.
     """
 
@@ -45,22 +45,22 @@ class DSDLDefinition:
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.uavcan
         basename_components = basename.split('.')[:-1]
-        str_regulated_port_id = None    # type: typing.Optional[str]
+        str_fixed_port_id = None    # type: typing.Optional[str]
         if len(basename_components) == 4:
-            str_regulated_port_id, short_name, str_major_version, str_minor_version = basename_components
+            str_fixed_port_id, short_name, str_major_version, str_minor_version = basename_components
         elif len(basename_components) == 3:
             short_name, str_major_version, str_minor_version = basename_components
         else:
             raise FileNameFormatError('Invalid file name', path=self._file_path)
 
-        # Parsing the regulated port ID, if specified; None if not
-        if str_regulated_port_id is not None:
+        # Parsing the fixed port ID, if specified; None if not
+        if str_fixed_port_id is not None:
             try:
-                self._regulated_port_id = int(str_regulated_port_id)    # type: typing.Optional[int]
+                self._fixed_port_id = int(str_fixed_port_id)    # type: typing.Optional[int]
             except ValueError:
-                raise FileNameFormatError('Could not parse the regulated port number', path=self._file_path) from None
+                raise FileNameFormatError('Could not parse the fixed port ID', path=self._file_path) from None
         else:
-            self._regulated_port_id = None
+            self._fixed_port_id = None
 
         # Parsing the version numbers
         try:
@@ -112,20 +112,20 @@ class DSDLDefinition:
         return self._version
 
     @property
-    def regulated_port_id(self) -> typing.Optional[int]:
-        """Either the regulated port ID as integer, or None if not defined for this type."""
-        return self._regulated_port_id
+    def fixed_port_id(self) -> typing.Optional[int]:
+        """Either the fixed port ID as integer, or None if not defined for this type."""
+        return self._fixed_port_id
 
     @property
-    def has_regulated_port_id(self) -> bool:
-        return self.regulated_port_id is not None
+    def has_fixed_port_id(self) -> bool:
+        return self.fixed_port_id is not None
 
     @property
     def file_path(self) -> str:
         return self._file_path
 
     def __str__(self) -> str:
-        return 'DSDLDefinition(name=%r, version=%r, regulated_port_id=%r, file_path=%r)' % \
-            (self.full_name, self.version, self.regulated_port_id, self.file_path)
+        return 'DSDLDefinition(name=%r, version=%r, fixed_port_id=%r, file_path=%r)' % \
+            (self.full_name, self.version, self.fixed_port_id, self.file_path)
 
     __repr__ = __str__

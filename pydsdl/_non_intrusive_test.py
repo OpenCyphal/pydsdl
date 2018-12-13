@@ -10,9 +10,9 @@ from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError
 from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
 from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType
-from .namespace_parser import parse_namespace, RegulatedPortIDCollisionError, VersionsOfDifferentKindError
+from .namespace_parser import parse_namespace, FixedPortIDCollisionError, VersionsOfDifferentKindError
 from .namespace_parser import MinorVersionsNotBitCompatibleError, MultipleDefinitionsUnderSameVersionError
-from .namespace_parser import MinorVersionRegulatedPortIDError, NestedRootNamespaceError, NamespaceNameCollisionError
+from .namespace_parser import MinorVersionFixedPortIDError, NestedRootNamespaceError, NamespaceNameCollisionError
 
 
 _DIRECTORY = None       # type: typing.Optional[tempfile.TemporaryDirectory]
@@ -50,7 +50,7 @@ def _unittest_define() -> None:
     assert _DIRECTORY is not None
     assert d.full_name == 'uavcan.test.Message'
     assert d.version == (1, 2)
-    assert d.regulated_port_id == 65000
+    assert d.fixed_port_id == 65000
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/test/65000.Message.1.2.uavcan')
     assert open(d.file_path).read() == '# empty'
 
@@ -58,7 +58,7 @@ def _unittest_define() -> None:
     d = _define('uavcan/Service.255.254.uavcan', '# empty 2')
     assert d.full_name == 'uavcan.Service'
     assert d.version == (255, 254)
-    assert d.regulated_port_id is None
+    assert d.fixed_port_id is None
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/Service.255.254.uavcan')
     assert open(d.file_path).read() == '# empty 2'
 
@@ -74,7 +74,7 @@ def _unittest_simple() -> None:
         truncated int64[<33] b
         '''
     )
-    assert abc.regulated_port_id == 58000
+    assert abc.fixed_port_id == 58000
     assert abc.full_name == 'vendor.nested.Abc'
     assert abc.version == (1, 2)
 
@@ -84,7 +84,7 @@ def _unittest_simple() -> None:
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith('vendor/nested/58000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
-    assert p.regulated_port_id == 58000
+    assert p.fixed_port_id == 58000
     assert p.deprecated
     assert p.version == (1, 2)
     assert p.bit_length_range == (14, 14 + 64 * 32)
@@ -145,7 +145,7 @@ def _unittest_simple() -> None:
     print('Parsed:', p)
     assert isinstance(p, ServiceType)
     assert p.full_name == 'another.Service'
-    assert p.regulated_port_id == 300
+    assert p.fixed_port_id == 300
     assert p.deprecated
     assert p.version == (0, 1)
     assert not p.constants
@@ -165,7 +165,7 @@ def _unittest_simple() -> None:
     assert len(req.fields) == 3
     assert req.number_of_variants == 3
     assert req.deprecated
-    assert not req.has_regulated_port_id
+    assert not req.has_fixed_port_id
     assert req.version == (0, 1)
     assert req.bit_length_range == (2, 2)   # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
@@ -188,7 +188,7 @@ def _unittest_simple() -> None:
     assert len(res.constants) == 0
     assert len(res.fields) == 2
     assert res.deprecated
-    assert not res.has_regulated_port_id
+    assert not res.has_fixed_port_id
     assert res.version == (0, 1)
     assert res.bit_length_range == (14, 14 + 64 * 32)
 
@@ -220,8 +220,8 @@ def _unittest_simple() -> None:
 
     assert p.full_name == 'another.Union'
     assert p.version == (5, 9)
-    assert p.regulated_port_id is None
-    assert not p.has_regulated_port_id
+    assert p.fixed_port_id is None
+    assert not p.has_fixed_port_id
     assert not p.deprecated
     assert isinstance(p, UnionType)
     assert p.number_of_variants == 3
@@ -658,7 +658,7 @@ def _unittest_parse_namespace() -> None:
         """
     )
 
-    with raises(RegulatedPortIDCollisionError):
+    with raises(FixedPortIDCollisionError):
         parse_namespace(
             os.path.join(directory.name, 'zubax'),
             []
@@ -830,7 +830,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """
     )
 
-    with raises(MinorVersionRegulatedPortIDError):
+    with raises(MinorVersionFixedPortIDError):
         parse_namespace(os.path.join(directory.name, 'ns'), [])
 
     _undefine_glob('ns/Spartans.30.1.uavcan')
@@ -863,7 +863,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """
     )
 
-    with raises(MinorVersionRegulatedPortIDError):
+    with raises(MinorVersionFixedPortIDError):
         parse_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Adding new major version under the same RPID
@@ -879,7 +879,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """
     )
 
-    with raises(RegulatedPortIDCollisionError):
+    with raises(FixedPortIDCollisionError):
         parse_namespace(os.path.join(directory.name, 'ns'), [])
 
 

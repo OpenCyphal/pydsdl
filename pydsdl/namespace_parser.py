@@ -36,10 +36,10 @@ class NestedRootNamespaceError(InvalidDefinitionError):
     pass
 
 
-class RegulatedPortIDCollisionError(InvalidDefinitionError):
+class FixedPortIDCollisionError(InvalidDefinitionError):
     """
     Raised when there is more than one data type, or different major versions of the same data type
-    using the same regulated port ID.
+    using the same fixed port ID.
     """
     pass
 
@@ -68,9 +68,9 @@ class VersionsOfDifferentKindError(InvalidDefinitionError):
     pass
 
 
-class MinorVersionRegulatedPortIDError(InvalidDefinitionError):
+class MinorVersionFixedPortIDError(InvalidDefinitionError):
     """
-    Different regulated port ID under the same major version, or a regulated port ID was removed under the same
+    Different fixed port ID under the same major version, or a fixed port ID was removed under the same
     major version.
     """
     pass
@@ -140,7 +140,7 @@ def parse_namespace(root_namespace_directory:       str,
     # directories may contain issues and mistakes that are outside of the control of the user (e.g.,
     # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
     # by the third party.
-    _ensure_no_regulated_port_id_collisions(types)
+    _ensure_no_fixed_port_id_collisions(types)
     _ensure_minor_version_compatibility(types)
 
     return types
@@ -174,16 +174,16 @@ def _parse_namespace_definitions(target_definitions: typing.List[DSDLDefinition]
     return types
 
 
-def _ensure_no_regulated_port_id_collisions(types: typing.List[CompoundType]) -> None:
+def _ensure_no_fixed_port_id_collisions(types: typing.List[CompoundType]) -> None:
     for a in types:
         for b in types:
             rpid_must_be_different = (a.full_name != b.full_name) or (a.version.major != b.version.major)
             if rpid_must_be_different:
                 if isinstance(a, ServiceType) == isinstance(b, ServiceType):
-                    if a.has_regulated_port_id and b.has_regulated_port_id:
-                        if a.regulated_port_id == b.regulated_port_id:
-                            raise RegulatedPortIDCollisionError(
-                                'The regulated port ID of this definition is also used in %r' % b.source_file_path,
+                    if a.has_fixed_port_id and b.has_fixed_port_id:
+                        if a.fixed_port_id == b.fixed_port_id:
+                            raise FixedPortIDCollisionError(
+                                'The fixed port ID of this definition is also used in %r' % b.source_file_path,
                                 path=a.source_file_path
                             )
 
@@ -237,17 +237,17 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                         )
 
                     # Must use either the same RPID, or the older one should not have an RPID
-                    if a.has_regulated_port_id == b.has_regulated_port_id:
-                        if a.regulated_port_id != b.regulated_port_id:
-                            raise MinorVersionRegulatedPortIDError(
-                                'Different regulated port ID values under the same version %r' % b.source_file_path,
+                    if a.has_fixed_port_id == b.has_fixed_port_id:
+                        if a.fixed_port_id != b.fixed_port_id:
+                            raise MinorVersionFixedPortIDError(
+                                'Different fixed port ID values under the same version %r' % b.source_file_path,
                                 path=a.source_file_path
                             )
                     else:
                         must_have = a if a.version.minor > b.version.minor else b
-                        if not must_have.has_regulated_port_id:
-                            raise MinorVersionRegulatedPortIDError(
-                                'Regulated port ID cannot be removed under the same major version',
+                        if not must_have.has_fixed_port_id:
+                            raise MinorVersionFixedPortIDError(
+                                'Fixed port ID cannot be removed under the same major version',
                                 path=must_have.source_file_path
                             )
 
@@ -334,17 +334,17 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])
     assert str(lut['foo.Qwerty']) == \
-        "DSDLDefinition(name='foo.Qwerty', version=Version(major=123, minor=234), regulated_port_id=123, " \
+        "DSDLDefinition(name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, " \
         "file_path='%s')" % lut['foo.Qwerty'].file_path
 
     assert str(lut['foo.nested.Foo']) == \
-        "DSDLDefinition(name='foo.nested.Foo', version=Version(major=32, minor=43), regulated_port_id=None, " \
+        "DSDLDefinition(name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, " \
         "file_path='%s')" % lut['foo.nested.Foo'].file_path
 
     t = lut['foo.Qwerty']
     assert t.file_path == os.path.join(root_ns_dir, '123.Qwerty.123.234.uavcan')
-    assert t.has_regulated_port_id
-    assert t.regulated_port_id == 123
+    assert t.has_fixed_port_id
+    assert t.fixed_port_id == 123
     assert t.text == '# TEST TEXT'
     assert t.version.major == 123
     assert t.version.minor == 234
@@ -355,8 +355,8 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     t = lut['foo.nested.Asd']
     assert t.file_path == os.path.join(root_ns_dir, 'nested', '2.Asd.21.32.uavcan')
-    assert t.has_regulated_port_id
-    assert t.regulated_port_id == 2
+    assert t.has_fixed_port_id
+    assert t.fixed_port_id == 2
     assert t.text == '# TEST TEXT'
     assert t.version.major == 21
     assert t.version.minor == 32
@@ -367,8 +367,8 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     t = lut['foo.nested.Foo']
     assert t.file_path == os.path.join(root_ns_dir, 'nested', 'Foo.32.43.uavcan')
-    assert not t.has_regulated_port_id
-    assert t.regulated_port_id is None
+    assert not t.has_fixed_port_id
+    assert t.fixed_port_id is None
     assert t.text == '# TEST TEXT'
     assert t.version.major == 32
     assert t.version.minor == 43
