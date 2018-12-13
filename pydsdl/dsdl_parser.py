@@ -43,6 +43,7 @@ class ConfigurationOptions:
     def __init__(self) -> None:
         self.print_handler = None                       # type: typing.Optional[PrintDirectiveOutputHandler]
         self.allow_unregulated_fixed_port_id = False
+        self.skip_assertion_checks = False
 
 
 _GrammarRule = typing.NamedTuple('GrammarRule', [
@@ -130,7 +131,8 @@ def parse_definition(definition:            DSDLDefinition,
                 raise SemanticError('Assertion check expressions must yield a boolean; %r yields %r' %
                                     (expression, result))
 
-        attribute_collections[-1].add_postponed_expression(expression, validator)
+        if not configuration_options.skip_assertion_checks:
+            attribute_collections[-1].add_postponed_expression(expression, validator)
 
     def make_print_expression_handler(ln: int) -> typing.Callable[[str], None]:
         # An extra closure is needed to capture the line number

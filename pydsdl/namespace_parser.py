@@ -79,7 +79,8 @@ class MinorVersionFixedPortIDError(InvalidDefinitionError):
 def parse_namespace(root_namespace_directory:        str,
                     lookup_directories:              typing.Iterable[str],
                     print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler]=None,
-                    allow_unregulated_fixed_port_id: bool=False) -> \
+                    allow_unregulated_fixed_port_id: bool=False,
+                    skip_assertion_checks:           bool=False) -> \
         typing.List[CompoundType]:
     """
     Parse all DSDL definitions in the specified root namespace directory.
@@ -101,6 +102,9 @@ def parse_namespace(root_namespace_directory:        str,
     :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
                                             This is a dangerous feature that must not be used unless you understand the
                                             risks. The background information is provided in the UAVCAN specification.
+
+    :param skip_assertion_checks:         Do not evaluate assertion check expressions. This option can be used to
+                                          accelerate parsing significantly. Use sparingly.
 
     :return: A list of CompoundType.
 
@@ -137,7 +141,8 @@ def parse_namespace(root_namespace_directory:        str,
     # Parse the constructed definitions
     configuration_options = ConfigurationOptions()
     configuration_options.print_handler = print_directive_output_handler
-    configuration_options.allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
+    configuration_options.allow_unregulated_fixed_port_id = bool(allow_unregulated_fixed_port_id)
+    configuration_options.skip_assertion_checks = bool(skip_assertion_checks)
 
     types = _parse_namespace_definitions(target_dsdl_definitions,
                                          lookup_dsdl_definitions,
