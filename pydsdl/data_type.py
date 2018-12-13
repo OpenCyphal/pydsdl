@@ -78,6 +78,10 @@ class MalformedUnionError(TypeParameterError):
     pass
 
 
+class DeprecatedDependencyError(TypeParameterError):
+    pass
+
+
 class DataType:
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
@@ -700,6 +704,17 @@ class CompoundType(DataType):
             else:
                 if not (0 <= port_id <= MAX_SUBJECT_ID):
                     raise InvalidFixedPortIDError('Fixed subject ID %r is not valid' % port_id)
+
+        # Consistent deprecation check.
+        # A non-deprecated type cannot be dependent on deprecated types.
+        # A deprecated type can be dependent on anything.
+        if not self.deprecated:
+            for a in self._attributes:
+                t = a.data_type
+                if isinstance(t, CompoundType):
+                    if t.deprecated:
+                        raise DeprecatedDependencyError('A type cannot depend on deprecated types '
+                                                        'unless it is also deprecated.')
 
     def is_mutually_bit_compatible_with(self, other: 'CompoundType') -> bool:
         """

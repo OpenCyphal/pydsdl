@@ -921,3 +921,43 @@ def _unittest_parse_namespace_faults() -> None:
         print(ex)
     else:               # pragma: no cover
         assert False
+
+
+@_in_n_out
+def _unittest_inconsistent_deprecation() -> None:
+    from pytest import raises
+
+    _parse_definition(
+        _define('ns/A.1.0.uavcan', ''),
+        [
+            _define('ns/B.1.0.uavcan',
+                    '''
+                    @deprecated
+                    A.1.0 a
+                    ''')
+        ]
+    )
+
+    with raises(SemanticError, match='(?i).*depend.*deprecated.*'):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                '''
+                X.1.0 b
+                '''
+            ),
+            [
+                _define('ns/X.1.0.uavcan', '@deprecated')
+            ]
+        )
+
+    _parse_definition(
+        _define('ns/D.1.0.uavcan',
+                '''
+                @deprecated
+                X.1.0 b
+                '''),
+        [
+            _define('ns/X.1.0.uavcan', '@deprecated')
+        ]
+    )
