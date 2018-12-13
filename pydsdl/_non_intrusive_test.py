@@ -127,11 +127,11 @@ def _unittest_simple() -> None:
         '''
         @union
         @deprecated
-        vendor.nested.Empty.255     new_empty_implicit
+        vendor.nested.Empty.255.255 new_empty_implicit
         vendor.nested.Empty.255.255 new_empty_explicit
         vendor.nested.Empty.255.254 old_empty
         ---#---#---#---#---#---#---#---#---
-        Constants.5 constants      # RELATIVE REFERENCE
+        Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
         '''
     )
@@ -208,7 +208,7 @@ def _unittest_simple() -> None:
         @union
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
-        vendor.nested.Empty.255[5] b
+        vendor.nested.Empty.255.255[5] b
         truncated bool [ <= 255 ] c
         '''
     )
@@ -353,7 +353,7 @@ def _unittest_error() -> None:
 
     with raises(SemanticError, match='(?i).*type.*'):
         parse_definition(
-            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type.1 VALUE = 123'),
+            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type.1.1 VALUE = 123'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
                 _define('ns/Type.1.1.uavcan', ''),
@@ -362,14 +362,14 @@ def _unittest_error() -> None:
 
     with raises(UndefinedDataTypeError):
         defs = [
-            _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1 b'),
-            _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1 b'),
+            _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b'),
+            _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b'),
         ]
         parse_definition(defs[0], defs)
 
     with raises(SemanticError, match='(?i).*union directive.*'):
         parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2 field\n@union'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n@union'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
             ]
@@ -377,7 +377,7 @@ def _unittest_error() -> None:
 
     with raises(SemanticError, match='(?i).*deprecated directive.*'):
         parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2 field\n@deprecated'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n@deprecated'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
             ]
@@ -385,7 +385,7 @@ def _unittest_error() -> None:
 
     with raises(SemanticError, match='(?i).*deprecated directive.*'):
         parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2 field\n---\n@deprecated'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n---\n@deprecated'),
             [
                 _define('ns/Type.2.0.uavcan', ''),
             ]
@@ -455,7 +455,7 @@ def _unittest_print() -> None:
         _define(
             'ns/ComplexOffset.1.0.uavcan',
             '''
-            Array.1[2] bar
+            Array.1.0[2] bar
             @print offset
             '''),
         [
@@ -479,7 +479,7 @@ def _unittest_assert() -> None:
             '''
             @assert offset == {0}
             @assert offset.min == offset.max
-            Array.1[2] bar
+            Array.1.0[2] bar
             @assert offset == {4, 12, 20, 28, 36}
             @assert offset.min == 4
             @assert offset.max == 36
@@ -620,7 +620,7 @@ def _unittest_parse_namespace() -> None:
         'zubax/58001.Message.1.0.uavcan',
         """
         void6
-        zubax.First.1[<=2] a
+        zubax.First.1.0[<=2] a
         @assert offset.min == 8
         @assert offset.max == 4104
         """

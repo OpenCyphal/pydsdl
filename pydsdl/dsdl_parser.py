@@ -56,7 +56,7 @@ class _DirectivePlaceholder:
         self.expression = expression
 
 
-_COMPOUND_ATTRIBUTE_TYPE_REGEXP = r'((?:[a-zA-Z_][a-zA-Z0-9_]*?\.)+?)(\d{1,3})(?:.(\d{1,3}))?$'
+_COMPOUND_ATTRIBUTE_TYPE_REGEXP = r'((?:[a-zA-Z_][a-zA-Z0-9_]*?\.)+?)(\d{1,3})\.(\d{1,3})$'
 
 
 class _AttributeCollection:
@@ -397,7 +397,7 @@ def _construct_type(referer_namespace:  str,
             None:        PrimitiveType.CastMode.SATURATED,
         }[cast_mode]
 
-    def construct_compound(name: str, v_major: int, v_minor: typing.Optional[int]) -> CompoundType:
+    def construct_compound(name: str, v_major: int, v_minor: int) -> CompoundType:
         if cast_mode is not None:
             raise SemanticError('Cast mode cannot be specified for compound data types')
 
@@ -416,16 +416,11 @@ def _construct_type(referer_namespace:  str,
             raise UndefinedDataTypeError('No suitable major version of %r could be found. '
                                          'Requested version %d, found: %r' % (name, v_major, matching_name))
 
-        if v_minor is None:
-            matching_minor = list(sorted(matching_major, key=lambda d: -d.version.minor))[:1]
-            _logger.info('Minor version auto-selection: requested type %s.%d, selected %r among %r',
-                         name, v_major, matching_minor[0], matching_major)
-        else:
-            matching_minor = list(filter(lambda x: x.version.minor == v_minor, matching_major))
-            if not matching_minor:
-                raise UndefinedDataTypeError('No suitable minor version of %r could be found. '
-                                             'Requested minor version %d, found: %r' %
-                                             (name, v_minor, matching_major))
+        matching_minor = list(filter(lambda x: x.version.minor == v_minor, matching_major))
+        if not matching_minor:
+            raise UndefinedDataTypeError('No suitable minor version of %r could be found. '
+                                         'Requested minor version %d, found: %r' %
+                                         (name, v_minor, matching_major))
 
         if len(matching_minor) != 1:    # pragma: no cover
             raise InternalError('Unexpected ambiguity: %r' % matching_minor)
@@ -446,9 +441,7 @@ def _construct_type(referer_namespace:  str,
     g.add_rule(r'int(\d\d?)$', lambda bw: SignedIntegerType(int(bw), get_cast_mode()))
     g.add_rule(r'uint(\d\d?)$', lambda bw: UnsignedIntegerType(int(bw), get_cast_mode()))
     g.add_rule(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
-               lambda name, v_mj, v_mn: construct_compound(name.strip('.'),
-                                                           int(v_mj),
-                                                           None if v_mn is None else int(v_mn)))
+               lambda name, v_mj, v_mn: construct_compound(name.strip('.'), int(v_mj), int(v_mn)))
     try:
         t = g.match(type_name)
     except InvalidGrammarError:
@@ -686,15 +679,19 @@ def _unittest_regexp() -> None:
 
     validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
              'uavcan.node.Heartbeat.1',
-             ('uavcan.node.Heartbeat.', '1', None))
+             None)
 
     validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
-             'Heartbeat.1',
-             ('Heartbeat.', '1', None))
+             'uavcan.node.Heartbeat.1.',
+             None)
+
+    validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
+             'Heartbeat.1.2',
+             ('Heartbeat.', '1', '2'))
 
     validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
              'a1.123',
-             ('a1.', '123', None))
+             None)
 
     validate(_COMPOUND_ATTRIBUTE_TYPE_REGEXP,
              'a1.123.234',
