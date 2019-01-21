@@ -346,18 +346,18 @@ def _unittest_error() -> None:
 
     with raises(UndefinedDataTypeError, match='(?i).*no suitable major version'):
         _parse_definition(
-            _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
+            _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
             ]
         )
 
     with raises(UndefinedDataTypeError, match='(?i).*no suitable minor version'):
         _parse_definition(
-            _define('vendor/types/A.1.0.uavcan', 'ns.Type.1.0 field'),
+            _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
-                _define('ns/Type.1.1.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.1.1.uavcan', ''),
             ]
         )
 
@@ -365,17 +365,17 @@ def _unittest_error() -> None:
         _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'int128 field'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
-                _define('ns/Type.1.1.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.1.1.uavcan', ''),
             ]
         )
 
     with raises(SemanticError, match='(?i).*type.*'):
         _parse_definition(
-            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type.1.1 VALUE = 123'),
+            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type_.1.1 VALUE = 123'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
-                _define('ns/Type.1.1.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.1.1.uavcan', ''),
             ]
         )
 
@@ -388,25 +388,25 @@ def _unittest_error() -> None:
 
     with raises(SemanticError, match='(?i).*union directive.*'):
         _parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n@union'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@union'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
             ]
         )
 
     with raises(SemanticError, match='(?i).*deprecated directive.*'):
         _parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n@deprecated'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@deprecated'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
             ]
         )
 
     with raises(SemanticError, match='(?i).*deprecated directive.*'):
         _parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type.2.0 field\n---\n@deprecated'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n---\n@deprecated'),
             [
-                _define('ns/Type.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', ''),
             ]
         )
 

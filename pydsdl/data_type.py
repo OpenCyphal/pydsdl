@@ -25,11 +25,38 @@ _VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + strin
 
 # Disallowed name patterns apply to any part of any name, e.g.,
 # an attribute name, a namespace component, type name, etc.
+# The pattern must produce an exact match to trigger a name error.
+# All patterns are case-insensitive.
 _DISALLOWED_NAME_PATTERNS = [
-    r'(?i)(bool|uint|int|void|float)\d*$',          # Data type like names
-    r'(?i)(u?q\d+_\d+)$',                           # Fixed point data type (Q format)
-    r'(?i)(saturated|truncated)$',                  # Keywords
-    r'(?i)(con|prn|aux|nul|com\d?|lpt\d?)$',        # Reserved by the specification (MS Windows compatibility)
+    r'truncated',
+    r'saturated',
+    r'true',
+    r'false',
+    r'bool',
+    r'void\d*',
+    r'u?int\d*',
+    r'u?q\d+_\d+',
+    r'float\d*',
+    r'optional',
+    r'aligned',
+    r'const',
+    r'struct',
+    r'super',
+    r'template',
+    r'enum',
+    r'self',
+    r'and',
+    r'or',
+    r'not',
+    r'auto',
+    r'type',
+    r'con',
+    r'prn',
+    r'aux',
+    r'nul',
+    r'com\d?',
+    r'lpt\d?',
+    r'_.*_',
 ]
 
 
@@ -944,7 +971,7 @@ def _check_name(name: str) -> None:
             raise InvalidNameError('Name or namespace component cannot contain %r' % char)
 
     for pat in _DISALLOWED_NAME_PATTERNS:
-        if re.match(pat, name):
+        if re.match(pat + '$', name, flags=re.RegexFlag.IGNORECASE):
             raise InvalidNameError('Disallowed name: %r matches the following pattern: %s' % (name, pat))
 
 
@@ -963,30 +990,30 @@ def _unittest_compound_types() -> None:
         try_name('')
 
     with raises(InvalidNameError, match='(?i).*root namespace.*'):
-        try_name('Type')
+        try_name('T')
 
     with raises(InvalidNameError, match='(?i).*long.*'):
         try_name('namespace.another.deeper.' * 10 + 'LongTypeName')
 
     with raises(InvalidNameError, match='(?i).*component.*empty.*'):
-        try_name('namespace.ns..Type')
+        try_name('namespace.ns..T')
 
     with raises(InvalidNameError, match='(?i).*component.*empty.*'):
-        try_name('.namespace.ns.Type')
+        try_name('.namespace.ns.T')
 
     with raises(InvalidNameError, match='(?i).*cannot start with.*'):
-        try_name('namespace.0ns.Type')
+        try_name('namespace.0ns.T')
 
     with raises(InvalidNameError, match='(?i).*cannot start with.*'):
-        try_name('namespace.ns.0Type')
+        try_name('namespace.ns.0T')
 
     with raises(InvalidNameError, match='(?i).*cannot contain.*'):
-        try_name('namespace.n-s.Type')
+        try_name('namespace.n-s.T')
 
-    assert try_name('root.nested.Type').full_name == 'root.nested.Type'
-    assert try_name('root.nested.Type').full_namespace == 'root.nested'
-    assert try_name('root.nested.Type').root_namespace == 'root'
-    assert try_name('root.nested.Type').short_name == 'Type'
+    assert try_name('root.nested.T').full_name == 'root.nested.T'
+    assert try_name('root.nested.T').full_namespace == 'root.nested'
+    assert try_name('root.nested.T').root_namespace == 'root'
+    assert try_name('root.nested.T').short_name == 'T'
 
     with raises(MalformedUnionError, match='.*variants.*'):
         UnionType(name='a.A',
@@ -1010,10 +1037,14 @@ def _unittest_compound_types() -> None:
 
     _check_name('abc')
     _check_name('_abc')
+    _check_name('abc_')
     _check_name('abc0')
 
     with raises(InvalidNameError):
         _check_name('0abc')
+
+    with raises(InvalidNameError):
+        _check_name('_abc_')
 
     with raises(InvalidNameError):
         _check_name('a-bc')
