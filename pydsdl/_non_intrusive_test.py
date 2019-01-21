@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -77,7 +77,7 @@ def _unittest_define() -> None:
 @_in_n_out
 def _unittest_simple() -> None:
     abc = _define(
-        'vendor/nested/58000.Abc.1.2.uavcan',
+        'vendor/nested/29000.Abc.1.2.uavcan',
         '''
         @deprecated
         uint8 CHARACTER = '#'
@@ -85,7 +85,7 @@ def _unittest_simple() -> None:
         truncated int64[<33] b
         '''
     )
-    assert abc.fixed_port_id == 58000
+    assert abc.fixed_port_id == 29000
     assert abc.full_name == 'vendor.nested.Abc'
     assert abc.version == (1, 2)
 
@@ -93,9 +93,9 @@ def _unittest_simple() -> None:
     print('Parsed:', p)
     assert isinstance(p, StructureType)
     assert p.full_name == 'vendor.nested.Abc'
-    assert p.source_file_path.endswith('vendor/nested/58000.Abc.1.2.uavcan')
+    assert p.source_file_path.endswith('vendor/nested/29000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
-    assert p.fixed_port_id == 58000
+    assert p.fixed_port_id == 29000
     assert p.deprecated
     assert p.version == (1, 2)
     assert p.bit_length_range == (14, 14 + 64 * 32)
@@ -639,7 +639,7 @@ def _unittest_parse_namespace() -> None:
     )
 
     _define(
-        'zubax/58001.Message.1.0.uavcan',
+        'zubax/29001.Message.1.0.uavcan',
         """
         void6
         zubax.First.1.0[<=2] a
@@ -819,7 +819,7 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     _define(
-        'ns/59000.Spartans.30.2.uavcan',
+        'ns/28700.Spartans.30.2.uavcan',
         """
         @deprecated
         @union
@@ -842,7 +842,7 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _undefine_glob('ns/Spartans.30.0.uavcan')
     _define(
-        'ns/59000.Spartans.30.0.uavcan',
+        'ns/28700.Spartans.30.0.uavcan',
         """
         @deprecated
         @union
@@ -857,7 +857,7 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _undefine_glob('ns/Spartans.30.1.uavcan')
     _define(
-        'ns/59000.Spartans.30.1.uavcan',
+        'ns/28700.Spartans.30.1.uavcan',
         """
         @deprecated
         @union
@@ -873,9 +873,9 @@ def _unittest_parse_namespace_versioning() -> None:
     )
     assert len(parsed) == 3
 
-    _undefine_glob('ns/59000.Spartans.30.1.uavcan')
+    _undefine_glob('ns/28700.Spartans.30.1.uavcan')
     _define(
-        'ns/59001.Spartans.30.1.uavcan',
+        'ns/28701.Spartans.30.1.uavcan',
         """
         @deprecated
         @union
@@ -889,9 +889,9 @@ def _unittest_parse_namespace_versioning() -> None:
         parse_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Adding new major version under the same RPID
-    _undefine_glob('ns/59001.Spartans.30.1.uavcan')
+    _undefine_glob('ns/28701.Spartans.30.1.uavcan')
     _define(
-        'ns/59000.Spartans.31.0.uavcan',
+        'ns/28700.Spartans.31.0.uavcan',
         """
         @deprecated
         @union

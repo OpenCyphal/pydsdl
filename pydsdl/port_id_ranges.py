@@ -1,16 +1,16 @@
 #
-# Copyright (C) 2018  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
-MAX_SUBJECT_ID = 65535
+MAX_SUBJECT_ID = 32767
 MAX_SERVICE_ID = 511
 
 
 _STANDARD_ROOT_NAMESPACE = 'uavcan'
 
-_STANDARD_MESSAGES = 62804, 65535
-_VENDOR_MESSAGES   = 57344, 59391
+_STANDARD_MESSAGES = 31744, 32767
+_VENDOR_MESSAGES   = 28672, 29695
 
 _STANDARD_SERVICES = 384, 511
 _VENDOR_SERVICES   = 256, 319
@@ -31,10 +31,10 @@ def is_valid_regulated_service_id(regulated_id: int,
 
 
 def _unittest_pid_ranges() -> None:
-    assert is_valid_regulated_subject_id(regulated_id=58000, root_namespace='sirius_cybernetics_corp')
-    assert not is_valid_regulated_subject_id(regulated_id=58000, root_namespace='uavcan')
-    assert is_valid_regulated_subject_id(regulated_id=64000, root_namespace='uavcan')
-    assert not is_valid_regulated_subject_id(regulated_id=64000, root_namespace='sirius_cybernetics_corp')
+    assert is_valid_regulated_subject_id(regulated_id=29000, root_namespace='sirius_cybernetics_corp')
+    assert not is_valid_regulated_subject_id(regulated_id=29000, root_namespace='uavcan')
+    assert is_valid_regulated_subject_id(regulated_id=32000, root_namespace='uavcan')
+    assert not is_valid_regulated_subject_id(regulated_id=32000, root_namespace='sirius_cybernetics_corp')
     assert not is_valid_regulated_subject_id(regulated_id=30000, root_namespace='uavcan')
     assert not is_valid_regulated_subject_id(regulated_id=30000, root_namespace='sirius_cybernetics_corp')
 

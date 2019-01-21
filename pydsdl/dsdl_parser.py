@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -248,7 +248,7 @@ def parse_definition(definition:            DSDLDefinition,
             if port_id is not None:
                 f = is_valid_regulated_service_id if isinstance(tout, ServiceType) else is_valid_regulated_subject_id
                 if not f(port_id, tout.root_namespace):
-                    raise InvalidFixedPortIDError('Regulated port ID %r is not valid.'
+                    raise InvalidFixedPortIDError('Regulated port ID %r is not valid. '
                                                   'Consider using allow_unregulated_fixed_port_id.' % port_id)
 
         assert isinstance(tout, CompoundType)
