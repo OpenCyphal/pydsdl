@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -93,7 +93,7 @@ class DSDLDefinition:
         return self.name_components[-1]
 
     @property
-    def namespace(self) -> str:
+    def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
         return str(CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 

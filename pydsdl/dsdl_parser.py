@@ -267,7 +267,7 @@ def _evaluate(definition: DSDLDefinition,
                                                        Attribute,
                                                        _ServiceResponseMarkerPlaceholder,
                                                        _DirectivePlaceholder]]]:
-    ns = definition.namespace
+    ns = definition.full_namespace
 
     grammar = RegularGrammarMatcher()
     grammar.add_rule(*_make_scalar_field_rule(ns, lookup_definitions, configuration_options))

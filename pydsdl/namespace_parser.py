@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -365,7 +365,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.name_components == ['foo', 'Qwerty']
     assert t.short_name == 'Qwerty'
     assert t.root_namespace == 'foo'
-    assert t.namespace == 'foo'
+    assert t.full_namespace == 'foo'
 
     t = lut['foo.nested.Asd']
     assert t.file_path == os.path.join(root_ns_dir, 'nested', '2.Asd.21.32.uavcan')
@@ -377,7 +377,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.name_components == ['foo', 'nested', 'Asd']
     assert t.short_name == 'Asd'
     assert t.root_namespace == 'foo'
-    assert t.namespace == 'foo.nested'
+    assert t.full_namespace == 'foo.nested'
 
     t = lut['foo.nested.Foo']
     assert t.file_path == os.path.join(root_ns_dir, 'nested', 'Foo.32.43.uavcan')
@@ -389,7 +389,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.name_components == ['foo', 'nested', 'Foo']
     assert t.short_name == 'Foo'
     assert t.root_namespace == 'foo'
-    assert t.namespace == 'foo.nested'
+    assert t.full_namespace == 'foo.nested'
 
     touchy('nested/Malformed.MAJOR.MINOR.uavcan')
     try:

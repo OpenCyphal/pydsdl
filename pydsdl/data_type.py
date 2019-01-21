@@ -743,7 +743,7 @@ class CompoundType(DataType):
         return self.name_components[-1]
 
     @property
-    def namespace(self) -> str:
+    def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
         return str(CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
@@ -994,7 +994,7 @@ def _unittest_compound_types() -> None:
         try_name('namespace.n-s.Type')
 
     assert try_name('root.nested.Type').full_name == 'root.nested.Type'
-    assert try_name('root.nested.Type').namespace == 'root.nested'
+    assert try_name('root.nested.Type').full_namespace == 'root.nested'
     assert try_name('root.nested.Type').root_namespace == 'root'
     assert try_name('root.nested.Type').short_name == 'Type'
 
