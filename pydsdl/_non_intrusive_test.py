@@ -888,7 +888,7 @@ def _unittest_parse_namespace_versioning() -> None:
     with raises(MinorVersionFixedPortIDError):
         parse_namespace(os.path.join(directory.name, 'ns'), [])
 
-    # Adding new major version under the same RPID
+    # Adding new major version under the same FPID
     _undefine_glob('ns/28701.Spartans.30.1.uavcan')
     _define(
         'ns/28700.Spartans.31.0.uavcan',
@@ -903,6 +903,22 @@ def _unittest_parse_namespace_versioning() -> None:
 
     with raises(FixedPortIDCollisionError):
         parse_namespace(os.path.join(directory.name, 'ns'), [])
+
+    # Major version zero allows us to re-use the same FPID under a different (non-zero) major version
+    _undefine_glob('ns/28700.Spartans.31.0.uavcan')
+    _define(
+        'ns/28700.Spartans.0.1.uavcan',
+        """
+        @deprecated
+        @union
+        uint16 small
+        float32 just_right
+        float64[1] woah
+        """
+    )
+
+    parsed = parse_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 3
 
 
 def _unittest_parse_namespace_faults() -> None:

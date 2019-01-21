@@ -191,15 +191,22 @@ def _parse_namespace_definitions(target_definitions:    typing.List[DSDLDefiniti
 def _ensure_no_fixed_port_id_collisions(types: typing.List[CompoundType]) -> None:
     for a in types:
         for b in types:
-            rpid_must_be_different = (a.full_name != b.full_name) or (a.version.major != b.version.major)
-            if rpid_must_be_different:
-                if isinstance(a, ServiceType) == isinstance(b, ServiceType):
-                    if a.has_fixed_port_id and b.has_fixed_port_id:
-                        if a.fixed_port_id == b.fixed_port_id:
-                            raise FixedPortIDCollisionError(
-                                'The fixed port ID of this definition is also used in %r' % b.source_file_path,
-                                path=a.source_file_path
-                            )
+            different_names = a.full_name != b.full_name
+            different_major_versions = a.version.major != b.version.major
+            # Must be the same kind because port ID sets of subjects and services are orthogonal
+            same_kind = isinstance(a, ServiceType) == isinstance(b, ServiceType)
+            # Data types where the major version is zero are allowed to collide
+            both_released = (a.version.major > 0) and (b.version.major > 0)
+
+            fpid_must_be_different = same_kind and (different_names or (different_major_versions and both_released))
+
+            if fpid_must_be_different:
+                if a.has_fixed_port_id and b.has_fixed_port_id:
+                    if a.fixed_port_id == b.fixed_port_id:
+                        raise FixedPortIDCollisionError(
+                            'The fixed port ID of this definition is also used in %r' % b.source_file_path,
+                            path=a.source_file_path
+                        )
 
 
 def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> None:
