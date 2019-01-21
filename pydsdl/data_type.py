@@ -971,7 +971,7 @@ def _check_name(name: str) -> None:
             raise InvalidNameError('Name or namespace component cannot contain %r' % char)
 
     for pat in _DISALLOWED_NAME_PATTERNS:
-        if re.match(pat + '$', name, flags=re.RegexFlag.IGNORECASE):
+        if re.match(pat + '$', name, flags=re.IGNORECASE):
             raise InvalidNameError('Disallowed name: %r matches the following pattern: %s' % (name, pat))
 
 
