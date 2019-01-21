@@ -100,7 +100,7 @@ class DataType:
         """
         A set of all possible bit length values for the encoded representation of the data type.
         With complex data types, a full bit length set estimation may lead to a combinatorial explosion.
-        This property must never return an empty set.
+        This function must never return an empty set.
         The following invariants hold:
         >>> self.bit_length_range.min == min(self.compute_bit_length_values())
         >>> self.bit_length_range.max == max(self.compute_bit_length_values())
@@ -877,7 +877,7 @@ class StructureType(CompoundType):
         blv_sets = [x.data_type.compute_bit_length_values() for x in self.fields[:field_index]]
         combinations = itertools.product(*blv_sets)
 
-        # The property protocol prohibits empty sets at the output
+        # The interface prohibits empty sets at the output
         return set(map(sum, combinations)) or {0}
 
 
