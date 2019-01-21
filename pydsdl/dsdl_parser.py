@@ -94,7 +94,8 @@ class _AttributeCollection:
     def execute_postponed_expressions(self, data_type: typing.Union[StructureType, UnionType]) -> None:
         for pe in self._expressions:
             offset = _OffsetValue(data_type, pe.next_attribute_index)
-            result = _evaluate_expression(pe.expression_text, offset=offset)
+            result = _evaluate_expression(pe.expression_text,
+                                          _offset_=offset)
             pe.validator(result)
 
 

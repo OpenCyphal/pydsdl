@@ -447,9 +447,9 @@ def _unittest_print() -> None:
     parse_definition(
         _define(
             'ns/Offset.1.0.uavcan',
-            '''@print offset    # Not recorded
+            '''@print _offset_    # Not recorded
             uint8 a
-            @print offset
+            @print _offset_
             '''),
         [],
         config
@@ -478,7 +478,7 @@ def _unittest_print() -> None:
             'ns/ComplexOffset.1.0.uavcan',
             '''
             Array.1.0[2] bar
-            @print offset
+            @print _offset_
             '''),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
@@ -499,31 +499,31 @@ def _unittest_assert() -> None:
         _define(
             'ns/A.1.0.uavcan',
             '''
-            @assert offset == {0}
-            @assert offset.min == offset.max
+            @assert _offset_ == {0}
+            @assert _offset_.min == _offset_.max
             Array.1.0[2] bar
-            @assert offset == {4, 12, 20, 28, 36}
-            @assert offset.min == 4
-            @assert offset.max == 36
-            @assert offset % 4 == {0}
-            @assert offset % 8 == {4}
-            @assert offset % 10 == {4, 2, 0, 8, 6}
-            @assert offset * 2 == {8, 24, 40, 56, 72}
-            @assert 2 * offset == {8, 24, 40, 56, 72}
-            @assert offset / 4 == {1, 3, 5, 7, 9}
-            @assert offset - 4 == {0, 8, 16, 24, 32}
-            @assert offset + 4 == {8, 16, 24, 32, 40}
+            @assert _offset_ == {4, 12, 20, 28, 36}
+            @assert _offset_.min == 4
+            @assert _offset_.max == 36
+            @assert _offset_ % 4 == {0}
+            @assert _offset_ % 8 == {4}
+            @assert _offset_ % 10 == {4, 2, 0, 8, 6}
+            @assert _offset_ * 2 == {8, 24, 40, 56, 72}
+            @assert 2 * _offset_ == {8, 24, 40, 56, 72}
+            @assert _offset_ / 4 == {1, 3, 5, 7, 9}
+            @assert _offset_ - 4 == {0, 8, 16, 24, 32}
+            @assert _offset_ + 4 == {8, 16, 24, 32, 40}
             uint64 big
-            @assert offset - 64 == {4, 12, 20, 28, 36}
-            @assert offset.min == 68
-            @assert offset.max == 100  # 36 + 64
-            @assert offset.max <= 100
-            @assert offset.max < 101
-            @assert offset <= 100
-            @assert offset < 101
-            @assert offset >= 68
-            @assert offset > 67
-            @assert offset == offset
+            @assert _offset_ - 64 == {4, 12, 20, 28, 36}
+            @assert _offset_.min == 68
+            @assert _offset_.max == 100  # 36 + 64
+            @assert _offset_.max <= 100
+            @assert _offset_.max < 101
+            @assert _offset_ <= 100
+            @assert _offset_ < 101
+            @assert _offset_ >= 68
+            @assert _offset_ > 67
+            @assert _offset_ == _offset_
             '''),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
@@ -536,8 +536,8 @@ def _unittest_assert() -> None:
                 'ns/B.1.0.uavcan',
                 '''
                 uint64 big
-                @assert offset == {64}
-                @assert offset + 1.0 == {64}
+                @assert _offset_ == {64}
+                @assert _offset_ + 1.0 == {64}
                 '''),
             []
         )
@@ -548,7 +548,7 @@ def _unittest_assert() -> None:
                 'ns/C.1.0.uavcan',
                 '''
                 uint64 big
-                @assert offset == 64
+                @assert _offset_ == 64
                 '''),
             []
         )
@@ -560,7 +560,7 @@ def _unittest_assert() -> None:
             @union
             float32 a
             uint64 b
-            @assert offset == {33, 65}
+            @assert _offset_ == {33, 65}
             '''),
         []
     )
@@ -575,7 +575,7 @@ def _unittest_assert() -> None:
             uint8 B = 1
             uint64 b
             uint8 C = 2
-            @assert offset == {33, 65}
+            @assert _offset_ == {33, 65}
             uint8 D = 3
             '''),
         []
@@ -587,10 +587,10 @@ def _unittest_assert() -> None:
                 'ns/F.1.0.uavcan',
                 '''
                 @union
-                @assert offset.min == 33
+                @assert _offset_.min == 33
                 float32 a
                 uint64 b
-                @assert offset == {33, 65}
+                @assert _offset_ == {33, 65}
                 '''),
             []
         )
@@ -601,7 +601,7 @@ def _unittest_assert() -> None:
                 'ns/G.1.0.uavcan',
                 '''
                 float32 a
-                @assert offset.min == 8
+                @assert _offset_.min == 8
                 '''),
             []
         )
@@ -612,7 +612,7 @@ def _unittest_assert() -> None:
                 'ns/H.1.0.uavcan',
                 '''
                 float32 a
-                @assert offset.min
+                @assert _offset_.min
                 '''),
             []
         )
@@ -633,8 +633,8 @@ def _unittest_parse_namespace() -> None:
         'zubax/First.1.0.uavcan',
         """
         uint8[<256] a
-        @assert offset.min == 8
-        @assert offset.max == 2048
+        @assert _offset_.min == 8
+        @assert _offset_.max == 2048
         """
     )
 
@@ -643,8 +643,8 @@ def _unittest_parse_namespace() -> None:
         """
         void6
         zubax.First.1.0[<=2] a
-        @assert offset.min == 8
-        @assert offset.max == 4104
+        @assert _offset_.min == 8
+        @assert _offset_.max == 4104
         """
     )
 
