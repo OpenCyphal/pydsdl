@@ -87,14 +87,14 @@ The user application should not instantiate data type classes directly,
 as their instantiation protocol uses a different error model internally,
 and since that is not a part of the library API, it may change in incompatible ways arbitrarily.
 
-Every data type (i.e., the `DataType` root class) has the following properties
-(althouth they are inaccessible for `ServiceType`):
+Every data type (i.e., the `DataType` root class) has the following attributes
+(although they raise `TypeError` when invoked against an instance of `ServiceType`):
 
 * `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
 which represent the minimum and the maximum possible bit length of an encoded representation.
-* `bit_length_values: Set[int]` - this property performs a bit length combination analysis on the data type and
-returns a full set of bit lengths of all possible valid encoded representations of the data type.
-Due to the involved computations, invoking this property can be expensive, so use with care.
+* `compute_bit_length_values() -> Set[int]` - this function performs a bit length combination analysis on
+the data type and returns a full set of bit lengths of all possible valid encoded representations of the data type.
+Due to the involved computations, the function can be expensive to invoke, so use with care.
 
 Instances of `CompoundType` (and its derivatives) contain *attributes*.
 Per the specification, an attribute can be a field or a constant.
@@ -142,9 +142,9 @@ else:
         if isinstance(t, pydsdl.data_type.ServiceType):
             blr, blv = 0, {0}
         else:
-            blr, blv = t.bit_length_range, t.bit_length_values
+            blr, blv = t.bit_length_range, t.compute_bit_length_values()
         # The above is because service types are not directly serializable (see the UAVCAN specification)
-        print(t.name, t.version, t.regulated_port_id, t.deprecated, blr, len(blv))
+        print(t.full_name, t.version, t.fixed_port_id, t.deprecated, blr, len(blv))
         for f in t.fields:
             print('\t', str(f.data_type), f.name)
         for c in t.constants:

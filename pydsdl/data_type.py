@@ -93,18 +93,17 @@ class DataType:
     def bit_length_range(self) -> BitLengthRange:
         # This default implementation uses BLV analysis, so it is very slow.
         # Derived classes can redefine it as appropriate.
-        blv = self.bit_length_values
+        blv = self.compute_bit_length_values()
         return BitLengthRange(min(blv), max(blv))
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
+    def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         """
         A set of all possible bit length values for the encoded representation of the data type.
         With complex data types, a full bit length set estimation may lead to a combinatorial explosion.
         This property must never return an empty set.
         The following invariants hold:
-        >>> self.bit_length_range.min == min(self.bit_length_values)
-        >>> self.bit_length_range.max == max(self.bit_length_values)
+        >>> self.bit_length_range.min == min(self.compute_bit_length_values())
+        >>> self.bit_length_range.max == max(self.compute_bit_length_values())
         """
         raise NotImplementedError
 
@@ -137,8 +136,7 @@ class PrimitiveType(DataType):
         """All primitives are of a fixed bit length, hence just one value is enough."""
         return self._bit_length
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:
+    def compute_bit_length_values(self) -> typing.Set[int]:
         return {self._bit_length}
 
     @property
@@ -303,8 +301,7 @@ class VoidType(DataType):
         """All primitives are of a fixed bit length, hence just one value is enough."""
         return self._bit_length
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:
+    def compute_bit_length_values(self) -> typing.Set[int]:
         return {self._bit_length}
 
     def __str__(self) -> str:
@@ -320,7 +317,7 @@ def _unittest_void() -> None:
     assert VoidType(1).bit_length_range == (1, 1)
     assert str(VoidType(13)) == 'void13'
     assert repr(VoidType(64)) == 'VoidType(bit_length=64)'
-    assert VoidType(22).bit_length_values == {22}
+    assert VoidType(22).compute_bit_length_values() == {22}
 
     with raises(InvalidBitLengthError):
         VoidType(1)
@@ -348,8 +345,7 @@ class ArrayType(DataType):
         """
         return False
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
+    def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
 
     def __str__(self) -> str:   # pragma: no cover
@@ -375,12 +371,11 @@ class StaticArrayType(ArrayType):
         return BitLengthRange(min=self.element_type.bit_length_range.min * self.size,
                               max=self.element_type.bit_length_range.max * self.size)
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:
+    def compute_bit_length_values(self) -> typing.Set[int]:
         # Combinatorics is tricky.
         # The cornerstone concept here is the standard library function "combinations_with_replacement()",
         # which implements the standard n-combination function.
-        combinations = itertools.combinations_with_replacement(self.element_type.bit_length_values, self.size)
+        combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(), self.size)
         # We do not care about permutations because the final bit length is invariant to the order of
         # serialized elements. Having found all combinations, we need to obtain a set of resulting length values.
         return set(map(sum, combinations))
@@ -415,7 +410,7 @@ def _unittest_static_array() -> None:
         'StaticArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.TRUNCATED: 1>), size=128)'
 
     small = StaticArrayType(su8, 2)
-    assert small.bit_length_values == {16}
+    assert small.compute_bit_length_values() == {16}
 
 
 class DynamicArrayType(ArrayType):
@@ -447,14 +442,13 @@ class DynamicArrayType(ArrayType):
             max=self.length_prefix_bit_length + self.element_type.bit_length_range.max * self.max_size
         )
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:
+    def compute_bit_length_values(self) -> typing.Set[int]:
         # Please refer to the corresponding implementation for the static array.
         # The idea here is that we treat the dynamic array as a combination of static arrays of different sizes,
         # from zero elements up to the maximum number of elements.
         output = set()           # type: typing.Set[int]
         for size in range(self.max_size + 1):
-            combinations = itertools.combinations_with_replacement(self.element_type.bit_length_values, size)
+            combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(), size)
             output |= set(map(lambda c: sum(c) + self.length_prefix_bit_length, combinations))
 
         return output
@@ -498,7 +492,7 @@ def _unittest_dynamic_array() -> None:
     # we have zero, one, or two elements of 8 bits each; plus 2 bit wide tag; therefore:
     # {2 + 0, 2 + 8, 2 + 16}
     small = DynamicArrayType(tu8, 2)
-    assert small.bit_length_values == {2, 10, 18}
+    assert small.compute_bit_length_values() == {2, 10, 18}
 
     # This one gets a little tricky, so pull out a piece of paper an a pencil.
     # So the nested type, as defined above, has the following set: {2, 10, 18}.
@@ -517,7 +511,7 @@ def _unittest_dynamic_array() -> None:
     #
     # If we were to remove duplicates, we end up with: {4, 12, 20, 28, 36}
     outer = StaticArrayType(small, 2)
-    assert outer.bit_length_values == {4, 12, 20, 28, 36}
+    assert outer.compute_bit_length_values() == {4, 12, 20, 28, 36}
 
 
 class Attribute:
@@ -725,7 +719,7 @@ class CompoundType(DataType):
         The implementation may be updated in the future to use a strict check as defined in the specification
         while keeping the same API, so beware.
         """
-        return self.bit_length_values == other.bit_length_values
+        return self.compute_bit_length_values() == other.compute_bit_length_values()
 
     @property
     def full_name(self) -> str:
@@ -785,8 +779,7 @@ class CompoundType(DataType):
         """Empty if this is a synthesized type, e.g. a service request or response section."""
         return self._source_file_path
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
+    def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
 
     def __str__(self) -> str:
@@ -844,14 +837,13 @@ class UnionType(CompoundType):
         return BitLengthRange(min=self.tag_bit_length + min([b.min for b in blr]),
                               max=self.tag_bit_length + max([b.max for b in blr]))
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:
+    def compute_bit_length_values(self) -> typing.Set[int]:
         # Unions are easy to handle because when serialized, a union is essentially just a single field,
         # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
         # add the tag length to each element. Easy.
         combinations = set()     # type: typing.Set[int]
         for f in self.fields:
-            combinations |= f.data_type.bit_length_values
+            combinations |= f.data_type.compute_bit_length_values()
 
         return set(map(lambda c: self.tag_bit_length + c, combinations))
 
@@ -863,8 +855,7 @@ class StructureType(CompoundType):
         return BitLengthRange(min=sum([b.min for b in blr]),
                               max=sum([b.max for b in blr]))
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:
+    def compute_bit_length_values(self) -> typing.Set[int]:
         return self.get_field_offset_values(field_index=len(self.fields))
 
     def get_field_offset_values(self, field_index: int) -> typing.Set[int]:
@@ -872,7 +863,7 @@ class StructureType(CompoundType):
         This function is mostly useful for field alignment and offset checks.
         :param field_index: Limits the output set as if the structure were to end before the
                             specified field index. If set to len(self.fields), makes the function
-                            behave as the bit_length_values property.
+                            behave as compute_bit_length_values().
         """
         if not (0 <= field_index <= len(self.fields)):      # pragma: no cover
             raise ValueError('Invalid field index: %d' % field_index)
@@ -883,7 +874,7 @@ class StructureType(CompoundType):
         # can be of different types, which sets structures apart from arrays. So instead of looking for
         # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
         # For large structures with dynamic arrays this can be very computationally expensive.
-        blv_sets = [x.data_type.bit_length_values for x in self.fields[:field_index]]
+        blv_sets = [x.data_type.compute_bit_length_values() for x in self.fields[:field_index]]
         combinations = itertools.product(*blv_sets)
 
         # The property protocol prohibits empty sets at the output
@@ -937,8 +928,7 @@ class ServiceType(CompoundType):
     def response_type(self) -> CompoundType:
         return self._response_type
 
-    @property
-    def bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
+    def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise TypeError('Service types are not directly serializable. Use either request or response.')
 
 
@@ -1064,7 +1054,7 @@ def _unittest_compound_types() -> None:
     assert try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-    ]).bit_length_values == {17}
+    ]).compute_bit_length_values() == {17}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
@@ -1075,7 +1065,7 @@ def _unittest_compound_types() -> None:
     assert try_union_fields([
         outer,
         SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-    ]).bit_length_values == {5, 13, 17, 21, 29, 37}
+    ]).compute_bit_length_values() == {5, 13, 17, 21, 29, 37}
 
     def try_struct_fields(field_types: typing.List[DataType]) -> StructureType:
         atr = []
@@ -1092,13 +1082,13 @@ def _unittest_compound_types() -> None:
     assert try_struct_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-    ]).bit_length_values == {32}
+    ]).compute_bit_length_values() == {32}
 
-    assert try_struct_fields([]).bit_length_values == {0}   # Empty sets forbidden
+    assert try_struct_fields([]).compute_bit_length_values() == {0}   # Empty sets forbidden
 
     assert try_struct_fields([
         outer,
         SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-    ]).bit_length_values == {4 + 16, 12 + 16, 20 + 16, 28 + 16, 36 + 16}
+    ]).compute_bit_length_values() == {4 + 16, 12 + 16, 20 + 16, 28 + 16, 36 + 16}
 
-    assert try_struct_fields([outer]).bit_length_values == {4, 12, 20, 28, 36}
+    assert try_struct_fields([outer]).compute_bit_length_values() == {4, 12, 20, 28, 36}

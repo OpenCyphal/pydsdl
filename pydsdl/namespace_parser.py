@@ -249,7 +249,7 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                         ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
                             a.response_type.is_mutually_bit_compatible_with(b.response_type)
                     else:
-                        ok = a.bit_length_values == b.bit_length_values
+                        ok = a.compute_bit_length_values() == b.compute_bit_length_values()
 
                     if not ok:
                         raise MinorVersionsNotBitCompatibleError(

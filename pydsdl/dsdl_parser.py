@@ -517,7 +517,7 @@ class _OffsetValue:
         # We're using lazy evaluation because not every expression uses the offset value
         if self._set_cache is None:
             if self._next_field_index >= len(self._data_type.fields):
-                self._set_cache = set(self._data_type.bit_length_values)
+                self._set_cache = set(self._data_type.compute_bit_length_values())
             else:
                 if isinstance(self._data_type, StructureType):
                     self._set_cache = self._data_type.get_field_offset_values(field_index=self._next_field_index)
