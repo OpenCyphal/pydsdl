@@ -677,13 +677,15 @@ class CompoundType(DataType):
                  attributes:    typing.Iterable[Attribute],
                  deprecated:    bool,
                  fixed_port_id: typing.Optional[int],
-                 source_file_path:  str):
+                 source_file_path:  str,
+                 source_file_text:  str):
         self._name = str(name).strip()
         self._version = version
         self._attributes = list(attributes)
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
+        self._source_file_text = str(source_file_text)
 
         # Name check
         if not self._name:
@@ -805,6 +807,11 @@ class CompoundType(DataType):
     def source_file_path(self) -> str:
         """Empty if this is a synthesized type, e.g. a service request or response section."""
         return self._source_file_path
+    
+    @property
+    def source_file_text(self) -> str:
+        """Empty if this is a synthesized type, e.g. a service request or response section."""
+        return self._source_file_text
 
     def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
@@ -832,7 +839,8 @@ class UnionType(CompoundType):
                  attributes:       typing.Iterable[Attribute],
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
-                 source_file_path: str):
+                 source_file_path: str,
+                 source_file_text: str):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
@@ -840,7 +848,8 @@ class UnionType(CompoundType):
                                         attributes=attributes,
                                         deprecated=deprecated,
                                         fixed_port_id=fixed_port_id,
-                                        source_file_path=source_file_path)
+                                        source_file_path=source_file_path,
+                                        source_file_text=source_file_text)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
             raise MalformedUnionError('A tagged union cannot contain less than %d variants' %
@@ -918,14 +927,16 @@ class ServiceType(CompoundType):
                  response_is_union:   bool,
                  deprecated:          bool,
                  fixed_port_id:       typing.Optional[int],
-                 source_file_path:    str):
+                 source_file_path:    str,
+                 source_file_text:    str):
         request_meta_type = UnionType if request_is_union else StructureType
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_attributes,
                                                deprecated=deprecated,
                                                fixed_port_id=None,
-                                               source_file_path='')
+                                               source_file_path='',
+                                               source_file_text='')
 
         response_meta_type = UnionType if response_is_union else StructureType
         self._response_type = response_meta_type(name=name + '.Response',
@@ -933,7 +944,8 @@ class ServiceType(CompoundType):
                                                  attributes=response_attributes,
                                                  deprecated=deprecated,
                                                  fixed_port_id=None,
-                                                 source_file_path='')
+                                                 source_file_path='',
+                                                 source_file_text='')
 
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
@@ -945,7 +957,8 @@ class ServiceType(CompoundType):
                                           attributes=container_attributes,
                                           deprecated=deprecated,
                                           fixed_port_id=fixed_port_id,
-                                          source_file_path=source_file_path)
+                                          source_file_path=source_file_path,
+                                          source_file_text=source_file_text)
 
     @property
     def request_type(self) -> CompoundType:
@@ -984,7 +997,8 @@ def _unittest_compound_types() -> None:
                             attributes=[],
                             deprecated=False,
                             fixed_port_id=None,
-                            source_file_path='')
+                            source_file_path='',
+                            source_file_text='')
 
     with raises(InvalidNameError, match='(?i).*empty.*'):
         try_name('')
@@ -1021,7 +1035,8 @@ def _unittest_compound_types() -> None:
                   attributes=[],
                   deprecated=False,
                   fixed_port_id=None,
-                  source_file_path='')
+                  source_file_path='',
+                  source_file_text='')
 
     with raises(MalformedUnionError, match='(?i).*padding.*'):
         UnionType(name='a.A',
@@ -1033,7 +1048,8 @@ def _unittest_compound_types() -> None:
                   ],
                   deprecated=False,
                   fixed_port_id=None,
-                  source_file_path='')
+                  source_file_path='',
+                  source_file_text='')
 
     _check_name('abc')
     _check_name('_abc')
@@ -1080,7 +1096,8 @@ def _unittest_compound_types() -> None:
                          attributes=atr,
                          deprecated=False,
                          fixed_port_id=None,
-                         source_file_path='')
+                         source_file_path='',
+                         source_file_text='')
 
     assert try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
@@ -1108,7 +1125,8 @@ def _unittest_compound_types() -> None:
                              attributes=atr,
                              deprecated=False,
                              fixed_port_id=None,
-                             source_file_path='')
+                             source_file_path='',
+                             source_file_text='')
 
     assert try_struct_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),

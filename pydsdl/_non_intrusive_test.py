@@ -95,6 +95,7 @@ def _unittest_simple() -> None:
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith('vendor/nested/29000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
+    assert p.source_file_text == abc.text
     assert p.fixed_port_id == 29000
     assert p.deprecated
     assert p.version == (1, 2)
