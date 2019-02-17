@@ -388,7 +388,7 @@ def _make_constant_rule(referer_namespace:  str,
                         r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s+'            # Type name
                         r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Constant name
                         r'\s*=\s*'                                  # Assignment
-                        r"((?:'[^']')|(?:[+\-\.0-9a-zA-Z_]+))"      # Initialization expression
+                        r"((?:'[^'\\]*(?:\\[^\r\n][^'\\]*)*')|(?:'[^'\\]*(?:\\[^\r\n][^'\\]*)*')|(?:[+\-\.0-9a-zA-Z_]+))"      # Initialization expression
                         r'\s*(?:#.*)?$',                            # End of the line
                         constructor)
 
