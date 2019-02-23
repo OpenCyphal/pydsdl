@@ -247,10 +247,13 @@ def parse_definition(definition:            DSDLDefinition,
         if not configuration_options.allow_unregulated_fixed_port_id:
             port_id = tout.fixed_port_id
             if port_id is not None:
-                f = is_valid_regulated_service_id if isinstance(tout, ServiceType) else is_valid_regulated_subject_id
+                is_service_type = isinstance(tout, ServiceType)
+                f = is_valid_regulated_service_id if is_service_type else is_valid_regulated_subject_id
                 if not f(port_id, tout.root_namespace):
-                    raise InvalidFixedPortIDError('Regulated port ID %r is not valid. '
-                                                  'Consider using allow_unregulated_fixed_port_id.' % port_id)
+                    type_msg = " for service type " if is_service_type else " for message type "
+                    raise InvalidFixedPortIDError('Regulated port ID %r%s\"%s\" is not valid. '
+                                                  'Consider using allow_unregulated_fixed_port_id.' % 
+                                                  (port_id, type_msg, tout.full_name))
 
         assert isinstance(tout, CompoundType)
         return tout
