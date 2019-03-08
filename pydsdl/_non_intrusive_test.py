@@ -981,3 +981,66 @@ def _unittest_inconsistent_deprecation() -> None:
             _define('ns/X.1.0.uavcan', '@deprecated')
         ]
     )
+
+
+@_in_n_out
+def _unittest_repeated_directives() -> None:
+    from pytest import raises
+
+    _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                '''
+                @union
+                @deprecated
+                int8 a
+                float16 b
+                '''),
+        []
+    )
+
+    with raises(SemanticError, match='(?i).*deprecated.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    '''
+                    @deprecated
+                    @deprecated
+                    '''),
+            []
+        )
+
+    with raises(SemanticError, match='(?i).*deprecated.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    '''
+                    @deprecated
+                    ---
+                    @deprecated
+                    '''),
+            []
+        )
+
+    _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                '''
+                @union
+                int8 a
+                float16 b
+                ---
+                @union
+                int8 a
+                float16 b
+                '''),
+        []
+    )
+
+    with raises(SemanticError, match='(?i).*union.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    '''
+                    @union
+                    @union
+                    int8 a
+                    float16 b
+                    '''),
+            []
+        )

@@ -114,12 +114,18 @@ def parse_definition(definition:            DSDLDefinition,
         if len(attribute_collections[-1].attributes) > 0:
             raise SemanticError('Union directive must be placed before the first attribute declaration')
 
+        if attribute_collections[-1].is_union:
+            raise SemanticError('Duplicated union directive')
+
         attribute_collections[-1].is_union = True
 
     def mark_deprecated() -> None:
         nonlocal is_deprecated
         if (len(attribute_collections) > 1) or (len(attribute_collections[-1].attributes) > 0):
             raise SemanticError('Deprecated directive must be placed near the beginning of the type definition')
+
+        if is_deprecated:
+            raise SemanticError('Duplicated deprecated directive')
 
         is_deprecated = True
 
