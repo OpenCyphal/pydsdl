@@ -250,7 +250,7 @@ def _unittest_simple() -> None:
 def _unittest_error() -> None:
     from pytest import raises
 
-    def standalone(rel_path: str, definition: str, allow_unregulated: bool=False) -> CompoundType:
+    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> CompoundType:
         cfg = ConfigurationOptions()
         cfg.allow_unregulated_fixed_port_id = allow_unregulated
         return parse_definition(_define(rel_path, definition), [], cfg)

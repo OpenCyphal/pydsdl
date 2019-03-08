@@ -456,7 +456,8 @@ class DynamicArrayType(ArrayType):
 
     @property
     def string_like(self) -> bool:
-        return isinstance(self.element_type, UnsignedIntegerType) and (self.element_type.bit_length == 8)
+        et = self.element_type      # Without this temporary MyPy yields a false positive type error
+        return isinstance(et, UnsignedIntegerType) and (et.bit_length == 8)
 
     @property
     def length_prefix_bit_length(self) -> int:
@@ -545,7 +546,7 @@ class Attribute:
     def __init__(self,
                  data_type: DataType,
                  name: str,
-                 skip_name_check: bool=False):
+                 skip_name_check: bool = False):
         self._data_type = data_type
         self._name = str(name)
 
@@ -814,13 +815,13 @@ class CompoundType(DataType):
 
     def __repr__(self) -> str:
         return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, fixed_port_id=%r)' % \
-           (self.__class__.__name__,
-            self.full_name,
-            self.version,
-            self.fields,
-            self.constants,
-            self.deprecated,
-            self.fixed_port_id)
+            (self.__class__.__name__,
+             self.full_name,
+             self.version,
+             self.fields,
+             self.constants,
+             self.deprecated,
+             self.fixed_port_id)
 
 
 class UnionType(CompoundType):

@@ -252,7 +252,7 @@ def parse_definition(definition:            DSDLDefinition,
                 if not f(port_id, tout.root_namespace):
                     type_msg = ' for service type ' if is_service_type else ' for message type '
                     raise InvalidFixedPortIDError('Regulated port ID %r%s%r is not valid. '
-                                                  'Consider using allow_unregulated_fixed_port_id.' % 
+                                                  'Consider using allow_unregulated_fixed_port_id.' %
                                                   (port_id, type_msg, tout.full_name))
 
         assert isinstance(tout, CompoundType)
@@ -384,13 +384,15 @@ def _make_constant_rule(referer_namespace:  str,
                         value=value,
                         initialization_expression=initialization_expression)
 
-    return _GrammarRule(r'\s*(?:(saturated|truncated)\s+)?'         # Cast mode
-                        r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s+'            # Type name
-                        r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Constant name
-                        r'\s*=\s*'                                  # Assignment
-                        r"((?:'[^'\\]*(?:\\[^\r\n][^'\\]*)*')|(?:'[^'\\]*(?:\\[^\r\n][^'\\]*)*')|(?:[+\-\.0-9a-zA-Z_]+))"      # Initialization expression
-                        r'\s*(?:#.*)?$',                            # End of the line
-                        constructor)
+    return _GrammarRule(
+        r'\s*(?:(saturated|truncated)\s+)?'         # Cast mode
+        r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s+'            # Type name
+        r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Constant name
+        r'\s*=\s*'                                  # Assignment
+        r"((?:'[^'\\]*(?:\\[^\r\n][^'\\]*)*')|(?:'[^'\\]*(?:\\[^\r\n][^'\\]*)*')|(?:[+\-\.0-9a-zA-Z_]+))"
+        r'\s*(?:#.*)?$',                            # End of the line
+        constructor
+    )
 
 
 def _make_padding_rule() -> _GrammarRule:

@@ -2,3 +2,4 @@
 pytest ~= 3.3
 coverage ~= 4.5
 mypy >= 0.641
+pycodestyle >= 2.5

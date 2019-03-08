@@ -21,15 +21,15 @@ class ParseError(Exception):       # PEP8 says that the "Exception" suffix is re
 
     def __init__(self,
                  text: str,
-                 path: typing.Optional[str]=None,
-                 line: typing.Optional[int]=None):
+                 path: typing.Optional[str] = None,
+                 line: typing.Optional[int] = None):
         Exception.__init__(self, text)
         self._path = path
         self._line = line
 
     def set_error_location_if_unknown(self,
-                                      path: typing.Optional[str]=None,
-                                      line: typing.Optional[int]=None) -> None:
+                                      path: typing.Optional[str] = None,
+                                      line: typing.Optional[int] = None) -> None:
         if not self._path and path:
             self._path = path
 
@@ -64,10 +64,10 @@ class InternalError(ParseError):
     processing the definitions.
     """
     def __init__(self,
-                 text: typing.Optional[str]=None,
-                 path: typing.Optional[str]=None,
-                 line: typing.Optional[int]=None,
-                 culprit: typing.Optional[Exception]=None):
+                 text: typing.Optional[str] = None,
+                 path: typing.Optional[str] = None,
+                 line: typing.Optional[int] = None,
+                 culprit: typing.Optional[Exception] = None):
         if culprit is not None:
             report_text = 'PLEASE REPORT AT https://github.com/UAVCAN/pydsdl/issues/new?title=' + \
                           urllib.parse.quote(repr(culprit))

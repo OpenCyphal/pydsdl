@@ -67,7 +67,7 @@ class DSDLDefinition:
             self._version = Version(major=int(str_major_version),
                                     minor=int(str_minor_version))
         except ValueError:
-                raise FileNameFormatError('Could not parse the version numbers', path=self._file_path) from None
+            raise FileNameFormatError('Could not parse the version numbers', path=self._file_path) from None
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))

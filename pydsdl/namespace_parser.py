@@ -78,9 +78,9 @@ class MinorVersionFixedPortIDError(InvalidDefinitionError):
 
 def parse_namespace(root_namespace_directory:        str,
                     lookup_directories:              typing.Iterable[str],
-                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler]=None,
-                    allow_unregulated_fixed_port_id: bool=False,
-                    skip_assertion_checks:           bool=False) -> \
+                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
+                    allow_unregulated_fixed_port_id: bool = False,
+                    skip_assertion_checks:           bool = False) -> \
         typing.List[CompoundType]:
     """
     Parse all DSDL definitions in the specified root namespace directory.
