@@ -6,6 +6,7 @@
 import os
 import typing
 import tempfile
+from textwrap import dedent
 from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError, ConfigurationOptions
 from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
@@ -78,12 +79,12 @@ def _unittest_define() -> None:
 def _unittest_simple() -> None:
     abc = _define(
         'vendor/nested/29000.Abc.1.2.uavcan',
-        '''
+        dedent('''
         @deprecated
         uint8 CHARACTER = '#'
         int8 a
         truncated int64[<33] b
-        '''
+        ''')
     )
     assert abc.fixed_port_id == 29000
     assert abc.full_name == 'vendor.nested.Abc'
@@ -128,14 +129,14 @@ def _unittest_simple() -> None:
 
     constants = _define(
         'another/Constants.5.0.uavcan',
-        '''
+        dedent('''
         float64 PI = 3.1415926535897932384626433
-        '''
+        ''')
     )
 
     service = _define(
         'another/300.Service.0.1.uavcan',
-        '''
+        dedent('''
         @union
         @deprecated
         vendor.nested.Empty.255.255 new_empty_implicit
@@ -144,7 +145,7 @@ def _unittest_simple() -> None:
         ---#---#---#---#---#---#---#---#---
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
-        '''
+        ''')
     )
 
     p = _parse_definition(service, [
@@ -215,13 +216,13 @@ def _unittest_simple() -> None:
 
     union = _define(
         'another/Union.5.9.uavcan',
-        '''
+        dedent('''
         @union
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
         truncated bool [ <= 255 ] c
-        '''
+        ''')
     )
 
     p = _parse_definition(union, [
@@ -425,11 +426,11 @@ def _unittest_print() -> None:
     parse_definition(
         _define(
             'ns/A.1.0.uavcan',
-            '''# line number 1
-            # line number 2
-            @print 2 + 2 == 4   # line number 3
-            # line number 4
-            '''),
+            '# line number 1\n'
+            '# line number 2\n'
+            '@print 2 + 2 == 4   # line number 3\n'
+            '# line number 4\n'
+        ),
         [],
         config
     )
@@ -447,10 +448,10 @@ def _unittest_print() -> None:
     parse_definition(
         _define(
             'ns/Offset.1.0.uavcan',
-            '''@print _offset_    # Not recorded
-            uint8 a
-            @print _offset_
-            '''),
+            '@print _offset_    # Not recorded\n'
+            'uint8 a\n'
+            '@print _offset_\n'
+        ),
         [],
         config
     )
@@ -476,10 +477,10 @@ def _unittest_print() -> None:
     parse_definition(
         _define(
             'ns/ComplexOffset.1.0.uavcan',
-            '''
+            dedent('''
             Array.1.0[2] bar
             @print _offset_
-            '''),
+            ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
         ],
@@ -498,7 +499,7 @@ def _unittest_assert() -> None:
     _parse_definition(
         _define(
             'ns/A.1.0.uavcan',
-            '''
+            dedent('''
             @assert _offset_ == {0}
             @assert _offset_.min == _offset_.max
             Array.1.0[2] bar
@@ -524,7 +525,7 @@ def _unittest_assert() -> None:
             @assert _offset_ >= 68
             @assert _offset_ > 67
             @assert _offset_ == _offset_
-            '''),
+            ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
         ]
@@ -534,11 +535,11 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/B.1.0.uavcan',
-                '''
+                dedent('''
                 uint64 big
                 @assert _offset_ == {64}
                 @assert _offset_ + 1.0 == {64}
-                '''),
+                ''')),
             []
         )
 
@@ -546,29 +547,29 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
-                '''
+                dedent('''
                 uint64 big
                 @assert _offset_ == 64
-                '''),
+                ''')),
             []
         )
 
     _parse_definition(
         _define(
             'ns/D.1.0.uavcan',
-            '''
+            dedent('''
             @union
             float32 a
             uint64 b
             @assert _offset_ == {33, 65}
-            '''),
+            ''')),
         []
     )
 
     _parse_definition(
         _define(
             'ns/E.1.0.uavcan',
-            '''
+            dedent('''
             @union
             uint8 A = 0
             float32 a
@@ -577,7 +578,7 @@ def _unittest_assert() -> None:
             uint8 C = 2
             @assert _offset_ == {33, 65}
             uint8 D = 3
-            '''),
+            ''')),
         []
     )
 
@@ -585,13 +586,13 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/F.1.0.uavcan',
-                '''
+                dedent('''
                 @union
                 @assert _offset_.min == 33
                 float32 a
                 uint64 b
                 @assert _offset_ == {33, 65}
-                '''),
+                ''')),
             []
         )
 
@@ -599,10 +600,10 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/G.1.0.uavcan',
-                '''
+                dedent('''
                 float32 a
                 @assert _offset_.min == 8
-                '''),
+                ''')),
             []
         )
 
@@ -610,10 +611,10 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/H.1.0.uavcan',
-                '''
+                dedent('''
                 float32 a
                 @assert _offset_.min
-                '''),
+                ''')),
             []
         )
 
@@ -631,33 +632,33 @@ def _unittest_parse_namespace() -> None:
 
     _define(
         'zubax/First.1.0.uavcan',
-        """
+        dedent("""
         uint8[<256] a
         @assert _offset_.min == 8
         @assert _offset_.max == 2048
-        """
+        """)
     )
 
     _define(
         'zubax/29001.Message.1.0.uavcan',
-        """
+        dedent("""
         void6
         zubax.First.1.0[<=2] a
         @assert _offset_.min == 8
         @assert _offset_.max == 4104
-        """
+        """)
     )
 
     _define(
         'zubax/nested/300.Spartans.30.0.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         float16 small
         float32 just_right
         float64 woah
         ---
-        """
+        """)
     )
 
     _define('zubax/nested/300.Spartans.30.0.txt', 'completely unrelated stuff')
@@ -675,9 +676,9 @@ def _unittest_parse_namespace() -> None:
 
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
-        """
+        dedent("""
         ---
-        """
+        """)
     )
 
     with raises(FixedPortIDCollisionError):
@@ -706,26 +707,26 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _define(
         'ns/Spartans.30.0.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         float16 small
         float32 just_right
         float64 woah
         ---
-        """
+        """)
     )
 
     _define(
         'ns/Spartans.30.1.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         int32 just_right
         float64[1] woah
         ---
-        """
+        """)
     )
 
     parsed = parse_namespace(
@@ -737,14 +738,14 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _define(
         'ns/Spartans.30.2.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         int32 just_right
         float64[<=1] woah
         ---
-        """
+        """)
     )
 
     with raises(MinorVersionsNotBitCompatibleError):
@@ -755,13 +756,13 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _define(
         'ns/Spartans.30.2.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         int32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     with raises(VersionsOfDifferentKindError):
@@ -774,13 +775,13 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _define(
         'ns/Spartans.30.0.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     parsed = parse_namespace(
@@ -792,13 +793,13 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _define(
         'ns/Spartans.30.1.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[<=1] woah
-        """
+        """)
     )
 
     with raises(MinorVersionsNotBitCompatibleError):
@@ -809,24 +810,24 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _define(
         'ns/Spartans.30.1.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         int64 woah
-        """
+        """)
     )
 
     _define(
         'ns/28700.Spartans.30.2.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         int32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     with raises(MultipleDefinitionsUnderSameVersionError):
@@ -843,13 +844,13 @@ def _unittest_parse_namespace_versioning() -> None:
     _undefine_glob('ns/Spartans.30.0.uavcan')
     _define(
         'ns/28700.Spartans.30.0.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     with raises(MinorVersionFixedPortIDError):
@@ -858,13 +859,13 @@ def _unittest_parse_namespace_versioning() -> None:
     _undefine_glob('ns/Spartans.30.1.uavcan')
     _define(
         'ns/28700.Spartans.30.1.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     parsed = parse_namespace(
@@ -876,13 +877,13 @@ def _unittest_parse_namespace_versioning() -> None:
     _undefine_glob('ns/28700.Spartans.30.1.uavcan')
     _define(
         'ns/28701.Spartans.30.1.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     with raises(MinorVersionFixedPortIDError):
@@ -892,13 +893,13 @@ def _unittest_parse_namespace_versioning() -> None:
     _undefine_glob('ns/28701.Spartans.30.1.uavcan')
     _define(
         'ns/28700.Spartans.31.0.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     with raises(FixedPortIDCollisionError):
@@ -908,13 +909,13 @@ def _unittest_parse_namespace_versioning() -> None:
     _undefine_glob('ns/28700.Spartans.31.0.uavcan')
     _define(
         'ns/28700.Spartans.0.1.uavcan',
-        """
+        dedent("""
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
-        """
+        """)
     )
 
     parsed = parse_namespace(os.path.join(directory.name, 'ns'), [])     # no error
@@ -951,10 +952,10 @@ def _unittest_inconsistent_deprecation() -> None:
         _define('ns/A.1.0.uavcan', ''),
         [
             _define('ns/B.1.0.uavcan',
-                    '''
+                    dedent('''
                     @deprecated
                     A.1.0 a
-                    ''')
+                    '''))
         ]
     )
 
@@ -962,9 +963,9 @@ def _unittest_inconsistent_deprecation() -> None:
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
-                '''
+                dedent('''
                 X.1.0 b
-                '''
+                ''')
             ),
             [
                 _define('ns/X.1.0.uavcan', '@deprecated')
@@ -973,10 +974,10 @@ def _unittest_inconsistent_deprecation() -> None:
 
     _parse_definition(
         _define('ns/D.1.0.uavcan',
-                '''
+                dedent('''
                 @deprecated
                 X.1.0 b
-                '''),
+                ''')),
         [
             _define('ns/X.1.0.uavcan', '@deprecated')
         ]
@@ -989,39 +990,39 @@ def _unittest_repeated_directives() -> None:
 
     _parse_definition(
         _define('ns/A.1.0.uavcan',
-                '''
+                dedent('''
                 @union
                 @deprecated
                 int8 a
                 float16 b
-                '''),
+                ''')),
         []
     )
 
     with raises(SemanticError, match='(?i).*deprecated.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
-                    '''
+                    dedent('''
                     @deprecated
                     @deprecated
-                    '''),
+                    ''')),
             []
         )
 
     with raises(SemanticError, match='(?i).*deprecated.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
-                    '''
+                    dedent('''
                     @deprecated
                     ---
                     @deprecated
-                    '''),
+                    ''')),
             []
         )
 
     _parse_definition(
         _define('ns/A.1.0.uavcan',
-                '''
+                dedent('''
                 @union
                 int8 a
                 float16 b
@@ -1029,18 +1030,18 @@ def _unittest_repeated_directives() -> None:
                 @union
                 int8 a
                 float16 b
-                '''),
+                ''')),
         []
     )
 
     with raises(SemanticError, match='(?i).*union.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
-                    '''
+                    dedent('''
                     @union
                     @union
                     int8 a
                     float16 b
-                    '''),
+                    ''')),
             []
         )

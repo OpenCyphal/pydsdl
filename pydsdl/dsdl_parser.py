@@ -324,7 +324,7 @@ def _make_scalar_field_rule(referer_namespace:  str,
                             configuration_options=configuration_options)
         return Field(t, field_name)
 
-    return _GrammarRule(r'\s*(?:(saturated|truncated)\s+)?'         # Cast mode
+    return _GrammarRule(r'(?:(saturated|truncated)\s+)?'            # Cast mode
                         r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s+'            # Type name
                         r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Field name
                         r'\s*(?:#.*)?$',                            # End of the line
@@ -358,7 +358,7 @@ def _make_array_field_rule(referer_namespace:  str,
 
         return Field(t, field_name)
 
-    return _GrammarRule(r'\s*(?:(saturated|truncated)\s+)?'         # Cast mode
+    return _GrammarRule(r'(?:(saturated|truncated)\s+)?'            # Cast mode
                         r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s*'            # Type name
                         r'\[\s*(<=?)?\s*(\d+)\s*\]\s+'              # Mode/size specifier
                         r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Field name
@@ -391,7 +391,7 @@ def _make_constant_rule(referer_namespace:  str,
                         initialization_expression=initialization_expression)
 
     return _GrammarRule(
-        r'\s*(?:(saturated|truncated)\s+)?'         # Cast mode
+        r'(?:(saturated|truncated)\s+)?'            # Cast mode
         r'([a-zA-Z_][a-zA-Z0-9_\.]*)\s+'            # Type name
         r'([a-zA-Z_][a-zA-Z0-9_]*)'                 # Constant name
         r'\s*=\s*'                                  # Assignment
@@ -402,12 +402,12 @@ def _make_constant_rule(referer_namespace:  str,
 
 
 def _make_padding_rule() -> _GrammarRule:
-    return _GrammarRule(r'\s*void(\d\d?)\s*(?:#.*)?$',
+    return _GrammarRule(r'void(\d\d?)\s*(?:#.*)?$',
                         lambda bw: PaddingField(VoidType(int(bw))))
 
 
 def _make_service_response_marker_rule() -> _GrammarRule:
-    return _GrammarRule(r'\s*---\s*(?:#.*)?$',
+    return _GrammarRule(r'---\s*(?:#.*)?$',
                         lambda: _ServiceResponseMarkerPlaceholder())
 
 
@@ -416,7 +416,7 @@ def _make_directive_rule() -> _GrammarRule:
     # We just take everything between the directive itself and either the end of the line or the first comment
     # and treat it as the expression (to be handled later). Strings are not allowed inside the expression,
     # which simplifies handling greatly.
-    return _GrammarRule(r'\s*@([a-zA-Z0-9_]+)\s*([^#]+?)?\s*(?:#.*)?$',
+    return _GrammarRule(r'@([a-zA-Z0-9_]+)\s*([^#]+?)?\s*(?:#.*)?$',
                         lambda d, e: _DirectivePlaceholder(d, e))
 
 
@@ -624,7 +624,7 @@ def _unittest_regexp() -> None:
              (None, 'saturated', 'uint8'))
 
     validate(_make_scalar_field_rule('', [], ConfigurationOptions()).regexp,
-             ' namespace.nested.TypeName.0.1  _0  # comment',
+             'namespace.nested.TypeName.0.1  _0  # comment',
              (None, 'namespace.nested.TypeName.0.1', '_0'))
 
     validate(_make_array_field_rule('', [], ConfigurationOptions()).regexp,
@@ -632,7 +632,7 @@ def _unittest_regexp() -> None:
              (None, 'namespace.nested.TypeName.0.1', None, '123', '_0'))
 
     validate(_make_array_field_rule('', [], ConfigurationOptions()).regexp,
-             '  namespace.nested.TypeName.0.1  [   123  ]  _# comment',
+             'namespace.nested.TypeName.0.1  [   123  ]  _# comment',
              (None, 'namespace.nested.TypeName.0.1', None, '123', '_'))
 
     validate(_make_array_field_rule('', [], ConfigurationOptions()).regexp,
@@ -644,11 +644,11 @@ def _unittest_regexp() -> None:
              ('truncated', 'type', '<=', '123', '_0'))
 
     validate(_make_array_field_rule('', [], ConfigurationOptions()).regexp,
-             ' truncated type  [ <= 123 ] _0',
+             'truncated type  [ <= 123 ] _0',
              ('truncated', 'type', '<=', '123', '_0'))
 
     validate(_make_padding_rule().regexp, 'void1', ('1',))
-    validate(_make_padding_rule().regexp, ' void64 ', ('64',))
+    validate(_make_padding_rule().regexp, 'void64 ', ('64',))
 
     validate(_make_constant_rule('', [], ConfigurationOptions()).regexp,
              'uint8 NAME = 123',
@@ -667,15 +667,15 @@ def _unittest_regexp() -> None:
              (None, 'uint8', 'NAME', '-0o123456'))
 
     validate(_make_constant_rule('', [], ConfigurationOptions()).regexp,
-             ' uint8 NAME=123#comment',
+             'uint8 NAME=123#comment',
              (None, 'uint8', 'NAME', '123'))
 
     validate(_make_constant_rule('', [], ConfigurationOptions()).regexp,
-             " uint8 NAME='#'",
+             "uint8 NAME='#'",
              (None, 'uint8', 'NAME', "'#'"))
 
     validate(_make_constant_rule('', [], ConfigurationOptions()).regexp,
-             "\tuint8 NAME = '#'# comment",
+             "uint8 NAME = '#'# comment",
              (None, 'uint8', 'NAME', "'#'"))
 
     validate(_make_directive_rule().regexp,
@@ -683,25 +683,24 @@ def _unittest_regexp() -> None:
              ('directive', None))
 
     validate(_make_directive_rule().regexp,
-             " @directive # hello world",
+             "@directive # hello world",
              ('directive', None))
 
     validate(_make_directive_rule().regexp,
-             " @directive a + b == c # hello world",
+             "@directive a + b == c # hello world",
              ('directive', 'a + b == c'))
 
     validate(_make_directive_rule().regexp,
-             " @directive a+b==c#hello world",
+             "@directive a+b==c#hello world",
              ('directive', 'a+b==c'))
 
     validate(_make_directive_rule().regexp,
-             " @directive a+b==c",
+             "@directive a+b==c",
              ('directive', 'a+b==c'))
 
     validate(_make_service_response_marker_rule().regexp, "---", ())
-    validate(_make_service_response_marker_rule().regexp, "\t---", ())
     validate(_make_service_response_marker_rule().regexp, "---  ", ())
-    validate(_make_service_response_marker_rule().regexp, " ---  # whatever", ())
+    validate(_make_service_response_marker_rule().regexp, "---  # whatever", ())
     validate(_make_service_response_marker_rule().regexp, "---#whatever", ())
 
     re_empty = _make_empty_rule().regexp
