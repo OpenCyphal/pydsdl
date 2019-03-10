@@ -46,7 +46,7 @@ def _define(rel_path: str, text: str) -> DSDLDefinition:
 def _in_n_out(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
     def decorator() -> None:
         global _DIRECTORY
-        _DIRECTORY = tempfile.TemporaryDirectory()
+        _DIRECTORY = tempfile.TemporaryDirectory(prefix='pydsdl-test-')
         try:
             test()
         finally:
@@ -1045,3 +1045,21 @@ def _unittest_repeated_directives() -> None:
                     ''')),
             []
         )
+
+
+@_in_n_out
+def _unittest_dsdl_parser_basics() -> None:
+    # This is how you can run one test only for development needs:
+    #   pytest pydsdl -k _unittest_dsdl_parser_basics --capture=no
+    # noinspection SpellCheckingInspection
+    _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                dedent(r'''
+                void16
+                ns.B.1.23 field
+                # Yields 8074.4
+                float16 a = 123456 + 0x_ab_cd_ef // 0b1111_1111 ** 2 - 0o123_456 * 2.7
+                @print "Hello\r\nworld!"
+                ''')),
+        []
+    )
