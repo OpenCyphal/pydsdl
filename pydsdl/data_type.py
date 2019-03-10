@@ -573,7 +573,7 @@ class Field(Attribute):
 
 
 class PaddingField(Field):
-    def __init__(self, data_type: DataType):
+    def __init__(self, data_type: VoidType):
         super(PaddingField, self).__init__(data_type, '', skip_name_check=True)
 
 
