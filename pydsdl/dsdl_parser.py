@@ -146,7 +146,8 @@ def _logged_transformation(fun: VisitorHandler) -> VisitorHandler:
 
 TypeList = typing.Union[type, typing.Tuple[type, ...]]
 
-PrimitiveExpressionValue = typing.Union[bool, int, float, str]
+# Note that we don't use floats internally; we use Decimals!
+PrimitiveExpressionValue = typing.Union[bool, int, Decimal, str]
 
 ExpressionValue = typing.Union[
     PrimitiveExpressionValue,
@@ -214,7 +215,7 @@ class _ASTTransformer(NodeVisitor):
     #
     @_polyadic_operator
     def visit_power_ex(self, _node: Node, children: typing.Sequence[ExpressionValue]) -> ExpressionValue:
-        return _elementwise_recursive_fold_left(children, operator.pow, (int, float))
+        return _elementwise_recursive_fold_left(children, operator.pow, (int, Decimal))
 
     #
     # Literals
