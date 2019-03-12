@@ -358,6 +358,8 @@ def _apply_binary_operator(operator_symbol: str, left: Expression, right: Expres
     except KeyError:
         raise InvalidOperandError('Binary operator %r is not defined for: %s, %s' %
                                   (operator_symbol, left, right))
+    except ZeroDivisionError:
+        raise InvalidOperandError('Division by zero')
 
 
 def _as_integer(value: Expression) -> int:
@@ -383,4 +385,4 @@ def _print_node(n: typing.Any) -> str:
 
 def _get_line_number(node: Node) -> int:
     """Returns the one-based line number where the specified node is located."""
-    return int(node.text.count('\n', 0, node.start) + 1)
+    return int(node.full_text.count('\n', 0, node.start) + 1)

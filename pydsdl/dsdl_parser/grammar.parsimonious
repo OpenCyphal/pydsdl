@@ -76,6 +76,7 @@ atom = set / parenthetical / literal / attribute_reference
 attribute_reference = name_component ("." (name_component / decimal_integer))*
 
 # A set is a notation used to represent mathematical sets.
+# Empty sets are currently not allowed.
 set = "{" _? expression_list _? "}"
 
 # Parenthetical expressions are used for managing precedence.

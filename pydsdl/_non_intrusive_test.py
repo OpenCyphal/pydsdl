@@ -1069,3 +1069,35 @@ def _unittest_dsdl_parser_basics() -> None:
                 ''')),
         []
     )
+
+
+@_in_n_out
+def _unittest_dsdl_parser_expressions() -> None:
+    _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                dedent(r'''
+                @assert true
+                @assert 1 == 2 - 1
+                @assert -10 == +20 / -2
+                @assert {10, 15, 20} % 5 == {0}
+                @assert {10, 15, 20} % 5 == {1, 2, 3} * 0
+                @assert {10, 15, 20} / 5 == {2, 3, 4} * 10 / 5 / 2
+                @assert {1} < {1, 2}
+                @assert {1} <= {1}
+                @assert {1} != {1, 2}
+                @assert {1} >= {1}
+                @assert {1, 5/2} == {-5/-2, 2.5, 1}
+                @assert {1, 2, 3} == {1} | {2} | {3} | {1}
+                @assert {1, 2, 3} == {1, 2, 3, 4, 5} & {1, 2, 3, 8, 9}
+                @assert {4, 5, 8, 9} == {1, 2, 3, 4, 5} ^ {1, 2, 3, 8, 9}
+                @assert "Hello" + ' ' + 'world' == 'Hello world'
+                @assert 'Hello'+' '+'world' != ''
+                @assert true != ('A' == "a")
+                @assert true && true
+                @assert ! (true && false)
+                @assert true||false
+                @assert !false
+                @assert ! 5 < 3
+                ''')),
+        []
+    )
