@@ -8,6 +8,7 @@ import enum
 import string
 import typing
 import itertools
+from fractions import Fraction
 from .port_id_ranges import MAX_SUBJECT_ID, MAX_SERVICE_ID
 
 
@@ -589,7 +590,7 @@ class Constant(Attribute):
         # Type check
         if isinstance(data_type, BooleanType):
             if isinstance(value, bool):
-                self._value = bool(value)  # type: typing.Union[float, int, bool]
+                self._value = bool(value)  # type: typing.Union[Fraction, int, bool]
             else:
                 raise InvalidConstantValueError('Invalid value for boolean constant: %r' % value)
 
@@ -609,8 +610,8 @@ class Constant(Attribute):
 
         elif isinstance(data_type, FloatType):
             # Remember, bool is a subtype of int
-            if isinstance(value, (int, float)) and not isinstance(value, bool):  # Implicit conversion
-                self._value = float(value)
+            if isinstance(value, (int, float, Fraction)) and not isinstance(value, bool):  # Implicit conversion
+                self._value = Fraction(value)
             else:
                 raise InvalidConstantValueError('Invalid value type for float constant: %r' % value)
 
@@ -618,8 +619,8 @@ class Constant(Attribute):
             raise InvalidTypeError('Invalid constant type: %r' % data_type)
 
         del value
-        assert isinstance(self._value, (bool, int, float))
-        assert isinstance(self.data_type, FloatType)   == isinstance(self._value, float)
+        assert isinstance(self._value, (bool, int, Fraction))
+        assert isinstance(self.data_type, FloatType)   == isinstance(self._value, Fraction)
         assert isinstance(self.data_type, BooleanType) == isinstance(self._value, bool)
         # Note that bool is a subclass of int, so we don't check against IntegerType
 
@@ -632,7 +633,7 @@ class Constant(Attribute):
                                                 (self._value, data_type))
 
     @property
-    def value(self) -> typing.Union[float, int, bool]:
+    def value(self) -> typing.Union[Fraction, int, bool]:
         return self._value
 
     @property
