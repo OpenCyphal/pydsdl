@@ -29,14 +29,45 @@ def parse_definition(definition:            DSDLDefinition,
     from ..parse_error import ParseError, InternalError
     from ..data_type import TypeParameterError
     from parsimonious import VisitationError, ParseError as ParsimoniousParseError  # Oops?
+    from .ast_transformer import ASTTransformer, Expression
 
     _logger.info('Parsing definition %r', definition)
 
-    try:
-        from .ast_transformer import ASTTransformer
+    def on_directive(line_number: int, name: str, expression: Expression) -> None:
+        if name == 'print':
+            _logger.info('Print directive at %s:%d%s',
+                         definition.file_path,
+                         line_number,
+                         (': %s' % expression) if expression is not None else ' (no expression to print)')
+            ph = configuration_options.print_handler
+            if ph:
+                ph(definition, line_number, expression)
 
-        transformer = ASTTransformer(lookup_definitions,
-                                     configuration_options)
+        elif name == 'assert':
+            if expression is None:
+                raise SemanticError('Assert directive requires an expression')
+
+            if not isinstance(expression, bool):
+                raise SemanticError('The expression of the assert directive must yield a boolean')
+
+            if not expression:
+                raise AssertionCheckFailureError('Assertion check has failed',
+                                                 path=definition.file_path,
+                                                 line=line_number)
+            else:
+                _logger.debug('Assertion check successful at %s:%d', definition.file_path, line_number)
+
+        elif name == 'deprecated':
+            pass    # TODO
+
+        elif name == 'union':
+            pass    # TODO
+
+        else:
+            raise SemanticError('Unknown directive %r' % name)
+
+    try:
+        transformer = ASTTransformer(on_directive=on_directive)
 
         with open(definition.file_path) as f:
             transformer.parse(f.read())

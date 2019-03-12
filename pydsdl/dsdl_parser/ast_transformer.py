@@ -8,21 +8,18 @@ import typing
 import logging
 import functools
 
-from functools import partial
 from fractions import Fraction
 from parsimonious import NodeVisitor, VisitationError, Grammar
 from parsimonious import ParseError as ParsimoniousParseError       # Oops? This sort of conflict is kinda bad.
 from parsimonious.nodes import Node
 
 from ..parse_error import ParseError, InternalError, InvalidDefinitionError
-from ..dsdl_definition import DSDLDefinition
 from ..data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType, DataType
 from ..data_type import ArrayType, StaticArrayType, DynamicArrayType, CompoundType, UnionType, StructureType
 from ..data_type import ServiceType, Attribute, Field, PaddingField, Constant, PrimitiveType, Version
 from ..data_type import TypeParameterError, InvalidFixedPortIDError
 from ..port_id_ranges import is_valid_regulated_subject_id, is_valid_regulated_service_id
 
-from .options import ConfigurationOptions, PrintDirectiveOutputHandler
 from .exceptions import DSDLSyntaxError, SemanticError, InvalidOperandError, ExpressionError, UndefinedDataTypeError
 from .exceptions import AssertionCheckFailureError
 
@@ -65,14 +62,24 @@ _Primitive = typing.Union[
 ]
 
 # All possible expression types; this includes container types.
-_Expression = typing.Union[
+Expression = typing.Union[
     _Primitive,
     # We have to use Any with containers because MyPy does not yet support recursive types.
     typing.FrozenSet[typing.Any],
 ]
 
+# For some weird reason the typing constructs can't be used with isinstance(), so we have to do this:
+_EXPRESSION_TYPES = bool, Fraction, str, frozenset
+
 
 _TypeList = typing.Union[type, typing.Tuple[type, ...]]
+
+# Directive handler is invoked when the parser encounters a directive.
+# The arguments are:
+#   - Line number, one-based.
+#   - Name of the directive.
+#   - The result of its expression, if provided; otherwise, None.
+DirectiveHandler = typing.Callable[[int, str, typing.Optional[Expression]], None]
 
 
 # noinspection PyMethodMayBeStatic
@@ -85,10 +92,8 @@ class ASTTransformer(NodeVisitor):
     unwrapped_exceptions = ParseError,
 
     def __init__(self,
-                 lookup_definitions: typing.Sequence[DSDLDefinition],
-                 configuration_options: ConfigurationOptions):
-        self._lookup_definitions    = lookup_definitions
-        self._configuration_options = configuration_options
+                 on_directive: DirectiveHandler):
+        self._on_directive = on_directive
 
     def generic_visit(self, node: Node, children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
@@ -124,10 +129,73 @@ class ASTTransformer(NodeVisitor):
         return Version(major=int(major), minor=int(minor))
 
     #
+    # Names
+    #
+    def visit_name_component(self, node: Node, _children: typing.List) -> str:
+        out = node.text
+        assert isinstance(out, str) and out
+        return out
+
+    #
+    # Directives
+    #
+    directive_name = NodeVisitor.lift_child
+
+    def visit_directive(self,
+                        node: Node,
+                        children: typing.Tuple[Node, str, typing.Union[Node, tuple]]) -> None:
+        _at, name, exp = children
+        assert _at.text == '@'
+        assert isinstance(name, str)
+        if isinstance(exp, Node):
+            assert not exp.children
+            exp = None
+        else:
+            assert isinstance(exp, tuple) and len(exp) == 1
+            assert isinstance(exp[0], tuple) and len(exp[0]) == 2
+            _, exp = exp[0]
+            assert isinstance(exp, _EXPRESSION_TYPES)
+
+        self._on_directive(_get_line_number(node), name, exp)
+
+    #
     # Expressions
     #
+    visit_expression = NodeVisitor.lift_child
+    visit_atom = NodeVisitor.lift_child
+
     @_logged_transformation
-    def _visit_binary_operator_chain(self, _node: Node, children: typing.Tuple[_Expression, Node]) -> _Expression:
+    def visit_set(self,
+                  _node: Node,
+                  children: typing.Tuple[Node, Node, typing.Tuple[Expression, ...], Node, Node]) \
+            -> typing.FrozenSet[Expression]:
+        _, _, exp_list, _, _ = children
+        if len(set(map(type, exp_list))) > 1:
+            raise InvalidOperandError('Heterogeneous sets are not allowed')
+        return frozenset(exp_list)
+
+    @_logged_transformation
+    def visit_parenthetical(self,
+                            _node: Node,
+                            children: typing.Tuple[Node, Node, Expression, Node, Node]) -> Expression:
+        _, _, exp, _, _ = children
+        assert isinstance(exp, _EXPRESSION_TYPES)
+        return exp
+
+    @_logged_transformation
+    def visit_expression_list(self,
+                              _node: Node,
+                              children: typing.Tuple[Expression, typing.Tuple[Node, ...]]) -> \
+            typing.Tuple[Expression, ...]:
+        assert len(children) == 2
+        out = [children[0]]
+        assert isinstance(out[0], _EXPRESSION_TYPES)
+        for _, _, _, exp in children[1]:
+            assert isinstance(exp, _EXPRESSION_TYPES)
+            out.append(exp)
+        return tuple(out)
+
+    def _visit_binary_operator_chain(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
         left = children[0]
         for _, (op,), _, right in children[1]:
             left = _apply_binary_operator(op.text, left, right)
@@ -141,44 +209,43 @@ class ASTTransformer(NodeVisitor):
     visit_comparison_ex     = _visit_binary_operator_chain
     visit_logical_ex        = _visit_binary_operator_chain
 
-    @_logged_transformation
-    def visit_logical_not_ex(self, _node: Node, children: typing.Tuple[typing.Union[Node, _Expression]]) -> _Expression:
-        if isinstance(children[0], tuple):
-            op, _, value = children[0]
-            assert op.text == '!'
-            if isinstance(value, bool):
-                return not value
-            else:
-                raise InvalidOperandError('Unsupported operand type for logical not: %r' % type(value))
-        else:
-            return children[0]
+    def visit_logical_not_ex(self, _node: Node, children: typing.Tuple[typing.Union[Node, Expression]]) -> Expression:
+        # TODO clean this up
+        if isinstance(children[0], tuple) and len(children[0]) == 3:
+            operator_node = children[0][0]
+            if isinstance(operator_node, Node) and operator_node.text == '!':
+                value = children[0][-1]
+                if isinstance(value, bool):
+                    return not value
+                else:
+                    raise InvalidOperandError('Unsupported operand type for logical not: %r' % type(value))
 
-    @_logged_transformation
+        return children[0]
+
     def visit_unary_ex(self,
                        _node: Node,
-                       children: typing.Tuple[typing.Union[Node, typing.Tuple[Node, ...]], _Expression]) -> _Expression:
+                       children: typing.Tuple[typing.Union[Node, typing.Tuple[Node, ...]], Expression]) -> Expression:
         lhs, rhs = children
+        # TODO clean this up
         if isinstance(lhs, tuple):
-            (op_node,), _ = lhs[0]
-            multiplier = {
+            selector = {
                 '+': Fraction(+1),
                 '-': Fraction(-1),
-            }[op_node.text]
-            # We treat unary plus/minus as multiplication by plus/minus one.
-            # This may lead to awkward error messages; do something about this later.
-            return _apply_binary_operator('*', multiplier, rhs)
-        else:
-            return rhs
+            }
+            (op_node,), _ = lhs[0]
+            if isinstance(op_node, Node) and op_node.text in selector:
+                # We treat unary plus/minus as multiplication by plus/minus one.
+                # This may lead to awkward error messages; do something about this later.
+                return _apply_binary_operator('*', selector[op_node.text], rhs)
 
-    @_logged_transformation
-    def visit_power_ex(self, _node: Node, children: typing.Tuple[_Expression, Node]) -> _Expression:
+        return rhs
+
+    def visit_power_ex(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
         if list(children[1]):
             base, exponent = children[0], children[1][0][-1]
             return _apply_binary_operator('**', base, exponent)
         else:
             return children[0]  # Pass through
-
-    visit_atom = NodeVisitor.lift_child
 
     #
     # Literals. All arithmetic values are represented internally as rationals.
@@ -208,7 +275,7 @@ class ASTTransformer(NodeVisitor):
         return out
 
 
-def _apply_binary_operator(operator_symbol: str, left: _Expression, right: _Expression) -> _Expression:
+def _apply_binary_operator(operator_symbol: str, left: Expression, right: Expression) -> Expression:
     """
     This function implements all binary operators defined for constant expressions.
     Operators of other arity metrics are handled differently.
@@ -293,7 +360,7 @@ def _apply_binary_operator(operator_symbol: str, left: _Expression, right: _Expr
                                   (operator_symbol, left, right))
 
 
-def _as_integer(value: _Expression) -> int:
+def _as_integer(value: Expression) -> int:
     if isinstance(value, Fraction) and value.denominator == 1:
         return value.numerator
     else:
@@ -312,3 +379,8 @@ def _print_node(n: typing.Any) -> str:
         return '[%s]' % ', '.join(map(_print_node, n))
     else:
         return repr(n)
+
+
+def _get_line_number(node: Node) -> int:
+    """Returns the one-based line number where the specified node is located."""
+    return int(node.text.count('\n', 0, node.start) + 1)

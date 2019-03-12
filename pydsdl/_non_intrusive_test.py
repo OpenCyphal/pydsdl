@@ -1058,10 +1058,14 @@ def _unittest_dsdl_parser_basics() -> None:
                 void16
                 ns.B.1.23 field
                 # Yields 8074.4
-                float64 b = +10 * -2 / -3 // 4 % 5
+                float64 b = {+10 * (-2 / -3) // 4 % 5, 123, 1/2, 1}
                 bool a = !true
-                #float16 a = 123456 + 0x_ab_cd_ef // 0b1111_1111 ** 2 - 0o123_456 * 2.7
+                float16 a = (123456 + 0x_ab_cd_ef) // 0b1111_1111 ** 2 - 0o123_456 * 2.7
                 @print "Hello\r\nworld!"
+                @print
+                @deprecated
+                @union
+                @assert true
                 ''')),
         []
     )

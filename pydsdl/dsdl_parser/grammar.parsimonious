@@ -48,7 +48,7 @@ name_component = ~r"[a-zA-Z_][a-zA-Z0-9_]*"
 
 # Directives may have an expression, depending on their semantics.
 # The expression must yield a type that is expected by the directive.
-directive      = "@" _? directive_name (_ expression)?
+directive      = "@" directive_name (_ expression)?
 directive_name = name_component
 
 # The rest of the rules is used to define expressions. The aliasing is added for clarity.
