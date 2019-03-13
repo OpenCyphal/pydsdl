@@ -169,7 +169,7 @@ class ASTTransformer(NodeVisitor):
     visit_op2_bit = NodeVisitor.lift_child
     visit_op2_add = NodeVisitor.lift_child
     visit_op2_mul = NodeVisitor.lift_child
-    visit_op2_pow = NodeVisitor.lift_child
+    visit_op2_exp = NodeVisitor.lift_child
 
     @_logged_transformation
     def visit_set(self,
@@ -239,7 +239,7 @@ class ASTTransformer(NodeVisitor):
         assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
         return _apply_binary_operator('*', Fraction(-1), exp)
 
-    def visit_ex_power(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
+    def visit_ex_exponential(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
         if list(children[1]):
             base, exponent = children[0], children[1][0][-1]
             return _apply_binary_operator('**', base, exponent)
@@ -255,14 +255,14 @@ class ASTTransformer(NodeVisitor):
     def visit_op2_cmp_equ(self, _node: Node, _children: typing.Sequence[Node]) -> str:
         return "=="
 
-    def visit_op2_cmp_geq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return ">="
+    def visit_op2_cmp_neq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "!="
 
     def visit_op2_cmp_leq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
         return "<="
 
-    def visit_op2_cmp_neq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "!="
+    def visit_op2_cmp_geq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return ">="
 
     def visit_op2_cmp_lss(self, _node: Node, _children: typing.Sequence[Node]) -> str:
         return "<"
@@ -297,7 +297,7 @@ class ASTTransformer(NodeVisitor):
     def visit_op2_mul_mod(self, _node: Node, _children: typing.Sequence[Node]) -> str:
         return "%"
 
-    def visit_op2_pow_pow(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+    def visit_op2_exp_pow(self, _node: Node, _children: typing.Sequence[Node]) -> str:
         return "**"
 
     #

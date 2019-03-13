@@ -61,13 +61,13 @@ ex_comparison     = ex_bitwise        (_? op2_cmp _? ex_bitwise)*
 ex_bitwise        = ex_additive       (_? op2_bit _? ex_additive)*
 ex_additive       = ex_multiplicative (_? op2_add _? ex_multiplicative)*
 ex_multiplicative = ex_inversion      (_? op2_mul _? ex_inversion)*
-ex_inversion      = op1_form_inv_pos / op1_form_inv_neg / ex_power
-ex_power          = atom              (_? op2_pow _? ex_inversion)?     # Right recursion
+ex_inversion      = op1_form_inv_pos / op1_form_inv_neg / ex_exponential
+ex_exponential    = atom              (_? op2_exp _? ex_inversion)?     # Right recursion
 
 # Unary operator forms are moved into separate rules for ease of parsing.
 op1_form_log_not = "!" _? ex_logical_not    # Right recursion
-op1_form_inv_pos = "+" _? ex_power
-op1_form_inv_neg = "-" _? ex_power
+op1_form_inv_pos = "+" _? ex_exponential
+op1_form_inv_neg = "-" _? ex_exponential
 
 # List of binary operators.
 op2_log = op2_log_or / op2_log_and
@@ -76,9 +76,9 @@ op2_log_and = "&&"
 
 op2_cmp = op2_cmp_equ / op2_cmp_geq / op2_cmp_leq / op2_cmp_neq / op2_cmp_lss / op2_cmp_grt  # Ordering is important.
 op2_cmp_equ = "=="
-op2_cmp_geq = ">="
-op2_cmp_leq = "<="
 op2_cmp_neq = "!="
+op2_cmp_leq = "<="
+op2_cmp_geq = ">="
 op2_cmp_lss = "<"
 op2_cmp_grt = ">"
 
@@ -97,8 +97,8 @@ op2_mul_fdv = "//"
 op2_mul_tdv = "/"
 op2_mul_mod = "%"
 
-op2_pow = op2_pow_pow   # pew pew
-op2_pow_pow = "**"
+op2_exp = op2_exp_pow
+op2_exp_pow = "**"
 
 # An atom is a basic part of an expression, such as literals or attributes (local or external)
 atom = set / parenthetical / literal / attribute_reference
