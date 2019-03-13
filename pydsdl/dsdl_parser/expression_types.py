@@ -17,10 +17,6 @@ class OperatorNotImplementedError(InvalidOperandError):
     pass
 
 
-class OperandTypeNotSupportedError(OperatorNotImplementedError):
-    pass
-
-
 #
 # Operator wrappers.
 # These wrappers serve two purposes:
@@ -289,19 +285,19 @@ class Boolean(Primitive):
         if isinstance(right, Boolean):
             return Boolean(self._value and right._value)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_logical_or(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value or right._value)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value == right._value)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
 
 class Rational(Primitive):
@@ -355,7 +351,7 @@ class Rational(Primitive):
         if isinstance(right, Rational):
             return Boolean(impl(self._value, right._value))
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_equal(self, right: 'Any') -> 'Boolean':
         return self._op2_generic_compare(right, operator.eq)
@@ -381,7 +377,7 @@ class Rational(Primitive):
         if isinstance(right, Rational):
             return Rational(impl(self.as_integer(), right.as_integer()))    # Throws if not an integer.
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_bitwise_or(self, right: 'Any') -> 'Rational':
         return self._op2_generic_bitwise(right, operator.or_)
@@ -406,7 +402,7 @@ class Rational(Primitive):
             else:
                 return Rational(result)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_additive_add(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.add)
@@ -457,13 +453,13 @@ class String(Primitive):
         if isinstance(right, String):
             return String(self._value + right._value)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_equal(self, right: 'Any') -> Boolean:
         if isinstance(right, String):
             return Boolean(self._value == right._value)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
 
 # noinspection PyAbstractClass
@@ -500,8 +496,8 @@ class Set(Container):
         list_of_elements = list(elements)   # type: typing.List[Any]
         del elements
         if len(list_of_elements) < 1:
-            raise OperandTypeNotSupportedError('Zero-length sets are currently not permitted because '
-                                               'of associated type deduction issues. This may change later.')
+            raise InvalidOperandError('Zero-length sets are currently not permitted because '
+                                      'of associated type deduction issues. This may change later.')
 
         element_types = set(map(type, list_of_elements))
         if len(element_types) != 1:
@@ -575,31 +571,31 @@ class Set(Container):
         if isinstance(right, Set):
             return Boolean(self._is_equal_to(right))
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_less_or_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_subset_of(right))
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_greater_or_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_superset_of(right))
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_less(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_proper_subset_of(right))
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_comparison_greater(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_proper_superset_of(right))
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     #
     # Set algebra operators that yield a new set.
@@ -608,19 +604,19 @@ class Set(Container):
         if isinstance(right, Set):
             return self._create_union_with(right)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_bitwise_xor(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_disjunctive_union_with(right)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_bitwise_and(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_intersection_with(right)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     #
     # Elementwise application.
@@ -630,7 +626,7 @@ class Set(Container):
         if isinstance(right, Primitive):
             return Set(impl(x, right) for x in self)
         else:
-            raise OperandTypeNotSupportedError
+            raise OperatorNotImplementedError
 
     def op2_additive_add(self, right: 'Any') -> 'Set':
         return self._op2_elementwise(op2_additive_add, right)
