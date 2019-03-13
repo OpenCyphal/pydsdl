@@ -164,9 +164,6 @@ class ASTTransformer(NodeVisitor):
     visit_expression = NodeVisitor.lift_child
     visit_atom       = NodeVisitor.lift_child
 
-    visit_logical_not_ex = NodeVisitor.lift_child
-    visit_inversion_ex   = NodeVisitor.lift_child
-
     visit_op2_log = NodeVisitor.lift_child
     visit_op2_cmp = NodeVisitor.lift_child
     visit_op2_bit = NodeVisitor.lift_child
@@ -214,13 +211,17 @@ class ASTTransformer(NodeVisitor):
 
     # Operators are handled through different grammar rules for precedence management purposes.
     # At the time of evaluation there is no point keeping them separate.
-    visit_multiplicative_ex = _visit_binary_operator_chain
-    visit_additive_ex       = _visit_binary_operator_chain
-    visit_bitwise_ex        = _visit_binary_operator_chain
-    visit_comparison_ex     = _visit_binary_operator_chain
-    visit_logical_ex        = _visit_binary_operator_chain
+    visit_ex_multiplicative = _visit_binary_operator_chain
+    visit_ex_additive       = _visit_binary_operator_chain
+    visit_ex_bitwise        = _visit_binary_operator_chain
+    visit_ex_comparison     = _visit_binary_operator_chain
+    visit_ex_logical        = _visit_binary_operator_chain
 
-    def visit_unary_ex_log_not(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+    # These are implemented via unary forms, no handling required.
+    visit_ex_logical_not = NodeVisitor.lift_child
+    visit_ex_inversion   = NodeVisitor.lift_child
+
+    def visit_op1_form_log_not(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
         if isinstance(exp, bool):
@@ -228,17 +229,17 @@ class ASTTransformer(NodeVisitor):
         else:
             raise InvalidOperandError('Unsupported operand type for logical not: %r' % type(exp))
 
-    def visit_unary_ex_inv_pos(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+    def visit_op1_form_inv_pos(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
         return _apply_binary_operator('*', Fraction(+1), exp)
 
-    def visit_unary_ex_inv_neg(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+    def visit_op1_form_inv_neg(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
         return _apply_binary_operator('*', Fraction(-1), exp)
 
-    def visit_power_ex(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
+    def visit_ex_power(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
         if list(children[1]):
             base, exponent = children[0], children[1][0][-1]
             return _apply_binary_operator('**', base, exponent)

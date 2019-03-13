@@ -49,25 +49,25 @@ directive = "@" name_component (_ expression)?
 # The rest of the rules is used to define expressions. The aliasing is added for clarity.
 # Since DSDL definitions cannot be used to describe runtime logic, all expressions are constant expressions,
 # evaluated at the time of parsing.
-expression      = logical_ex
+expression      = ex_logical
 expression_list = expression (_? "," _? expression)*
 
 # Operators. The precedence relations are expressed in the rules; the order here is from lower to higher.
 # Operators that share common prefix (e.g. < and <=, // and /, and so on) are arranged so that the longest form
 # comes first; otherwise it would be unreachable.
-logical_ex        = logical_not_ex    (_? op2_log _? logical_not_ex)*
-logical_not_ex    = unary_ex_log_not / comparison_ex
-comparison_ex     = bitwise_ex        (_? op2_cmp _? bitwise_ex)*
-bitwise_ex        = additive_ex       (_? op2_bit _? additive_ex)*
-additive_ex       = multiplicative_ex (_? op2_add _? multiplicative_ex)*
-multiplicative_ex = inversion_ex      (_? op2_mul _? inversion_ex)*
-inversion_ex      = unary_ex_inv_pos / unary_ex_inv_neg / power_ex
-power_ex          = atom              (_? op2_pow _? inversion_ex)?     # Right recursion
+ex_logical        = ex_logical_not    (_? op2_log _? ex_logical_not)*
+ex_logical_not    = op1_form_log_not / ex_comparison
+ex_comparison     = ex_bitwise        (_? op2_cmp _? ex_bitwise)*
+ex_bitwise        = ex_additive       (_? op2_bit _? ex_additive)*
+ex_additive       = ex_multiplicative (_? op2_add _? ex_multiplicative)*
+ex_multiplicative = ex_inversion      (_? op2_mul _? ex_inversion)*
+ex_inversion      = op1_form_inv_pos / op1_form_inv_neg / ex_power
+ex_power          = atom              (_? op2_pow _? ex_inversion)?     # Right recursion
 
-# Implementations of unary operator expressions.
-unary_ex_log_not = "!" _? logical_not_ex    # Right recursion
-unary_ex_inv_pos = "+" _? power_ex
-unary_ex_inv_neg = "-" _? power_ex
+# Unary operator forms are moved into separate rules for ease of parsing.
+op1_form_log_not = "!" _? ex_logical_not    # Right recursion
+op1_form_inv_pos = "+" _? ex_power
+op1_form_inv_neg = "-" _? ex_power
 
 # List of binary operators.
 op2_log = op2_log_or / op2_log_and
