@@ -117,11 +117,13 @@ class ASTTransformer(NodeVisitor):
     #
     # Type references
     #
-    def visit_cast_mode(self, node: Node, _children: typing.Sequence[Node]) -> PrimitiveType.CastMode:
-        return {
-            'saturated': PrimitiveType.CastMode.SATURATED,
-            'truncated': PrimitiveType.CastMode.TRUNCATED,
-        }[node.text]
+    visit_cast_mode = NodeVisitor.lift_child
+
+    def visit_cast_mode_saturated(self, _node: Node, _children: typing.Sequence[Node]) -> PrimitiveType.CastMode:
+        return PrimitiveType.CastMode.SATURATED
+
+    def visit_cast_mode_truncated(self, _node: Node, _children: typing.Sequence[Node]) -> PrimitiveType.CastMode:
+        return PrimitiveType.CastMode.TRUNCATED
 
     def visit_type_version(self, _node: Node, children: typing.Sequence[int]) -> Version:
         assert isinstance(children[0], Fraction) and isinstance(children[2], Fraction)
@@ -139,8 +141,6 @@ class ASTTransformer(NodeVisitor):
     #
     # Directives
     #
-    directive_name = NodeVisitor.lift_child
-
     def visit_directive(self,
                         node: Node,
                         children: typing.Tuple[Node, str, typing.Union[Node, tuple]]) -> None:
@@ -162,7 +162,17 @@ class ASTTransformer(NodeVisitor):
     # Expressions
     #
     visit_expression = NodeVisitor.lift_child
-    visit_atom = NodeVisitor.lift_child
+    visit_atom       = NodeVisitor.lift_child
+
+    visit_logical_not_ex = NodeVisitor.lift_child
+    visit_inversion_ex   = NodeVisitor.lift_child
+
+    visit_op2_log = NodeVisitor.lift_child
+    visit_op2_cmp = NodeVisitor.lift_child
+    visit_op2_bit = NodeVisitor.lift_child
+    visit_op2_add = NodeVisitor.lift_child
+    visit_op2_mul = NodeVisitor.lift_child
+    visit_op2_pow = NodeVisitor.lift_child
 
     @_logged_transformation
     def visit_set(self,
@@ -197,8 +207,9 @@ class ASTTransformer(NodeVisitor):
 
     def _visit_binary_operator_chain(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
         left = children[0]
-        for _, (op,), _, right in children[1]:
-            left = _apply_binary_operator(op.text, left, right)
+        for _, op, _, right in children[1]:
+            assert isinstance(op, str)
+            left = _apply_binary_operator(op, left, right)
         return left
 
     # Operators are handled through different grammar rules for precedence management purposes.
@@ -209,36 +220,23 @@ class ASTTransformer(NodeVisitor):
     visit_comparison_ex     = _visit_binary_operator_chain
     visit_logical_ex        = _visit_binary_operator_chain
 
-    def visit_logical_not_ex(self, _node: Node, children: typing.Tuple[typing.Union[Node, Expression]]) -> Expression:
-        # TODO clean this up
-        if isinstance(children[0], tuple) and len(children[0]) == 3:
-            operator_node = children[0][0]
-            if isinstance(operator_node, Node) and operator_node.text == '!':
-                value = children[0][-1]
-                if isinstance(value, bool):
-                    return not value
-                else:
-                    raise InvalidOperandError('Unsupported operand type for logical not: %r' % type(value))
+    def visit_unary_ex_log_not(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+        _op, _, exp = children
+        assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
+        if isinstance(exp, bool):
+            return not exp
+        else:
+            raise InvalidOperandError('Unsupported operand type for logical not: %r' % type(exp))
 
-        return children[0]
+    def visit_unary_ex_inv_pos(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+        _op, _, exp = children
+        assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
+        return _apply_binary_operator('*', Fraction(+1), exp)
 
-    def visit_unary_ex(self,
-                       _node: Node,
-                       children: typing.Tuple[typing.Union[Node, typing.Tuple[Node, ...]], Expression]) -> Expression:
-        lhs, rhs = children
-        # TODO clean this up
-        if isinstance(lhs, tuple):
-            selector = {
-                '+': Fraction(+1),
-                '-': Fraction(-1),
-            }
-            (op_node,), _ = lhs[0]
-            if isinstance(op_node, Node) and op_node.text in selector:
-                # We treat unary plus/minus as multiplication by plus/minus one.
-                # This may lead to awkward error messages; do something about this later.
-                return _apply_binary_operator('*', selector[op_node.text], rhs)
-
-        return rhs
+    def visit_unary_ex_inv_neg(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+        _op, _, exp = children
+        assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
+        return _apply_binary_operator('*', Fraction(-1), exp)
 
     def visit_power_ex(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
         if list(children[1]):
@@ -247,10 +245,65 @@ class ASTTransformer(NodeVisitor):
         else:
             return children[0]  # Pass through
 
+    def visit_op2_log_or(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "||"
+
+    def visit_op2_log_and(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "&&"
+
+    def visit_op2_cmp_equ(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "=="
+
+    def visit_op2_cmp_geq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return ">="
+
+    def visit_op2_cmp_leq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "<="
+
+    def visit_op2_cmp_neq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "!="
+
+    def visit_op2_cmp_lss(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "<"
+
+    def visit_op2_cmp_grt(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return ">"
+
+    def visit_op2_bit_or(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "|"
+
+    def visit_op2_bit_xor(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "^"
+
+    def visit_op2_bit_and(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "&"
+
+    def visit_op2_add_add(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "+"
+
+    def visit_op2_add_sub(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "-"
+
+    def visit_op2_mul_mul(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "*"
+
+    def visit_op2_mul_fdv(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "//"
+
+    def visit_op2_mul_tdv(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "/"
+
+    def visit_op2_mul_mod(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "%"
+
+    def visit_op2_pow_pow(self, _node: Node, _children: typing.Sequence[Node]) -> str:
+        return "**"
+
     #
     # Literals. All arithmetic values are represented internally as rationals.
     #
     visit_literal = NodeVisitor.lift_child
+    visit_boolean = NodeVisitor.lift_child
 
     def visit_real(self, node: Node, _children: typing.Sequence[Node]) -> Fraction:
         return Fraction(node.text)
@@ -261,11 +314,11 @@ class ASTTransformer(NodeVisitor):
     def visit_decimal_integer(self, node: Node, _children: typing.Sequence[Node]) -> Fraction:
         return Fraction(int(node.text))
 
-    def visit_boolean(self, node: Node, _children: typing.Sequence[Node]) -> bool:
-        return {
-            'true':  True,
-            'false': False,
-        }[node.text]
+    def visit_boolean_true(self, _node: Node, _children: typing.Sequence[Node]) -> bool:
+        return True
+
+    def visit_boolean_false(self, _node: Node, _children: typing.Sequence[Node]) -> bool:
+        return False
 
     @_logged_transformation
     def visit_string(self, node: Node, _children: typing.Sequence[Node]) -> str:
@@ -281,8 +334,8 @@ def _apply_binary_operator(operator_symbol: str, left: Expression, right: Expres
     Operators of other arity metrics are handled differently.
     """
     # If either of the below assertions fail, we're processing the tree improperly. Useful for development.
-    assert not isinstance(left, Node)
-    assert not isinstance(right, Node)
+    assert isinstance(left, _EXPRESSION_TYPES)
+    assert isinstance(right, _EXPRESSION_TYPES)
     try:
         if isinstance(left, frozenset) and isinstance(right, frozenset):  # (set, set) -> (set|bool)
             result = {
