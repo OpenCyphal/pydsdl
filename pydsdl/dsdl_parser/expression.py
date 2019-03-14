@@ -39,6 +39,7 @@ class Any:
         raise NotImplementedError
 
     def __str__(self) -> str:
+        """Must return a DSDL spec-compatible textual representation of the contained value suitable for printing."""
         raise NotImplementedError
 
     def __repr__(self) -> str:
@@ -58,58 +59,43 @@ class Any:
     # The types of the operators defined here must match the specification.
     # Make sure to use least generic types in the derived classes - Python allows covariant return types.
     #
-    def _logical_or(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
-
+    def _logical_or(self, right: 'Any')  -> 'Boolean': raise OperatorNotImplementedError
     def _logical_and(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def _equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
-
-    def _less_or_equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
-
+    def _equal(self, right: 'Any')            -> 'Boolean': raise OperatorNotImplementedError
+    def _less_or_equal(self, right: 'Any')    -> 'Boolean': raise OperatorNotImplementedError
     def _greater_or_equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
+    def _less(self, right: 'Any')             -> 'Boolean': raise OperatorNotImplementedError
+    def _greater(self, right: 'Any')          -> 'Boolean': raise OperatorNotImplementedError
 
-    def _less(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
-
-    def _greater(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
-
-    def _bitwise_or(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _bitwise_or(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _bitwise_or_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _bitwise_xor(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _bitwise_xor(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _bitwise_xor_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _bitwise_and(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _bitwise_and(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _bitwise_and_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _add(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _add(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _add_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _subtract(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _subtract(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _subtract_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _multiply(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _multiply(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _multiply_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _floor_divide(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _floor_divide(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _floor_divide_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _divide(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _divide(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _divide_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _modulo(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _modulo(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _modulo_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def _power(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
-
+    def _power(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
     def _power_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
 
@@ -176,7 +162,7 @@ class Rational(Primitive):
     def native_value(self) -> Fraction:
         return self._value
 
-    def as_integer(self) -> int:
+    def as_native_integer(self) -> int:
         """
         Returns the inferior as a native integer,
         unless it cannot be represented as such without the loss of precision; i.e., if denominator != 1.
@@ -236,7 +222,7 @@ class Rational(Primitive):
     #
     def _generic_bitwise(self, right: 'Any', impl: typing.Callable[[typing.Any, typing.Any], typing.Any]) -> 'Rational':
         if isinstance(right, Rational):
-            return Rational(impl(self.as_integer(), right.as_integer()))    # Throws if not an integer.
+            return Rational(impl(self.as_native_integer(), right.as_native_integer()))    # Throws if not an integer.
         else:
             raise OperatorNotImplementedError
 
@@ -308,7 +294,7 @@ class String(Primitive):
             raise NotImplementedError
 
     def __str__(self) -> str:
-        return self._value
+        return repr(self._value)
 
     def _add(self, right: 'Any') -> 'String':
         if isinstance(right, String):
@@ -573,16 +559,16 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
     return decorator
 
 
-def logical_not(left: Any) -> Boolean:                          # noinspection PyProtectedMember
-    return left._logical_not()
+def logical_not(operand: Any) -> Boolean:                       # noinspection PyProtectedMember
+    return operand._logical_not()
 
 
-def positive(left: Any) -> Any:                                 # noinspection PyProtectedMember
-    return left._positive()
+def positive(operand: Any) -> Any:                              # noinspection PyProtectedMember
+    return operand._positive()
 
 
-def negative(left: Any) -> Any:                                 # noinspection PyProtectedMember
-    return left._negative()
+def negative(operand: Any) -> Any:                              # noinspection PyProtectedMember
+    return operand._negative()
 
 
 @_auto_swap('logical_or')  # Commutative
@@ -714,3 +700,32 @@ def _unittest_expressions() -> None:
                        Set([s('789'), s('987')])]))
     assert new_set == Set([Set([s('abc123'), s('abc456')]),
                            Set([s('abc789'), s('abc987')])])
+
+
+def _unittest_textual_representations() -> None:
+    assert str(Rational(Fraction(123, 456))) == '41/152'
+    assert repr(Rational(Fraction(123, 456))) == 'rational(41/152)'
+    assert str(Rational(-123)) == '-123'
+    assert repr(Rational(-123)) == 'rational(-123)'
+
+    assert str(Boolean(True)) == 'true'
+    assert repr(Boolean(False)) == 'bool(false)'
+
+    assert str(String('Hello\nworld!')) == r"'Hello\nworld!'"
+    assert repr(String('Hello\nworld!')) == r"string('Hello\nworld!')"
+
+    tmp = str(Set([Rational(1), Rational(Fraction(-9, 7))]))
+    assert tmp == '{1, -9/7}' or tmp == '{-9/7, 1}'
+
+    tmp = repr(Set([Rational(1), Rational(Fraction(-9, 7))]))
+    assert tmp == 'set({1, -9/7})' or tmp == 'set({-9/7, 1})'
+
+    tmp = str(Set([Set([Rational(1), Rational(Fraction(-9, 7))]),
+                   Set([Rational(Fraction(90, 7))])]))
+    assert \
+        tmp == '{{1, -9/7}, {90/7}}' or \
+        tmp == '{{-9/7, 1}, {90/7}}' or \
+        tmp == '{{90/7}, {-9/7, 1}}' or \
+        tmp == '{{90/7}, {1, -9/7}}'
+
+    assert repr(Set([String('123')])) == "set({'123'})"

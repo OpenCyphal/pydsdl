@@ -55,32 +55,12 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     return wrapper
 
 
-# Basic atomic value types used by the expression evaluation logic.
-_Primitive = typing.Union[
-    bool,               # Boolean expressions
-    Fraction,           # Integer and real-typed expressions
-    str,
-]
-
-# All possible expression types; this includes container types.
-Expression = typing.Union[
-    _Primitive,
-    # We have to use Any with containers because MyPy does not yet support recursive types.
-    typing.FrozenSet[typing.Any],
-]
-
-# For some weird reason the typing constructs can't be used with isinstance(), so we have to do this:
-_EXPRESSION_TYPES = bool, Fraction, str, frozenset
-
-
-_TypeList = typing.Union[type, typing.Tuple[type, ...]]
-
 # Directive handler is invoked when the parser encounters a directive.
 # The arguments are:
 #   - Line number, one-based.
 #   - Name of the directive.
 #   - The result of its expression, if provided; otherwise, None.
-DirectiveHandler = typing.Callable[[int, str, typing.Optional[Expression]], None]
+OnDirectiveCallback = typing.Callable[[int, str, typing.Optional[expression.Any]], None]
 
 
 # noinspection PyMethodMayBeStatic
@@ -93,8 +73,8 @@ class ASTTransformer(NodeVisitor):
     unwrapped_exceptions = ParseError,
 
     def __init__(self,
-                 on_directive: DirectiveHandler):
-        self._on_directive = on_directive
+                 on_directive_callback: OnDirectiveCallback):
+        self._on_directive_callback = on_directive_callback
 
     def generic_visit(self, node: Node, children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
@@ -127,9 +107,10 @@ class ASTTransformer(NodeVisitor):
         return PrimitiveType.CastMode.TRUNCATED
 
     def visit_type_version(self, _node: Node, children: typing.Sequence[int]) -> Version:
-        assert isinstance(children[0], Fraction) and isinstance(children[2], Fraction)
         major, _, minor = children
-        return Version(major=int(major), minor=int(minor))
+        assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
+        return Version(major=major.as_native_integer(),
+                       minor=minor.as_native_integer())
 
     #
     # Names
@@ -155,9 +136,9 @@ class ASTTransformer(NodeVisitor):
             assert isinstance(exp, tuple) and len(exp) == 1
             assert isinstance(exp[0], tuple) and len(exp[0]) == 2
             _, exp = exp[0]
-            assert isinstance(exp, _EXPRESSION_TYPES)
+            assert isinstance(exp, expression.Any)
 
-        self._on_directive(_get_line_number(node), name, exp)
+        self._on_directive_callback(_get_line_number(node), name, exp)
 
     #
     # Expressions
@@ -175,43 +156,50 @@ class ASTTransformer(NodeVisitor):
     @_logged_transformation
     def visit_set(self,
                   _node: Node,
-                  children: typing.Tuple[Node, Node, typing.Tuple[Expression, ...], Node, Node]) \
-            -> typing.FrozenSet[Expression]:
+                  children: typing.Tuple[Node, Node, typing.Tuple[expression.Any, ...], Node, Node]) \
+            -> expression.Set:
         _, _, exp_list, _, _ = children
-        if len(set(map(type, exp_list))) > 1:
-            raise InvalidOperandError('Heterogeneous sets are not allowed')
-        return frozenset(exp_list)
+        assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
+        return expression.Set(exp_list)
 
     @_logged_transformation
     def visit_parenthetical(self,
                             _node: Node,
-                            children: typing.Tuple[Node, Node, Expression, Node, Node]) -> Expression:
+                            children: typing.Tuple[Node, Node, expression.Any, Node, Node]) -> expression.Any:
         _, _, exp, _, _ = children
-        assert isinstance(exp, _EXPRESSION_TYPES)
+        assert isinstance(exp, expression.Any)
         return exp
 
     @_logged_transformation
     def visit_expression_list(self,
                               _node: Node,
-                              children: typing.Tuple[Expression, typing.Tuple[Node, ...]]) -> \
-            typing.Tuple[Expression, ...]:
+                              children: typing.Tuple[expression.Any,  # I feel so type safe right now
+                                                     typing.Tuple[typing.Tuple[Node, Node, Node, expression.Any]]]) \
+            -> typing.Tuple[expression.Any, ...]:
         assert len(children) == 2
         out = [children[0]]
-        assert isinstance(out[0], _EXPRESSION_TYPES)
         for _, _, _, exp in children[1]:
-            assert isinstance(exp, _EXPRESSION_TYPES)
             out.append(exp)
+        assert all(map(lambda x: isinstance(x, expression.Any), out))
         return tuple(out)
 
-    def _visit_binary_operator_chain(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
+    def _visit_binary_operator_chain(self,
+                                     _node: Node,
+                                     children: typing.Tuple[expression.Any,  # I miss static typing so much right now
+                                                            typing.Iterable[typing.Tuple[Node,
+                                                                                         expression.BinaryOperator,
+                                                                                         Node,
+                                                                                         expression.Any]]]) \
+            -> expression.Any:
         left = children[0]
-        for _, op, _, right in children[1]:
-            assert isinstance(op, str)
-            left = _apply_binary_operator(op, left, right)
+        for _, operator, _, right in children[1]:
+            assert callable(operator)
+            left = operator(left, right)
         return left
 
     # Operators are handled through different grammar rules for precedence management purposes.
     # At the time of evaluation there is no point keeping them separate.
+    visit_ex_exponential    = _visit_binary_operator_chain
     visit_ex_multiplicative = _visit_binary_operator_chain
     visit_ex_additive       = _visit_binary_operator_chain
     visit_ex_bitwise        = _visit_binary_operator_chain
@@ -222,206 +210,67 @@ class ASTTransformer(NodeVisitor):
     visit_ex_logical_not = NodeVisitor.lift_child
     visit_ex_inversion   = NodeVisitor.lift_child
 
-    def visit_op1_form_log_not(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+    def visit_op1_form_log_not(self, _node: Node, children: typing.Tuple[Node, Node, expression.Any]) -> expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
-        if isinstance(exp, bool):
-            return not exp
-        else:
-            raise InvalidOperandError('Unsupported operand type for logical not: %r' % type(exp))
+        assert isinstance(_op, Node) and isinstance(exp, expression.Any)
+        return expression.logical_not(exp)
 
-    def visit_op1_form_inv_pos(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+    def visit_op1_form_inv_pos(self, _node: Node, children: typing.Tuple[Node, Node, expression.Any]) -> expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
-        return _apply_binary_operator('*', Fraction(+1), exp)
+        assert isinstance(_op, Node) and isinstance(exp, expression.Any)
+        return expression.positive(exp)
 
-    def visit_op1_form_inv_neg(self, _node: Node, children: typing.Tuple[Node, Node, Expression]) -> Expression:
+    def visit_op1_form_inv_neg(self, _node: Node, children: typing.Tuple[Node, Node, expression.Any]) -> expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, Node) and isinstance(exp, _EXPRESSION_TYPES)
-        return _apply_binary_operator('*', Fraction(-1), exp)
+        assert isinstance(_op, Node) and isinstance(exp, expression.Any)
+        return expression.negative(exp)
 
-    def visit_ex_exponential(self, _node: Node, children: typing.Tuple[Expression, Node]) -> Expression:
-        if list(children[1]):
-            base, exponent = children[0], children[1][0][-1]
-            return _apply_binary_operator('**', base, exponent)
-        else:
-            return children[0]  # Pass through
-
-    def visit_op2_log_or(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "||"
-
-    def visit_op2_log_and(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "&&"
-
-    def visit_op2_cmp_equ(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "=="
-
-    def visit_op2_cmp_neq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "!="
-
-    def visit_op2_cmp_leq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "<="
-
-    def visit_op2_cmp_geq(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return ">="
-
-    def visit_op2_cmp_lss(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "<"
-
-    def visit_op2_cmp_grt(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return ">"
-
-    def visit_op2_bit_or(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "|"
-
-    def visit_op2_bit_xor(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "^"
-
-    def visit_op2_bit_and(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "&"
-
-    def visit_op2_add_add(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "+"
-
-    def visit_op2_add_sub(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "-"
-
-    def visit_op2_mul_mul(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "*"
-
-    def visit_op2_mul_fdv(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "//"
-
-    def visit_op2_mul_tdv(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "/"
-
-    def visit_op2_mul_mod(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "%"
-
-    def visit_op2_exp_pow(self, _node: Node, _children: typing.Sequence[Node]) -> str:
-        return "**"
+    def visit_op2_log_or(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.logical_or
+    def visit_op2_log_and(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.logical_and
+    def visit_op2_cmp_equ(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.equal
+    def visit_op2_cmp_neq(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.not_equal
+    def visit_op2_cmp_leq(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.less_or_equal
+    def visit_op2_cmp_geq(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.greater_or_equal
+    def visit_op2_cmp_lss(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.less
+    def visit_op2_cmp_grt(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.greater
+    def visit_op2_bit_or(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.bitwise_or
+    def visit_op2_bit_xor(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.bitwise_xor
+    def visit_op2_bit_and(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.bitwise_and
+    def visit_op2_add_add(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.add
+    def visit_op2_add_sub(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.subtract
+    def visit_op2_mul_mul(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.multiply
+    def visit_op2_mul_fdv(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.floor_divide
+    def visit_op2_mul_div(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.divide
+    def visit_op2_mul_mod(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.modulo
+    def visit_op2_exp_pow(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.power
 
     #
-    # Literals. All arithmetic values are represented internally as rationals.
+    # Literals.
     #
     visit_literal = NodeVisitor.lift_child
     visit_boolean = NodeVisitor.lift_child
 
-    def visit_real(self, node: Node, _children: typing.Sequence[Node]) -> Fraction:
-        return Fraction(node.text)
+    def visit_real(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+        return expression.Rational(Fraction(node.text))
 
-    def visit_integer(self, node: Node, _children: typing.Sequence[Node]) -> Fraction:
-        return Fraction(int(node.text, base=0))
+    def visit_integer(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+        return expression.Rational(int(node.text, base=0))
 
-    def visit_decimal_integer(self, node: Node, _children: typing.Sequence[Node]) -> Fraction:
-        return Fraction(int(node.text))
+    def visit_decimal_integer(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+        return expression.Rational(int(node.text))
 
-    def visit_boolean_true(self, _node: Node, _children: typing.Sequence[Node]) -> bool:
-        return True
+    def visit_boolean_true(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
+        return expression.Boolean(True)
 
-    def visit_boolean_false(self, _node: Node, _children: typing.Sequence[Node]) -> bool:
-        return False
+    def visit_boolean_false(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
+        return expression.Boolean(False)
 
     @_logged_transformation
-    def visit_string(self, node: Node, _children: typing.Sequence[Node]) -> str:
+    def visit_string(self, node: Node, _children: typing.Sequence[Node]) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         out = eval(node.text)
         assert isinstance(out, str)
-        return out
-
-
-def _apply_binary_operator(operator_symbol: str, left: Expression, right: Expression) -> Expression:
-    """
-    This function implements all binary operators defined for constant expressions.
-    Operators of other arity metrics are handled differently.
-    """
-    # If either of the below assertions fail, we're processing the tree improperly. Useful for development.
-    assert isinstance(left, _EXPRESSION_TYPES)
-    assert isinstance(right, _EXPRESSION_TYPES)
-    try:
-        if isinstance(left, frozenset) and isinstance(right, frozenset):  # (set, set) -> (set|bool)
-            result = {
-                # Set algebra; yields set
-                '|': lambda a, b: frozenset(a | b),  # Union
-                '&': lambda a, b: frozenset(a & b),  # Intersection
-                '^': lambda a, b: frozenset(a ^ b),  # Unique
-                # Set algebra; yields bool
-                '<': lambda a, b: a < b,    # A is a proper subset of B
-                '>': lambda a, b: a > b,    # A is a proper superset of B
-                '<=': lambda a, b: a <= b,  # A is a subset of B
-                '>=': lambda a, b: a >= b,  # A is a superset of B
-                # Comparison; yields bool
-                '==': lambda a, b: a == b,
-                '!=': lambda a, b: a != b,
-            }[operator_symbol](left, right)
-            assert isinstance(result, (bool, frozenset))
-            return result
-
-        if isinstance(left, bool) and isinstance(right, bool):  # (bool, bool) -> bool
-            result = {
-                '||': lambda a, b: a or b,
-                '&&': lambda a, b: a and b,
-                '==': lambda a, b: a == b,
-                '!=': lambda a, b: a != b,
-            }[operator_symbol](left, right)
-            assert isinstance(result, bool)
-            return result
-
-        if isinstance(left, Fraction) and isinstance(right, Fraction):  # (rational, rational) -> (rational|bool)
-            result = {
-                # Comparison operators yield bool
-                '==': lambda a, b: a == b,
-                '>=': lambda a, b: a >= b,
-                '<=': lambda a, b: a <= b,
-                '!=': lambda a, b: a != b,
-                '<': lambda a, b: a < b,
-                '>': lambda a, b: a > b,
-                # Bitwise operators yield an integral fraction; fail if any of the operands is not an integer
-                '|': lambda a, b: Fraction(_as_integer(a) | _as_integer(b)),
-                '^': lambda a, b: Fraction(_as_integer(a) ^ _as_integer(b)),
-                '&': lambda a, b: Fraction(_as_integer(a) & _as_integer(b)),
-                # Arithmetic operators accept any fractions
-                '+': lambda a, b: Fraction(a + b),
-                '-': lambda a, b: Fraction(a - b),
-                '%': lambda a, b: Fraction(a % b),
-                '*': lambda a, b: Fraction(a * b),
-                '/': lambda a, b: Fraction(a / b),
-                '//': lambda a, b: Fraction(a // b),
-                '**': lambda a, b: Fraction(a ** b),
-            }[operator_symbol](left, right)
-            assert isinstance(result, (bool, Fraction))
-            return result
-
-        if isinstance(left, str) and isinstance(right, str):  # (str, str) -> (str|bool)
-            result = {
-                # Creational, yields str
-                '+': lambda a, b: a + b,
-                # Comparison, yields bool
-                '==': lambda a, b: a == b,
-                '!=': lambda a, b: a != b,
-            }[operator_symbol](left, right)
-            assert isinstance(result, (bool, str))
-            return result
-
-        # Left/right side elementwise expansion; support for other containers may be added later.
-        if isinstance(left, frozenset):  # (set, any) -> set
-            return frozenset({_apply_binary_operator(operator_symbol, x, right) for x in left})
-        if isinstance(right, frozenset):  # (set, any) -> set
-            return frozenset({_apply_binary_operator(operator_symbol, left, x) for x in right})
-
-        raise KeyError
-    except KeyError:
-        raise InvalidOperandError('Binary operator %r is not defined for: %s, %s' %
-                                  (operator_symbol, left, right))
-    except ZeroDivisionError:
-        raise InvalidOperandError('Division by zero')
-
-
-def _as_integer(value: Expression) -> int:
-    if isinstance(value, Fraction) and value.denominator == 1:
-        return value.numerator
-    else:
-        raise InvalidOperandError('Expected an integer, found this: %s' % value)
+        return expression.String(out)
 
 
 def _print_node(n: typing.Any) -> str:

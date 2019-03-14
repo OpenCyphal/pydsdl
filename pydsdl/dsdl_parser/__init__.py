@@ -29,33 +29,33 @@ def parse_definition(definition:            DSDLDefinition,
     from ..parse_error import ParseError, InternalError
     from ..data_type import TypeParameterError
     from parsimonious import VisitationError, ParseError as ParsimoniousParseError  # Oops?
-    from .ast_transformer import ASTTransformer, Expression
+    from .ast_transformer import ASTTransformer
+    from . import expression
 
     _logger.info('Parsing definition %r', definition)
 
-    def on_directive(line_number: int, name: str, expression: Expression) -> None:
+    def on_directive(line_number: int, name: str, value: expression.Any) -> None:
         if name == 'print':
             _logger.info('Print directive at %s:%d%s',
                          definition.file_path,
                          line_number,
-                         (': %s' % expression) if expression is not None else ' (no expression to print)')
+                         (': %s' % value) if value is not None else ' (no value to print)')
             ph = configuration_options.print_handler
             if ph:
-                ph(definition, line_number, expression)
+                ph(definition, line_number, value)
 
         elif name == 'assert':
-            if expression is None:
+            if isinstance(value, expression.Boolean):
+                if not value.native_value:
+                    raise AssertionCheckFailureError('Assertion check has failed',
+                                                     path=definition.file_path,
+                                                     line=line_number)
+                else:
+                    _logger.debug('Assertion check successful at %s:%d', definition.file_path, line_number)
+            elif value is None:
                 raise SemanticError('Assert directive requires an expression')
-
-            if not isinstance(expression, bool):
-                raise SemanticError('The expression of the assert directive must yield a boolean')
-
-            if not expression:
-                raise AssertionCheckFailureError('Assertion check has failed',
-                                                 path=definition.file_path,
-                                                 line=line_number)
             else:
-                _logger.debug('Assertion check successful at %s:%d', definition.file_path, line_number)
+                raise SemanticError('The assertion check expression must yield a boolean, not %s' % value.TYPE_NAME)
 
         elif name == 'deprecated':
             pass    # TODO
@@ -67,7 +67,7 @@ def parse_definition(definition:            DSDLDefinition,
             raise SemanticError('Unknown directive %r' % name)
 
     try:
-        transformer = ASTTransformer(on_directive=on_directive)
+        transformer = ASTTransformer(on_directive_callback=on_directive)
 
         with open(definition.file_path) as f:
             transformer.parse(f.read())
@@ -75,12 +75,17 @@ def parse_definition(definition:            DSDLDefinition,
         raise KeyboardInterrupt
     except ParsimoniousParseError as ex:
         raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())
-    except VisitationError as ex:
-        raise DSDLSyntaxError(str(ex), path=definition.file_path)
     except TypeParameterError as ex:
         raise SemanticError(str(ex), path=definition.file_path)
-    except ParseError as ex:  # pragma: no cover
+    except ParseError as ex:       # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
         raise
-    except Exception as ex:  # pragma: no cover
+    except VisitationError as ex:  # pragma: no cover
+        try:
+            line = int(ex.original_class.line())
+        except AttributeError:
+            line = None
+        # Treat as internal because all intentional errors are not wrapped into VisitationError.
+        raise InternalError(str(ex), path=definition.file_path, line=line)
+    except Exception as ex:        # pragma: no cover
         raise InternalError(culprit=ex, path=definition.file_path)

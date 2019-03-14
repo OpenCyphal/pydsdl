@@ -91,10 +91,10 @@ op2_add = op2_add_add / op2_add_sub
 op2_add_add = "+"
 op2_add_sub = "-"
 
-op2_mul = op2_mul_mul / op2_mul_fdv / op2_mul_tdv / op2_mul_mod  # Ordering is important.
+op2_mul = op2_mul_mul / op2_mul_fdv / op2_mul_div / op2_mul_mod  # Ordering is important.
 op2_mul_mul = "*"
 op2_mul_fdv = "//"
-op2_mul_tdv = "/"
+op2_mul_div = "/"
 op2_mul_mod = "%"
 
 op2_exp = op2_exp_pow
