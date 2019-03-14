@@ -5,6 +5,7 @@
 
 import typing
 import operator
+import functools
 from fractions import Fraction
 
 from .exceptions import InvalidOperandError
@@ -12,122 +13,145 @@ from .exceptions import InvalidOperandError
 
 _TypeList = typing.Union[type, typing.Tuple[type, ...]]
 
+_OperatorReturnType = typing.TypeVar('_OperatorReturnType')
+
 
 class OperatorNotImplementedError(InvalidOperandError):
-    pass
+    """Thrown when there is no matching operator for the supplied arguments."""
+    def __init__(self):
+        super(OperatorNotImplementedError, self).__init__(
+            'The requested operator is not defined for the provided arguments')
 
 
 #
-# Operator wrappers.
-# These wrappers serve two purposes:
+# Operator wrappers. These wrappers serve two purposes:
 #   - Late binding, as explained here: https://stackoverflow.com/questions/55148139/referring-to-a-pure-virtual-method
 #   - Automatic left-right operand swapping when necessary (for some polyadic operators).
+# The operators are prefixed with "op" followed by a number representing the arity of the operator.
 #
-def op1_logical_not(left: 'Boolean') -> 'Boolean':
-    return left.op1_logical_not()
+def _binary_operator(direct_operator: typing.Callable[['Any', 'Any'], _OperatorReturnType]) \
+        -> typing.Callable[['Any', 'Any'], _OperatorReturnType]:
+    swapped_method_name = '_%s_swapped' % direct_operator.__name__
+
+    @functools.wraps(direct_operator)
+    def wrapper(left: 'Any', right: 'Any') -> 'Any':
+        if not isinstance(left, Any) or not isinstance(right, Any):
+            raise ValueError('Operators are only defined for implementations of Any; found this: %r, %r' %
+                             (type(left), type(right)))
+        try:
+            result = direct_operator(left, right)
+        except OperatorNotImplementedError:
+            if type(left) != type(right) and hasattr(right, swapped_method_name):  # Right and Left are swapped.
+                result = getattr(right, swapped_method_name)(left)
+            else:
+                raise
+
+        assert isinstance(result, Any)
+        return result
+
+    return wrapper
 
 
-def op1_inversion_positive(left: 'Any') -> 'Any':
-    return left.op1_inversion_positive()
+def op1_logical_not(left: 'Any') -> 'Boolean':                          # noinspection PyProtectedMember
+    return left._op1_logical_not()
 
 
-def op1_inversion_negative(left: 'Any') -> 'Any':
-    return left.op1_inversion_negative()
+def op1_positive(left: 'Any') -> 'Any':                                 # noinspection PyProtectedMember
+    return left._op1_positive()
 
 
-def op2_logical_or(left: 'Boolean', right: 'Boolean') -> 'Boolean':
-    return left.op2_logical_or(right)
+def op1_negative(left: 'Any') -> 'Any':                                 # noinspection PyProtectedMember
+    return left._op1_negative()
 
 
-def op2_logical_and(left: 'Boolean', right: 'Boolean') -> 'Boolean':
-    return left.op2_logical_and(right)
+@_binary_operator
+def op2_logical_or(left: 'Any', right: 'Any') -> 'Boolean':             # noinspection PyProtectedMember
+    return left._op2_logical_or(right)
 
 
-def op2_comparison_equal(left: 'Any', right: 'Any') -> 'Boolean':
-    return left.op2_comparison_equal(right)
+@_binary_operator
+def op2_logical_and(left: 'Any', right: 'Any') -> 'Boolean':            # noinspection PyProtectedMember
+    return left._op2_logical_and(right)
 
 
-def op2_comparison_not_equal(left: 'Any', right: 'Any') -> 'Boolean':
-    return left.op2_comparison_not_equal(right)
+@_binary_operator
+def op2_equal(left: 'Any', right: 'Any') -> 'Boolean':                  # noinspection PyProtectedMember
+    return left._op2_equal(right)
 
 
-def op2_comparison_less_or_equal(left: 'Any', right: 'Any') -> 'Boolean':
-    return left.op2_comparison_less_or_equal(right)
+@_binary_operator
+def op2_not_equal(left: 'Any', right: 'Any') -> 'Boolean':              # noinspection PyProtectedMember
+    return left._op2_not_equal(right)
 
 
-def op2_comparison_greater_or_equal(left: 'Any', right: 'Any') -> 'Boolean':
-    return left.op2_comparison_greater_or_equal(right)
+@_binary_operator
+def op2_less_or_equal(left: 'Any', right: 'Any') -> 'Boolean':          # noinspection PyProtectedMember
+    return left._op2_less_or_equal(right)
 
 
-def op2_comparison_less(left: 'Any', right: 'Any') -> 'Boolean':
-    return left.op2_comparison_less(right)
+@_binary_operator
+def op2_greater_or_equal(left: 'Any', right: 'Any') -> 'Boolean':       # noinspection PyProtectedMember
+    return left._op2_greater_or_equal(right)
 
 
-def op2_comparison_greater(left: 'Any', right: 'Any') -> 'Boolean':
-    return left.op2_comparison_greater(right)
+@_binary_operator
+def op2_less(left: 'Any', right: 'Any') -> 'Boolean':                   # noinspection PyProtectedMember
+    return left._op2_less(right)
 
 
-def op2_bitwise_or(left: 'Any', right: 'Any') -> 'Any':
-    return left.op2_bitwise_or(right)
+@_binary_operator
+def op2_greater(left: 'Any', right: 'Any') -> 'Boolean':                # noinspection PyProtectedMember
+    return left._op2_greater(right)
 
 
-def op2_bitwise_xor(left: 'Any', right: 'Any') -> 'Any':
-    return left.op2_bitwise_xor(right)
+@_binary_operator
+def op2_bitwise_or(left: 'Any', right: 'Any') -> 'Any':                 # noinspection PyProtectedMember
+    return left._op2_bitwise_or(right)
 
 
-def op2_bitwise_and(left: 'Any', right: 'Any') -> 'Any':
-    return left.op2_bitwise_and(right)
+@_binary_operator
+def op2_bitwise_xor(left: 'Any', right: 'Any') -> 'Any':                # noinspection PyProtectedMember
+    return left._op2_bitwise_xor(right)
 
 
-def op2_additive_add(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_additive_add(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_additive_add(left)
+@_binary_operator
+def op2_bitwise_and(left: 'Any', right: 'Any') -> 'Any':                # noinspection PyProtectedMember
+    return left._op2_bitwise_and(right)
 
 
-def op2_additive_subtract(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_additive_subtract(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_additive_subtract(left)
+@_binary_operator
+def op2_add(left: 'Any', right: 'Any') -> 'Any':                        # noinspection PyProtectedMember
+    return left._op2_add(right)
 
 
-def op2_multiplicative_multiply(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_multiplicative_multiply(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_multiplicative_multiply(left)
+@_binary_operator
+def op2_subtract(left: 'Any', right: 'Any') -> 'Any':                   # noinspection PyProtectedMember
+    return left._op2_subtract(right)
 
 
-def op2_multiplicative_floor_division(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_multiplicative_floor_division(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_multiplicative_floor_division(left)
+@_binary_operator
+def op2_multiply(left: 'Any', right: 'Any') -> 'Any':                   # noinspection PyProtectedMember
+    return left._op2_multiply(right)
 
 
-def op2_multiplicative_true_division(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_multiplicative_true_division(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_multiplicative_true_division(left)
+@_binary_operator
+def op2_floor_divide(left: 'Any', right: 'Any') -> 'Any':             # noinspection PyProtectedMember
+    return left._op2_floor_divide(right)
 
 
-def op2_multiplicative_modulo(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_multiplicative_modulo(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_multiplicative_modulo(left)
+@_binary_operator
+def op2_divide(left: 'Any', right: 'Any') -> 'Any':                   # noinspection PyProtectedMember
+    return left._op2_divide(right)
 
 
-def op2_exponential_power(left: 'Any', right: 'Any') -> 'Any':
-    try:
-        return left.op2_exponential_power(right)
-    except OperatorNotImplementedError:
-        return right.swapped_op2_exponential_power(left)
+@_binary_operator
+def op2_modulo(left: 'Any', right: 'Any') -> 'Any':                     # noinspection PyProtectedMember
+    return left._op2_modulo(right)
 
-# TODO: a decorator that swaps the arguments automatically; also a set of module-internal swapped wrappers.
+
+@_binary_operator
+def op2_power(left: 'Any', right: 'Any') -> 'Any':                      # noinspection PyProtectedMember
+    return left._op2_power(right)
 
 
 #
@@ -153,99 +177,67 @@ class Any:
     #
     # Unary operators.
     #
-    def op1_logical_not(self) -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op1_logical_not(self) -> 'Boolean': raise OperatorNotImplementedError
 
-    def op1_inversion_positive(self) -> 'Any':
-        raise OperatorNotImplementedError
+    def _op1_positive(self) -> 'Any': raise OperatorNotImplementedError
 
-    def op1_inversion_negative(self) -> 'Any':
-        raise OperatorNotImplementedError
+    def _op1_negative(self) -> 'Any': raise OperatorNotImplementedError
 
     #
     # Binary operators.
     # The types of the operators defined here must match the specification.
     # Make sure to use least generic types in the derived classes - Python allows covariant return types.
     #
-    def op2_logical_or(self, right: 'Boolean') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_logical_or(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_logical_and(self, right: 'Boolean') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_logical_and(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_comparison_equal(self, right: 'Any') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_comparison_not_equal(self, right: 'Any') -> 'Boolean':
-        return self.op2_comparison_equal(right).op1_logical_not()       # Default implementation
+    def _op2_not_equal(self, right: 'Any') -> 'Boolean':  # noinspection PyProtectedMember
+        return self._op2_equal(right)._op1_logical_not()  # default implementation
 
-    def op2_comparison_less_or_equal(self, right: 'Any') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_less_or_equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_comparison_greater_or_equal(self, right: 'Any') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_greater_or_equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_comparison_less(self, right: 'Any') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_less(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_comparison_greater(self, right: 'Any') -> 'Boolean':
-        raise OperatorNotImplementedError
+    def _op2_greater(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
 
-    def op2_bitwise_or(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_bitwise_or(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_bitwise_xor(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_bitwise_xor(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_bitwise_and(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_bitwise_and(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_additive_add(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_add(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_additive_subtract(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_add_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_multiplicative_multiply(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_subtract(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_multiplicative_floor_division(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_subtract_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_multiplicative_true_division(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_multiply(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_multiplicative_modulo(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_multiply_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def op2_exponential_power(self, right: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_floor_divide(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    #
-    # Binary operators with swapped arguments are invoked when the corresponding non-swapped version
-    # throws an OperatorNotImplementedError (including derived exceptions). This is like the Python's
-    # built-in methods __radd__(), __rmul__(), etc.
-    #
-    def swapped_op2_additive_add(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_floor_divide_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def swapped_op2_additive_subtract(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_divide(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def swapped_op2_multiplicative_multiply(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_divide_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def swapped_op2_multiplicative_floor_division(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_modulo(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def swapped_op2_multiplicative_true_division(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_modulo_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def swapped_op2_multiplicative_modulo(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_power(self, right: 'Any') -> 'Any': raise OperatorNotImplementedError
 
-    def swapped_op2_exponential_power(self, left: 'Any') -> 'Any':
-        raise OperatorNotImplementedError
+    def _op2_power_swapped(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
 
 
 # noinspection PyAbstractClass
@@ -278,22 +270,22 @@ class Boolean(Primitive):
     def __str__(self) -> str:
         return 'true' if self._value else 'false'
 
-    def op1_logical_not(self) -> 'Boolean':
+    def _op1_logical_not(self) -> 'Boolean':
         return Boolean(not self._value)
 
-    def op2_logical_and(self, right: 'Any') -> 'Boolean':
+    def _op2_logical_and(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value and right._value)
         else:
             raise OperatorNotImplementedError
 
-    def op2_logical_or(self, right: 'Any') -> 'Boolean':
+    def _op2_logical_or(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value or right._value)
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value == right._value)
         else:
@@ -336,10 +328,10 @@ class Rational(Primitive):
     #
     # Unary operators.
     #
-    def op1_inversion_positive(self) -> 'Rational':
+    def _op1_positive(self) -> 'Rational':
         return Rational(+self._value)
 
-    def op1_inversion_negative(self) -> 'Rational':
+    def _op1_negative(self) -> 'Rational':
         return Rational(-self._value)
 
     #
@@ -353,19 +345,19 @@ class Rational(Primitive):
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_equal(self, right: 'Any') -> 'Boolean':
         return self._op2_generic_compare(right, operator.eq)
 
-    def op2_comparison_less_or_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_less_or_equal(self, right: 'Any') -> 'Boolean':
         return self._op2_generic_compare(right, operator.le)
 
-    def op2_comparison_greater_or_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_greater_or_equal(self, right: 'Any') -> 'Boolean':
         return self._op2_generic_compare(right, operator.ge)
 
-    def op2_comparison_less(self, right: 'Any') -> 'Boolean':
+    def _op2_less(self, right: 'Any') -> 'Boolean':
         return self._op2_generic_compare(right, operator.lt)
 
-    def op2_comparison_greater(self, right: 'Any') -> 'Boolean':
+    def _op2_greater(self, right: 'Any') -> 'Boolean':
         return self._op2_generic_compare(right, operator.gt)
 
     #
@@ -379,13 +371,13 @@ class Rational(Primitive):
         else:
             raise OperatorNotImplementedError
 
-    def op2_bitwise_or(self, right: 'Any') -> 'Rational':
+    def _op2_bitwise_or(self, right: 'Any') -> 'Rational':
         return self._op2_generic_bitwise(right, operator.or_)
 
-    def op2_bitwise_xor(self, right: 'Any') -> 'Rational':
+    def _op2_bitwise_xor(self, right: 'Any') -> 'Rational':
         return self._op2_generic_bitwise(right, operator.xor)
 
-    def op2_bitwise_and(self, right: 'Any') -> 'Rational':
+    def _op2_bitwise_and(self, right: 'Any') -> 'Rational':
         return self._op2_generic_bitwise(right, operator.and_)
 
     #
@@ -404,25 +396,25 @@ class Rational(Primitive):
         else:
             raise OperatorNotImplementedError
 
-    def op2_additive_add(self, right: 'Any') -> 'Rational':
+    def _op2_add(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.add)
 
-    def op2_additive_subtract(self, right: 'Any') -> 'Rational':
+    def _op2_subtract(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.sub)
 
-    def op2_multiplicative_multiply(self, right: 'Any') -> 'Rational':
+    def _op2_multiply(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.mul)
 
-    def op2_multiplicative_floor_division(self, right: 'Any') -> 'Rational':
+    def _op2_floor_divide(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.floordiv)
 
-    def op2_multiplicative_true_division(self, right: 'Any') -> 'Rational':
+    def _op2_divide(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.truediv)
 
-    def op2_multiplicative_modulo(self, right: 'Any') -> 'Rational':
+    def _op2_modulo(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.mod)
 
-    def op2_exponential_power(self, right: 'Any') -> 'Rational':
+    def _op2_power(self, right: 'Any') -> 'Rational':
         return self._op2_generic_arithmetic(right, operator.pow)
 
 
@@ -449,13 +441,13 @@ class String(Primitive):
     def __str__(self) -> str:
         return self._value
 
-    def op2_additive_add(self, right: 'Any') -> 'String':
+    def _op2_add(self, right: 'Any') -> 'String':
         if isinstance(right, String):
             return String(self._value + right._value)
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_equal(self, right: 'Any') -> Boolean:
+    def _op2_equal(self, right: 'Any') -> Boolean:
         if isinstance(right, String):
             return Boolean(self._value == right._value)
         else:
@@ -504,7 +496,7 @@ class Set(Container):
             # This also weeds out covariant sets, although our barbie-size type system is unaware of that.
             raise InvalidOperandError('Heterogeneous sets are not permitted')
 
-        self._element_type = list(element_types)[1]  # type: typing.Type[Any]
+        self._element_type = list(element_types)[0]  # type: typing.Type[Any]
         self._value = frozenset(list_of_elements)    # type: typing.FrozenSet[Any]
 
         if not issubclass(self._element_type, Any):
@@ -567,31 +559,31 @@ class Set(Container):
     #
     # Set comparison.
     #
-    def op2_comparison_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_equal_to(right))
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_less_or_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_less_or_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_subset_of(right))
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_greater_or_equal(self, right: 'Any') -> 'Boolean':
+    def _op2_greater_or_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_superset_of(right))
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_less(self, right: 'Any') -> 'Boolean':
+    def _op2_less(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_proper_subset_of(right))
         else:
             raise OperatorNotImplementedError
 
-    def op2_comparison_greater(self, right: 'Any') -> 'Boolean':
+    def _op2_greater(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_proper_superset_of(right))
         else:
@@ -600,19 +592,19 @@ class Set(Container):
     #
     # Set algebra operators that yield a new set.
     #
-    def op2_bitwise_or(self, right: 'Any') -> 'Set':
+    def _op2_bitwise_or(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_union_with(right)
         else:
             raise OperatorNotImplementedError
 
-    def op2_bitwise_xor(self, right: 'Any') -> 'Set':
+    def _op2_bitwise_xor(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_disjunctive_union_with(right)
         else:
             raise OperatorNotImplementedError
 
-    def op2_bitwise_and(self, right: 'Any') -> 'Set':
+    def _op2_bitwise_and(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_intersection_with(right)
         else:
@@ -622,34 +614,99 @@ class Set(Container):
     # Elementwise application.
     # https://stackoverflow.com/questions/55148139/referring-to-a-pure-virtual-method
     #
-    def _op2_elementwise(self, impl: typing.Callable[['Any', 'Any'], 'Any'], right: 'Any') -> 'Set':
-        if isinstance(right, Primitive):
-            return Set(impl(x, right) for x in self)
+    def _op2_elementwise(self,
+                         impl: typing.Callable[['Any', 'Any'], 'Any'],
+                         other: 'Any',
+                         swap: bool = False) -> 'Set':
+        if isinstance(other, Primitive):
+            return Set((impl(other, x) if swap else impl(x, other)) for x in self)
         else:
             raise OperatorNotImplementedError
 
-    def op2_additive_add(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_additive_add, right)
+    def _op2_add(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_add, right)
 
-    def op2_additive_subtract(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_additive_subtract, right)
+    def _op2_add_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_add, left, swap=True)
 
-    def op2_multiplicative_multiply(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_multiplicative_multiply, right)
+    def _op2_subtract(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_subtract, right)
 
-    def op2_multiplicative_floor_division(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_multiplicative_floor_division, right)
+    def _op2_subtract_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_subtract, left, swap=True)
 
-    def op2_multiplicative_true_division(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_multiplicative_true_division, right)
+    def _op2_multiply(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_multiply, right)
 
-    def op2_multiplicative_modulo(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_multiplicative_modulo, right)
+    def _op2_multiply_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_multiply, left, swap=True)
 
-    def op2_exponential_power(self, right: 'Any') -> 'Set':
-        return self._op2_elementwise(op2_exponential_power, right)
+    def _op2_floor_divide(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_floor_divide, right)
+
+    def _op2_floor_divide_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_floor_divide, left, swap=True)
+
+    def _op2_divide(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_divide, right)
+
+    def _op2_divide_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_divide, left, swap=True)
+
+    def _op2_modulo(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_modulo, right)
+
+    def _op2_modulo_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_modulo, left, swap=True)
+
+    def _op2_power(self, right: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_power, right)
+
+    def _op2_power_swapped(self, left: 'Any') -> 'Set':
+        return self._op2_elementwise(op2_power, left, swap=True)
 
 
 def _enforce_initializer_type(value: typing.Any, expected_type: _TypeList) -> None:
     if not isinstance(value, expected_type):
         raise ValueError('Expected type %r, found %r' % (expected_type, type(value)))
+
+
+# noinspection PyUnresolvedReferences,PyTypeChecker
+def _unittest_expressions() -> None:
+    r = Rational
+    s = String
+
+    for a in (True, False):
+        for b in (True, False):
+            assert Boolean(a).native_value == a
+            assert op1_logical_not(Boolean(a)).native_value == (not a)
+            assert op2_logical_and(Boolean(a), Boolean(b)).native_value == (a and b)
+            assert op2_logical_or(Boolean(a), Boolean(b)).native_value == (a or b)
+
+    assert \
+        op2_equal(
+            op2_divide(
+                op2_multiply(
+                    op2_add(r(2), r(2)),
+                    r(3)
+                ),
+                r(5)
+            ),
+            r(Fraction(12, 5))
+        ).native_value
+
+    assert op2_add(s('123'), s('abc')).native_value == '123abc'  # type: ignore
+
+    new_set = op2_add(Set([s('123'), s('456')]),
+                      s('abc'))
+    assert set(new_set) == {s('123abc'), s('456abc')}  # type: ignore
+
+    new_set = op2_add(s('abc'),
+                      Set([s('123'), s('456')]))
+    assert set(new_set) == {s('abc123'), s('abc456')}  # type: ignore
+
+    new_set = op2_add(s('abc'),
+                      Set([Set([s('123'), s('456')]),
+                           Set([s('789'), s('987')])]))
+    assert new_set == Set([Set([s('abc123'), s('abc456')]),
+                           Set([s('abc789'), s('abc987')])])

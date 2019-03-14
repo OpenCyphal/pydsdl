@@ -20,6 +20,7 @@ from ..data_type import ServiceType, Attribute, Field, PaddingField, Constant, P
 from ..data_type import TypeParameterError, InvalidFixedPortIDError
 from ..port_id_ranges import is_valid_regulated_subject_id, is_valid_regulated_service_id
 
+from . import expression
 from .exceptions import DSDLSyntaxError, SemanticError, InvalidOperandError, ExpressionError, UndefinedDataTypeError
 from .exceptions import AssertionCheckFailureError
 
