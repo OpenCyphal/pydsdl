@@ -11,7 +11,10 @@ from fractions import Fraction
 from .exceptions import InvalidOperandError
 
 
-_TypeList = typing.Union[type, typing.Tuple[type, ...]]
+_OperatorReturnType = typing.TypeVar('_OperatorReturnType')
+
+BinaryOperator = typing.Callable[['Any', 'Any'], _OperatorReturnType]
+UnaryOperator = typing.Callable[['Any'], _OperatorReturnType]
 
 
 class OperatorNotImplementedError(InvalidOperandError):
@@ -21,10 +24,10 @@ class OperatorNotImplementedError(InvalidOperandError):
             'The requested operator is not defined for the provided arguments')
 
 
-#
-# Expression type implementations.
-#
 class Any:
+    """
+    This abstract class represents an arbitrary intrinsic DSDL expression value.
+    """
     # This attribute must be specified in the derived classes.
     # It contains the name of the data type implemented by the class.
     TYPE_NAME = None    # type: str
@@ -335,12 +338,10 @@ class Set(Container):
 
     # noinspection PyProtectedMember
     class _Decorator:
-        ReturnType = typing.TypeVar('ReturnType')
-
         @staticmethod
-        def homotypic_binary_operator(inferior: typing.Callable[['Set', 'Set'], ReturnType]) \
-                -> typing.Callable[['Set', 'Set'], ReturnType]:
-            def wrapper(self: 'Set', other: 'Set') -> 'Set._Decorator.ReturnType':
+        def homotypic_binary_operator(inferior: typing.Callable[['Set', 'Set'], _OperatorReturnType]) \
+                -> typing.Callable[['Set', 'Set'], _OperatorReturnType]:
+            def wrapper(self: 'Set', other: 'Set') -> _OperatorReturnType:
                 assert isinstance(self, Set) and isinstance(other, Set)
                 if self.element_type == other.element_type:
                     return inferior(self, other)
@@ -532,7 +533,7 @@ class Set(Container):
         return self._elementwise(power, left, swap=True)
 
 
-def _enforce_initializer_type(value: typing.Any, expected_type: _TypeList) -> None:
+def _enforce_initializer_type(value: typing.Any, expected_type: typing.Union[type, typing.Tuple[type, ...]]) -> None:
     if not isinstance(value, expected_type):
         raise ValueError('Expected type %r, found %r' % (expected_type, type(value)))
 
@@ -541,15 +542,10 @@ def _enforce_initializer_type(value: typing.Any, expected_type: _TypeList) -> No
 # Operator wrappers. These wrappers serve two purposes:
 #   - Late binding, as explained here: https://stackoverflow.com/questions/55148139/referring-to-a-pure-virtual-method
 #   - Automatic left-right operand swapping when necessary (for some polyadic operators).
-# The operators are prefixed with "op" followed by a number representing the arity of the operator.
 #
-_OperatorReturnType = typing.TypeVar('_OperatorReturnType')
-_GenericOperator = typing.Callable[[Any, Any], _OperatorReturnType]
-
-
 def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
-        typing.Callable[[_GenericOperator], _GenericOperator]:
-    def decorator(direct_operator: _GenericOperator) -> _GenericOperator:
+        typing.Callable[[BinaryOperator], BinaryOperator]:
+    def decorator(direct_operator: BinaryOperator) -> BinaryOperator:
         if alternative_operator_name:
             operand_right_method_name = '_' + alternative_operator_name
         else:
