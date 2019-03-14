@@ -540,12 +540,12 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
         typing.Callable[[BinaryOperator], BinaryOperator]:
     def decorator(direct_operator: BinaryOperator) -> BinaryOperator:
         if alternative_operator_name:
-            operand_right_method_name = '_' + alternative_operator_name
+            alternative_method_name = '_' + alternative_operator_name
         else:
-            operand_right_method_name = '_%s_right' % direct_operator.__name__
+            alternative_method_name = '_%s_right' % direct_operator.__name__
 
-        if not hasattr(Any, operand_right_method_name):
-            raise TypeError('The following alternative operator method is not defined: %r' % operand_right_method_name)
+        if not hasattr(Any, alternative_method_name):
+            raise TypeError('The following alternative operator method is not defined: %r' % alternative_method_name)
 
         @functools.wraps(direct_operator)
         def wrapper(left: Any, right: Any) -> Any:
@@ -556,7 +556,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
                 result = direct_operator(left, right)
             except UndefinedOperatorError:
                 if type(left) != type(right):
-                    result = getattr(right, operand_right_method_name)(left)  # Left and Right are right.
+                    result = getattr(right, alternative_method_name)(left)  # Left and Right are swapped.
                 else:
                     raise
 
