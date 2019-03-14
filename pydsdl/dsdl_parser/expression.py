@@ -8,7 +8,7 @@ import operator
 import functools
 from fractions import Fraction
 
-from .exceptions import InvalidOperandError
+from ..parse_error import InvalidDefinitionError
 
 
 _OperatorReturnType = typing.TypeVar('_OperatorReturnType')
@@ -17,11 +17,18 @@ BinaryOperator = typing.Callable[['Any', 'Any'], _OperatorReturnType]
 UnaryOperator = typing.Callable[['Any'], _OperatorReturnType]
 
 
-class OperatorNotImplementedError(InvalidOperandError):
+class ExpressionError(InvalidDefinitionError):
+    pass
+
+
+class InvalidOperandError(ExpressionError):
+    pass
+
+
+class UndefinedOperatorError(InvalidOperandError):
     """Thrown when there is no matching operator for the supplied arguments."""
     def __init__(self) -> None:
-        super(OperatorNotImplementedError, self).__init__(
-            'The requested operator is not defined for the provided arguments')
+        super(UndefinedOperatorError, self).__init__('The requested operator is not defined for the provided arguments')
 
 
 class Any:
@@ -48,55 +55,55 @@ class Any:
     #
     # Unary operators.
     #
-    def _logical_not(self) -> 'Boolean': raise OperatorNotImplementedError
+    def _logical_not(self) -> 'Boolean': raise UndefinedOperatorError
 
-    def _positive(self) -> 'Any': raise OperatorNotImplementedError
+    def _positive(self) -> 'Any': raise UndefinedOperatorError
 
-    def _negative(self) -> 'Any': raise OperatorNotImplementedError
+    def _negative(self) -> 'Any': raise UndefinedOperatorError
 
     #
     # Binary operators.
     # The types of the operators defined here must match the specification.
     # Make sure to use least generic types in the derived classes - Python allows covariant return types.
     #
-    def _logical_or(self, right: 'Any')  -> 'Boolean': raise OperatorNotImplementedError
-    def _logical_and(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
+    def _logical_or(self, right: 'Any')  -> 'Boolean': raise UndefinedOperatorError
+    def _logical_and(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
 
-    def _equal(self, right: 'Any')            -> 'Boolean': raise OperatorNotImplementedError
-    def _less_or_equal(self, right: 'Any')    -> 'Boolean': raise OperatorNotImplementedError
-    def _greater_or_equal(self, right: 'Any') -> 'Boolean': raise OperatorNotImplementedError
-    def _less(self, right: 'Any')             -> 'Boolean': raise OperatorNotImplementedError
-    def _greater(self, right: 'Any')          -> 'Boolean': raise OperatorNotImplementedError
+    def _equal(self, right: 'Any')            -> 'Boolean': raise UndefinedOperatorError
+    def _less_or_equal(self, right: 'Any')    -> 'Boolean': raise UndefinedOperatorError
+    def _greater_or_equal(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
+    def _less(self, right: 'Any')             -> 'Boolean': raise UndefinedOperatorError
+    def _greater(self, right: 'Any')          -> 'Boolean': raise UndefinedOperatorError
 
-    def _bitwise_or(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _bitwise_or_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _bitwise_or(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _bitwise_or_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _bitwise_xor(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _bitwise_xor_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _bitwise_xor(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _bitwise_xor_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _bitwise_and(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _bitwise_and_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _bitwise_and(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _bitwise_and_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _add(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _add_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _add(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _add_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _subtract(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _subtract_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _subtract(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _subtract_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _multiply(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _multiply_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _multiply(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _multiply_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _floor_divide(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _floor_divide_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _floor_divide(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _floor_divide_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _divide(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _divide_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _divide(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _divide_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _modulo(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _modulo_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _modulo(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _modulo_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _power(self, right: 'Any')      -> 'Any': raise OperatorNotImplementedError
-    def _power_right(self, left: 'Any') -> 'Any': raise OperatorNotImplementedError
+    def _power(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
+    def _power_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
 
 # noinspection PyAbstractClass
@@ -136,19 +143,19 @@ class Boolean(Primitive):
         if isinstance(right, Boolean):
             return Boolean(self._value and right._value)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _logical_or(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value or right._value)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Boolean):
             return Boolean(self._value == right._value)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
 
 class Rational(Primitive):
@@ -200,7 +207,7 @@ class Rational(Primitive):
         if isinstance(right, Rational):
             return Boolean(impl(self._value, right._value))
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _equal(self, right: 'Any') -> 'Boolean':
         return self._generic_compare(right, operator.eq)
@@ -224,7 +231,7 @@ class Rational(Primitive):
         if isinstance(right, Rational):
             return Rational(impl(self.as_native_integer(), right.as_native_integer()))    # Throws if not an integer.
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _bitwise_or(self, right: 'Any') -> 'Rational':
         return self._generic_bitwise(right, operator.or_)
@@ -249,7 +256,7 @@ class Rational(Primitive):
             else:
                 return Rational(result)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _add(self, right: 'Any') -> 'Rational':
         return self._generic_arithmetic(right, operator.add)
@@ -300,13 +307,13 @@ class String(Primitive):
         if isinstance(right, String):
             return String(self._value + right._value)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _equal(self, right: 'Any') -> Boolean:
         if isinstance(right, String):
             return Boolean(self._value == right._value)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
 
 # noinspection PyAbstractClass
@@ -416,31 +423,31 @@ class Set(Container):
         if isinstance(right, Set):
             return Boolean(self._is_equal_to(right))
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _less_or_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_subset_of(right))
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _greater_or_equal(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_superset_of(right))
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _less(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_proper_subset_of(right))
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _greater(self, right: 'Any') -> 'Boolean':
         if isinstance(right, Set):
             return Boolean(self._is_proper_superset_of(right))
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     #
     # Set algebra operators that yield a new set.
@@ -449,19 +456,19 @@ class Set(Container):
         if isinstance(right, Set):
             return self._create_union_with(right)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _bitwise_xor(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_disjunctive_union_with(right)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _bitwise_and(self, right: 'Any') -> 'Set':
         if isinstance(right, Set):
             return self._create_intersection_with(right)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     #
     # Elementwise application.
@@ -474,7 +481,7 @@ class Set(Container):
         if isinstance(other, Primitive):
             return Set((impl(other, x) if swap else impl(x, other)) for x in self)
         else:
-            raise OperatorNotImplementedError
+            raise UndefinedOperatorError
 
     def _add(self, right: 'Any') -> 'Set':
         return self._elementwise(add, right)
@@ -547,7 +554,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
                                  (type(left), type(right)))
             try:
                 result = direct_operator(left, right)
-            except OperatorNotImplementedError:
+            except UndefinedOperatorError:
                 if type(left) != type(right):
                     result = getattr(right, operand_right_method_name)(left)  # Left and Right are right.
                 else:

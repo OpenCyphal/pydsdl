@@ -7,12 +7,27 @@ import os
 import typing
 import logging
 
+from ..parse_error import InvalidDefinitionError
 from ..dsdl_definition import DSDLDefinition
 from ..data_type import CompoundType
 
 from .options import ConfigurationOptions, PrintDirectiveOutputHandler
-from .exceptions import DSDLSyntaxError, SemanticError, UndefinedDataTypeError, AssertionCheckFailureError, \
-    ExpressionError, InvalidOperandError, InvalidDefinitionError
+
+
+class DSDLSyntaxError(InvalidDefinitionError):
+    pass
+
+
+class UndefinedDataTypeError(InvalidDefinitionError):
+    pass
+
+
+class SemanticError(InvalidDefinitionError):
+    pass
+
+
+class AssertionCheckFailureError(SemanticError):
+    pass
 
 
 _GRAMMAR_DEFINITION_FILE_PATH = os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')
@@ -67,7 +82,7 @@ def parse_definition(definition:            DSDLDefinition,
             raise SemanticError('Unknown directive %r' % name)
 
     try:
-        transformer = ASTTransformer(on_directive_callback=on_directive)
+        transformer = ASTTransformer()
 
         with open(definition.file_path) as f:
             transformer.parse(f.read())
@@ -82,7 +97,7 @@ def parse_definition(definition:            DSDLDefinition,
         raise
     except VisitationError as ex:  # pragma: no cover
         try:
-            line = int(ex.original_class.line())
+            line = int(ex.original_class.line())    # type: typing.Optional[int]
         except AttributeError:
             line = None
         # Treat as internal because all intentional errors are not wrapped into VisitationError.

@@ -9,20 +9,13 @@ import logging
 import functools
 
 from fractions import Fraction
-from parsimonious import NodeVisitor, VisitationError, Grammar
-from parsimonious import ParseError as ParsimoniousParseError       # Oops? This sort of conflict is kinda bad.
+from parsimonious import NodeVisitor, Grammar
 from parsimonious.nodes import Node
 
-from ..parse_error import ParseError, InternalError, InvalidDefinitionError
-from ..data_type import BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType, DataType
-from ..data_type import ArrayType, StaticArrayType, DynamicArrayType, CompoundType, UnionType, StructureType
-from ..data_type import ServiceType, Attribute, Field, PaddingField, Constant, PrimitiveType, Version
-from ..data_type import TypeParameterError, InvalidFixedPortIDError
-from ..port_id_ranges import is_valid_regulated_subject_id, is_valid_regulated_service_id
+from ..parse_error import ParseError, InvalidDefinitionError
+from ..data_type import VoidType, PaddingField, PrimitiveType, Version
 
 from . import expression
-from .exceptions import DSDLSyntaxError, SemanticError, InvalidOperandError, ExpressionError, UndefinedDataTypeError
-from .exceptions import AssertionCheckFailureError
 
 
 _GRAMMAR_DEFINITION_FILE_PATH = os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')
@@ -55,12 +48,22 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     return wrapper
 
 
-# Directive handler is invoked when the parser encounters a directive.
-# The arguments are:
-#   - Line number, one-based.
-#   - Name of the directive.
-#   - The result of its expression, if provided; otherwise, None.
-OnDirectiveCallback = typing.Callable[[int, str, typing.Optional[expression.Any]], None]
+class StatementStreamProcessor:
+    """
+    This interface must be implemented by the logic that sits on top of the AST transformer.
+    The methods are invoked immediately as corresponding statements are encountered within the
+    processed DSDL definition.
+    This interface can be used to construct a more abstract intermediate representation of the processed text.
+    """
+    def on_directive(self,
+                     line_number: int,
+                     directive_name: str,
+                     associated_expression_value: typing.Optional[expression.Any]) -> None:
+        raise NotImplementedError
+
+    def on_service_response_marker(self) -> None:
+        """The correctness of the marker placement is not validated by the caller."""
+        raise NotImplementedError
 
 
 # noinspection PyMethodMayBeStatic
@@ -72,9 +75,8 @@ class ASTTransformer(NodeVisitor):
     # Beware that those might be propagated from recursive parser instances!
     unwrapped_exceptions = ParseError,
 
-    def __init__(self,
-                 on_directive_callback: OnDirectiveCallback):
-        self._on_directive_callback = on_directive_callback
+    def __init__(self):
+        pass
 
     def generic_visit(self, node: Node, children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
@@ -91,7 +93,7 @@ class ASTTransformer(NodeVisitor):
                 'void%d' % i: VoidType(i) for i in _FULL_BIT_WIDTH_SET
             }[node.text]
         except KeyError:
-            raise UndefinedDataTypeError(node.text) from None
+            raise InvalidDefinitionError(node.text) from None   # FIXME improper exception type
         else:
             return PaddingField(data_type)
 
@@ -112,17 +114,21 @@ class ASTTransformer(NodeVisitor):
         return Version(major=major.as_native_integer(),
                        minor=minor.as_native_integer())
 
-    #
-    # Names
-    #
-    def visit_name_component(self, node: Node, _children: typing.List) -> str:
+    @_logged_transformation
+    def visit_composite_name(self, node: Node, _children: typing.Tuple) -> str:
+        pass
+
+    def visit_name_component(self, node: Node, _children: typing.Tuple) -> str:
         out = node.text
         assert isinstance(out, str) and out
         return out
 
     #
-    # Directives
+    # Directives and control sequences
     #
+    def visit_service_response_marker(self, _node: Node, _children: typing.Tuple) -> None:
+        pass  # TODO self._element_stream_processor.on_service_response_marker()
+
     def visit_directive(self,
                         node: Node,
                         children: typing.Tuple[Node, str, typing.Union[Node, tuple]]) -> None:
@@ -138,7 +144,8 @@ class ASTTransformer(NodeVisitor):
             _, exp = exp[0]
             assert isinstance(exp, expression.Any)
 
-        self._on_directive_callback(_get_line_number(node), name, exp)
+        line_number = _get_line_number(node)
+        # TODO self._element_stream_processor.on_directive(_get_line_number(node), name, exp)
 
     #
     # Expressions
@@ -170,7 +177,6 @@ class ASTTransformer(NodeVisitor):
         assert isinstance(exp, expression.Any)
         return exp
 
-    @_logged_transformation
     def visit_expression_list(self,
                               _node: Node,
                               children: typing.Tuple[expression.Any,  # I feel so type safe right now
