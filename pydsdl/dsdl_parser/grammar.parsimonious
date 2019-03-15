@@ -55,10 +55,9 @@ expression_list = expression (_? "," _? expression)*
 atom = set / parenthetical / literal / identifier
 
 # Reference to an attribute (local or external), type, etc.
-identifier = name_component ("." (name_component / type_version))*
+identifier = name_component ("." name_component)* ("." type_version)? ("." name_component)*
 
-# A set is a notation used to represent mathematical sets.
-# Empty sets are currently not allowed.
+# Set notation. Empty sets are currently not allowed.
 set = "{" _? expression_list _? "}"
 
 # Parenthetical expressions are used for managing precedence.
@@ -81,11 +80,12 @@ op1_form_log_not = "!" _? ex_logical_not    # Right recursion
 op1_form_inv_pos = "+" _? ex_exponential
 op1_form_inv_neg = "-" _? ex_exponential
 
-# List of binary operators.
+# Logical operators; defined for booleans.
 op2_log = op2_log_or / op2_log_and
 op2_log_or  = "||"
 op2_log_and = "&&"
 
+# Comparison operators.
 op2_cmp = op2_cmp_equ / op2_cmp_geq / op2_cmp_leq / op2_cmp_neq / op2_cmp_lss / op2_cmp_grt  # Ordering is important.
 op2_cmp_equ = "=="
 op2_cmp_neq = "!="
@@ -94,21 +94,25 @@ op2_cmp_geq = ">="
 op2_cmp_lss = "<"
 op2_cmp_grt = ">"
 
+# Bitwise integer manipulation operators.
 op2_bit = op2_bit_or / op2_bit_xor / op2_bit_and
 op2_bit_or  = "|"
 op2_bit_xor = "^"
 op2_bit_and = "&"
 
+# Additive operators.
 op2_add = op2_add_add / op2_add_sub
 op2_add_add = "+"
 op2_add_sub = "-"
 
+# Multiplicative operators.
 op2_mul = op2_mul_mul / op2_mul_fdv / op2_mul_div / op2_mul_mod  # Ordering is important.
 op2_mul_mul = "*"
 op2_mul_fdv = "//"
 op2_mul_div = "/"
 op2_mul_mod = "%"
 
+# Exponential operators.
 op2_exp = op2_exp_pow
 op2_exp_pow = "**"
 
