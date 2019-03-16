@@ -12,8 +12,8 @@ from fractions import Fraction
 from parsimonious import NodeVisitor, Grammar
 from parsimonious.nodes import Node
 
-from ..parse_error import ParseError, InvalidDefinitionError
-from ..data_type import VoidType, PaddingField, PrimitiveType, Version
+from ..parse_error import ParseError
+from ..data_type import PrimitiveType, Version
 
 from . import expression
 
@@ -26,31 +26,9 @@ _FULL_BIT_WIDTH_SET = list(range(1, 65))
 _logger = logging.getLogger(__name__)
 
 
-#
-# Decorators for use with the transformer.
-#
-_VisitorHandler = typing.Callable[['ASTTransformer', Node, typing.Any], typing.Any]
-
-
-def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
-    """
-    Simply logs the resulting transformation upon its completion.
-    """
-    @functools.wraps(fun)
-    def wrapper(self: 'ASTTransformer', node: Node, children: typing.Any) -> typing.Any:
-        result = '<TRANSFORMATION FAILED>'  # type: typing.Any
-        try:
-            result = fun(self, node, children)
-            return result
-        finally:
-            _logger.debug('Transformation: %s(%s) --> %r', node.expr_name, _print_node(children), result)
-
-    return wrapper
-
-
 class StatementStreamProcessor:
     """
-    This interface must be implemented by the logic that sits on top of the AST transformer.
+    This interface must be implemented by the logic that sits on top of the transformer.
     The methods are invoked immediately as corresponding statements are encountered within the
     processed DSDL definition.
     This interface can be used to construct a more abstract intermediate representation of the processed text.
@@ -66,8 +44,30 @@ class StatementStreamProcessor:
         raise NotImplementedError
 
 
+#
+# Decorators for use with the transformer.
+#
+_VisitorHandler = typing.Callable[['ParseTreeTransformer', Node, typing.Any], typing.Any]
+
+
+def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
+    """
+    Simply logs the resulting transformation upon its completion.
+    """
+    @functools.wraps(fun)
+    def wrapper(self: 'ParseTreeTransformer', node: Node, children: typing.Any) -> typing.Any:
+        result = '<TRANSFORMATION FAILED>'  # type: typing.Any
+        try:
+            result = fun(self, node, children)
+            return result
+        finally:
+            _logger.debug('Transformation: %s(%s) --> %r', node.expr_name, _print_node(children), result)
+
+    return wrapper
+
+
 # noinspection PyMethodMayBeStatic
-class ASTTransformer(NodeVisitor):
+class ParseTreeTransformer(NodeVisitor):
     # Populating the default grammar (see the NodeVisitor API).
     grammar = Grammar(open(_GRAMMAR_DEFINITION_FILE_PATH).read())
 
@@ -75,8 +75,9 @@ class ASTTransformer(NodeVisitor):
     # Beware that those might be propagated from recursive parser instances!
     unwrapped_exceptions = ParseError,
 
-    def __init__(self):
-        pass
+    def __init__(self, statement_stream_processor: StatementStreamProcessor):
+        assert isinstance(statement_stream_processor, StatementStreamProcessor)
+        self._statement_stream_processor = statement_stream_processor   # type: StatementStreamProcessor
 
     def generic_visit(self, node: Node, children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
@@ -86,16 +87,8 @@ class ASTTransformer(NodeVisitor):
     # Fields
     #
     @_logged_transformation
-    def visit_padding_field(self, node: Node, _children: typing.Sequence[Node]) -> PaddingField:
-        # Using reverse matching to weed out improper integer representations, e.g. with leading zeros
-        try:
-            data_type = {
-                'void%d' % i: VoidType(i) for i in _FULL_BIT_WIDTH_SET
-            }[node.text]
-        except KeyError:
-            raise InvalidDefinitionError(node.text) from None   # FIXME improper exception type
-        else:
-            return PaddingField(data_type)
+    def visit_padding_field(self, node: Node, _children: typing.Sequence[Node]) -> None:
+        print('PADDING FIELD', node.text)   # TODO: ENDPOINT HANDLING
 
     #
     # Type references
@@ -127,7 +120,7 @@ class ASTTransformer(NodeVisitor):
     # Directives and control sequences
     #
     def visit_service_response_marker(self, _node: Node, _children: typing.Tuple) -> None:
-        pass  # TODO self._element_stream_processor.on_service_response_marker()
+        self._statement_stream_processor.on_service_response_marker()
 
     def visit_directive(self,
                         node: Node,
@@ -145,7 +138,7 @@ class ASTTransformer(NodeVisitor):
             assert isinstance(exp, expression.Any)
 
         line_number = _get_line_number(node)
-        # TODO self._element_stream_processor.on_directive(_get_line_number(node), name, exp)
+        self._statement_stream_processor.on_directive(line_number, name, exp)
 
     #
     # Expressions
@@ -161,27 +154,18 @@ class ASTTransformer(NodeVisitor):
     visit_op2_exp = NodeVisitor.lift_child
 
     @_logged_transformation
-    def visit_set(self,
-                  _node: Node,
-                  children: typing.Tuple[Node, Node, typing.Tuple[expression.Any, ...], Node, Node]) \
-            -> expression.Set:
+    def visit_set(self, _node: Node, children: tuple) -> expression.Set:
         _, _, exp_list, _, _ = children
         assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
         return expression.Set(exp_list)
 
     @_logged_transformation
-    def visit_parenthetical(self,
-                            _node: Node,
-                            children: typing.Tuple[Node, Node, expression.Any, Node, Node]) -> expression.Any:
+    def visit_parenthetical(self, _node: Node, children: tuple) -> expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, expression.Any)
         return exp
 
-    def visit_expression_list(self,
-                              _node: Node,
-                              children: typing.Tuple[expression.Any,  # I feel so type safe right now
-                                                     typing.Tuple[typing.Tuple[Node, Node, Node, expression.Any]]]) \
-            -> typing.Tuple[expression.Any, ...]:
+    def visit_expression_list(self, _node: Node, children: tuple) -> typing.Tuple[expression.Any, ...]:
         assert len(children) == 2
         out = [children[0]]
         for _, _, _, exp in children[1]:
@@ -189,14 +173,7 @@ class ASTTransformer(NodeVisitor):
         assert all(map(lambda x: isinstance(x, expression.Any), out))
         return tuple(out)
 
-    def _visit_binary_operator_chain(self,
-                                     _node: Node,
-                                     children: typing.Tuple[expression.Any,  # I miss static typing so much right now
-                                                            typing.Iterable[typing.Tuple[Node,
-                                                                                         expression.BinaryOperator,
-                                                                                         Node,
-                                                                                         expression.Any]]]) \
-            -> expression.Any:
+    def _visit_binary_operator_chain(self, _node: Node, children: tuple) -> expression.Any:
         left = children[0]
         for _, operator, _, right in children[1]:
             assert callable(operator)
@@ -279,6 +256,9 @@ class ASTTransformer(NodeVisitor):
         return expression.String(out)
 
 
+#
+# Internal helper functions.
+#
 def _print_node(n: typing.Any) -> str:
     """Simple printing helper; the default printing method from Parsimonious is no good."""
     if isinstance(n, Node):
