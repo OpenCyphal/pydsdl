@@ -31,6 +31,12 @@ class UndefinedOperatorError(InvalidOperandError):
         super(UndefinedOperatorError, self).__init__('The requested operator is not defined for the provided arguments')
 
 
+class UndefinedAttributeError(InvalidOperandError):
+    """Thrown when the requested attribute does not exist."""
+    def __init__(self) -> None:
+        super(UndefinedAttributeError, self).__init__('Invalid attribute name')
+
+
 class Any:
     """
     This abstract class represents an arbitrary intrinsic DSDL expression value.
@@ -104,6 +110,11 @@ class Any:
 
     def _power(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
     def _power_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+
+    #
+    # Attribute access operator. It is a binary operator as well, but its semantics is slightly different.
+    #
+    def _attribute(self, name: 'String') -> 'Any': raise UndefinedAttributeError
 
 
 # noinspection PyAbstractClass
@@ -525,6 +536,17 @@ class Set(Container):
     def _power_right(self, left: 'Any') -> 'Set':
         return self._elementwise(power, left, swap=True)
 
+    #
+    # Attributes
+    #
+    def _attribute(self, name: 'String') -> 'Any':
+        if name.native_value == 'min':
+            raise UndefinedAttributeError   # TODO
+        elif name.native_value == 'max':
+            raise UndefinedAttributeError   # TODO
+        else:
+            raise UndefinedAttributeError
+
 
 def _enforce_initializer_type(value: typing.Any, expected_type: typing.Union[type, typing.Tuple[type, ...]]) -> None:
     if not isinstance(value, expected_type):
@@ -593,7 +615,7 @@ def equal(left: Any, right: Any) -> Boolean:                    # noinspection P
     return left._equal(right)
 
 
-# Special case - synthetic operator
+# Special case - synthetic operator.
 def not_equal(left: Any, right: Any) -> Boolean:                # noinspection PyProtectedMember
     return logical_not(equal(left, right))
 
@@ -666,6 +688,15 @@ def modulo(left: Any, right: Any) -> Any:                       # noinspection P
 @_auto_swap()
 def power(left: Any, right: Any) -> Any:                        # noinspection PyProtectedMember
     return left._power(right)
+
+
+# Special case - no argument-swapped alternative defined.
+def attribute(value: Any, name: String) -> Any:
+    if isinstance(value, Any) and isinstance(name, String):     # noinspection PyProtectedMember
+        return value._attribute(name)
+    else:
+        raise ValueError('The argument types of the attribute operator are (Any, String), got (%r, %r)' %
+                         (type(value), type(name)))
 
 
 # noinspection PyUnresolvedReferences,PyTypeChecker

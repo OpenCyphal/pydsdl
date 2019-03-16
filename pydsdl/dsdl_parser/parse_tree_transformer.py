@@ -154,12 +154,6 @@ class ParseTreeTransformer(NodeVisitor):
     visit_op2_exp = NodeVisitor.lift_child
 
     @_logged_transformation
-    def visit_set(self, _node: Node, children: tuple) -> expression.Set:
-        _, _, exp_list, _, _ = children
-        assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
-        return expression.Set(exp_list)
-
-    @_logged_transformation
     def visit_parenthetical(self, _node: Node, children: tuple) -> expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, expression.Any)
@@ -182,6 +176,7 @@ class ParseTreeTransformer(NodeVisitor):
 
     # Operators are handled through different grammar rules for precedence management purposes.
     # At the time of evaluation there is no point keeping them separate.
+    visit_ex_attribute      = _visit_binary_operator_chain
     visit_ex_exponential    = _visit_binary_operator_chain
     visit_ex_multiplicative = _visit_binary_operator_chain
     visit_ex_additive       = _visit_binary_operator_chain
@@ -226,12 +221,19 @@ class ParseTreeTransformer(NodeVisitor):
     def visit_op2_mul_div(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.divide
     def visit_op2_mul_mod(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.modulo
     def visit_op2_exp_pow(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.power
+    def visit_op2_attrib(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.attribute
 
     #
     # Literals.
     #
     visit_literal = NodeVisitor.lift_child
     visit_boolean = NodeVisitor.lift_child
+
+    @_logged_transformation
+    def visit_set(self, _node: Node, children: tuple) -> expression.Set:
+        _, _, exp_list, _, _ = children
+        assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
+        return expression.Set(exp_list)
 
     def visit_real(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
         return expression.Rational(Fraction(node.text))
