@@ -12,9 +12,8 @@ from fractions import Fraction
 from parsimonious import NodeVisitor, Grammar
 from parsimonious.nodes import Node
 
-from ..parse_error import ParseError
-from ..data_type import PrimitiveType, Version
-
+from .parse_error import ParseError
+from .data_type import PrimitiveType, Version
 from . import expression
 
 

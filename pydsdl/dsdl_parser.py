@@ -8,10 +8,9 @@ import logging
 
 from parsimonious import VisitationError, ParseError as ParsimoniousParseError  # Oops?
 
-from ..parse_error import InvalidDefinitionError, ParseError, InternalError
-from ..dsdl_definition import DSDLDefinition
-from ..data_type import CompoundType, TypeParameterError
-
+from .parse_error import InvalidDefinitionError, ParseError, InternalError
+from .dsdl_definition import DSDLDefinition
+from .data_type import CompoundType, TypeParameterError
 from .parse_tree_transformer import ParseTreeTransformer, StatementStreamProcessor
 from . import expression
 
