@@ -326,7 +326,6 @@ class VoidType(DataType):
 
     @property
     def bit_length(self) -> int:
-        """All primitives are of a fixed bit length, hence just one value is enough."""
         return self._bit_length
 
     def compute_bit_length_values(self) -> typing.Set[int]:

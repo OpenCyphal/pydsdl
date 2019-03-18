@@ -147,6 +147,9 @@ class Boolean(Primitive):
     def __str__(self) -> str:
         return 'true' if self._value else 'false'
 
+    def __bool__(self) -> bool:     # For use in expressions without accessing "native_value"
+        return self._value
+
     def _logical_not(self) -> 'Boolean':
         return Boolean(not self._value)
 
@@ -541,11 +544,16 @@ class Set(Container):
     #
     def _attribute(self, name: 'String') -> 'Any':
         if name.native_value == 'min':
-            raise UndefinedAttributeError   # TODO
+            out = functools.reduce(lambda a, b: a if less(a, b) else b, self)
+            assert isinstance(out, self.element_type)
         elif name.native_value == 'max':
-            raise UndefinedAttributeError   # TODO
+            out = functools.reduce(lambda a, b: a if greater(a, b) else b, self)
+            assert isinstance(out, self.element_type)
         else:
             raise UndefinedAttributeError
+
+        assert isinstance(out, Any)
+        return out
 
 
 def _enforce_initializer_type(value: typing.Any, expected_type: typing.Union[type, typing.Tuple[type, ...]]) -> None:
@@ -573,7 +581,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
         def wrapper(left: Any, right: Any) -> Any:
             if not isinstance(left, Any) or not isinstance(right, Any):
                 raise ValueError('Operators are only defined for implementations of Any; found this: %r, %r' %
-                                 (type(left), type(right)))
+                                 (type(left).__name__, type(right).__name__))
             try:
                 result = direct_operator(left, right)
             except UndefinedOperatorError:
@@ -696,7 +704,7 @@ def attribute(value: Any, name: String) -> Any:
         return value._attribute(name)
     else:
         raise ValueError('The argument types of the attribute operator are (Any, String), got (%r, %r)' %
-                         (type(value), type(name)))
+                         (type(value).__name__, type(name).__name__))
 
 
 # noinspection PyUnresolvedReferences,PyTypeChecker
@@ -738,6 +746,9 @@ def _unittest_expressions() -> None:
                        Set([s('789'), s('987')])]))
     assert new_set == Set([Set([s('abc123'), s('abc456')]),
                            Set([s('abc789'), s('abc987')])])
+
+    assert attribute(Set([r(1), r(2), r(3), r(-4), r(-5)]), s('min')) == r(-5)
+    assert attribute(Set([r(1), r(2), r(3), r(-4), r(-5)]), s('max')) == r(3)
 
 
 def _unittest_textual_representations() -> None:

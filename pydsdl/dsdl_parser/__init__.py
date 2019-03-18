@@ -3,6 +3,5 @@
 # This software is distributed under the terms of the MIT License.
 #
 
-from .options import ConfigurationOptions, PrintDirectiveOutputHandler
-from .parser import parse_definition
+from .parser import parse_definition, ConfigurationOptions, PrintDirectiveOutputHandler
 from .parser import SemanticError, DSDLSyntaxError, AssertionCheckFailureError, UndefinedDataTypeError

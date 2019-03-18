@@ -12,9 +12,20 @@ from ..parse_error import InvalidDefinitionError, ParseError, InternalError
 from ..dsdl_definition import DSDLDefinition
 from ..data_type import CompoundType, TypeParameterError
 
-from .options import ConfigurationOptions
 from .parse_tree_transformer import ParseTreeTransformer, StatementStreamProcessor
 from . import expression
+
+
+# Arguments: emitting definition, line number, value to print
+# The lines are numbered starting from one
+PrintDirectiveOutputHandler = typing.Callable[[DSDLDefinition, int, typing.Any], None]
+
+
+class ConfigurationOptions:
+    def __init__(self) -> None:
+        self.print_handler = None                       # type: typing.Optional[PrintDirectiveOutputHandler]
+        self.allow_unregulated_fixed_port_id = False
+        self.skip_assertion_checks = False
 
 
 class DSDLSyntaxError(InvalidDefinitionError):
