@@ -9,6 +9,7 @@ import functools
 from fractions import Fraction
 
 from ..parse_error import InvalidDefinitionError
+from .. import data_type
 
 
 _OperatorReturnType = typing.TypeVar('_OperatorReturnType')
@@ -128,7 +129,9 @@ class Boolean(Primitive):
     TYPE_NAME = 'bool'
 
     def __init__(self, value: bool = False):
-        _enforce_initializer_type(value, bool)
+        if not isinstance(value, bool):
+            raise ValueError('Cannot construct a Boolean instance from ' + type(value).__name__)
+
         self._value = value  # type: bool
 
     @property
@@ -142,7 +145,7 @@ class Boolean(Primitive):
         if isinstance(other, Boolean):
             return self._value == other._value
         else:
-            raise NotImplementedError
+            return NotImplemented
 
     def __str__(self) -> str:
         return 'true' if self._value else 'false'
@@ -176,7 +179,8 @@ class Rational(Primitive):
     TYPE_NAME = 'rational'
 
     def __init__(self, value: typing.Union[int, Fraction]):
-        _enforce_initializer_type(value, (int, Fraction))
+        if not isinstance(value, (int, Fraction)):
+            raise ValueError('Cannot construct a Rational instance from ' + type(value).__name__)
         self._value = Fraction(value)  # type: Fraction
 
     @property
@@ -200,7 +204,7 @@ class Rational(Primitive):
         if isinstance(other, Rational):
             return self._value == other._value
         else:
-            raise NotImplementedError
+            return NotImplemented
 
     def __str__(self) -> str:
         return str(self._value)
@@ -298,7 +302,8 @@ class String(Primitive):
     TYPE_NAME = 'string'
 
     def __init__(self, value: str):
-        _enforce_initializer_type(value, str)
+        if not isinstance(value, str):
+            raise ValueError('Cannot construct a String instance from ' + type(value).__name__)
         self._value = value  # type: str
 
     @property
@@ -312,7 +317,7 @@ class String(Primitive):
         if isinstance(other, String):
             return self._value == other._value
         else:
-            raise NotImplementedError
+            return NotImplemented
 
     def __str__(self) -> str:
         return repr(self._value)
@@ -390,7 +395,7 @@ class Set(Container):
         if isinstance(other, Set):
             return self._value == other._value
         else:
-            raise NotImplementedError
+            return NotImplemented
 
     def __str__(self) -> str:
         return '{%s}' % ', '.join(map(str, self._value))    # This is recursive.
@@ -549,6 +554,8 @@ class Set(Container):
         elif name.native_value == 'max':
             out = functools.reduce(lambda a, b: a if greater(a, b) else b, self)
             assert isinstance(out, self.element_type)
+        elif name.native_value == 'count':  # "size" and "length" can be ambiguous, "cardinality" is long
+            out = Rational(len(self._value))
         else:
             raise UndefinedAttributeError
 
@@ -556,9 +563,53 @@ class Set(Container):
         return out
 
 
-def _enforce_initializer_type(value: typing.Any, expected_type: typing.Union[type, typing.Tuple[type, ...]]) -> None:
-    if not isinstance(value, expected_type):
-        raise ValueError('Expected type %r, found %r' % (expected_type, type(value)))
+class Type(Any):
+    TYPE_NAME = 'type'
+
+    def __init__(self, type_descriptor: data_type.DataType):
+        if not isinstance(type_descriptor, data_type.DataType):
+            raise ValueError('Invalid type descriptor: ' + repr(type_descriptor))
+
+        self._value = type_descriptor
+
+    def __hash__(self) -> int:
+        return hash(str(self)) + 2 ** 64 * hash(type(self._value))
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Type):
+            same_type = isinstance(other._value, type(self._value)) and \
+                        isinstance(self._value, type(other._value))
+            return same_type and str(self) == str(other)
+        else:
+            return NotImplemented
+
+    def __str__(self) -> str:
+        return str(self._value)
+
+    def _attribute(self, name: 'String') -> 'Any':
+        # Constant resolution
+        if isinstance(self._value, data_type.CompoundType):
+            for c in self._value.constants:
+                if c.name == name.native_value:
+                    return self._convert_constant_value_to_expression_value(c.value, c.data_type)
+            else:
+                raise InvalidOperandError('The field %r is not defined for data type %s' %
+                                          (name.native_value, self._value))
+        else:
+            raise UndefinedOperatorError
+
+    @staticmethod
+    def _convert_constant_value_to_expression_value(constant_value: typing.Any,
+                                                    constant_type: data_type.DataType) -> Any:
+        if isinstance(constant_type, data_type.ArithmeticType):
+            assert isinstance(constant_value, (int, Fraction))
+            return Rational(constant_value)
+        elif isinstance(constant_type, data_type.BooleanType):
+            assert isinstance(constant_value, bool)
+            return Boolean(constant_value)
+        else:
+            raise InvalidOperandError('The constant of type %s cannot be represented as an expression value' %
+                                      (constant_type, ))
 
 
 #

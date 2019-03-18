@@ -43,6 +43,9 @@ class StatementStreamProcessor:
         """The correctness of the marker placement is not validated by the caller."""
         raise NotImplementedError
 
+    def on_freestanding_identifier(self, name: str) -> expression.Any:
+        raise NotImplementedError
+
 
 #
 # Decorators for use with the transformer.
