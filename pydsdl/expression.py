@@ -8,7 +8,7 @@ import operator
 import functools
 from fractions import Fraction
 
-from .parse_error import InvalidDefinitionError
+from .frontend_error import InvalidDefinitionError
 
 
 _OperatorReturnType = typing.TypeVar('_OperatorReturnType')

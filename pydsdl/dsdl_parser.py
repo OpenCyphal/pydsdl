@@ -6,9 +6,9 @@
 import typing
 import logging
 
-from parsimonious import VisitationError, ParseError as ParsimoniousParseError  # Oops?
+import parsimonious
 
-from .parse_error import InvalidDefinitionError, ParseError, InternalError
+from .frontend_error import InvalidDefinitionError, FrontendError, InternalError
 from .dsdl_definition import DSDLDefinition
 from .data_type import CompoundType, TypeParameterError
 from .parse_tree_transformer import ParseTreeTransformer, StatementStreamProcessor
@@ -60,14 +60,14 @@ def parse_definition(definition:            DSDLDefinition,
             transformer.parse(f.read())
 
         raise KeyboardInterrupt     # TODO
-    except ParsimoniousParseError as ex:
+    except parsimonious.ParseError as ex:
         raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())
     except TypeParameterError as ex:
         raise SemanticError(str(ex), path=definition.file_path)
-    except ParseError as ex:       # pragma: no cover
+    except FrontendError as ex:       # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
         raise
-    except VisitationError as ex:  # pragma: no cover
+    except parsimonious.VisitationError as ex:  # pragma: no cover
         try:
             line = int(ex.original_class.line())    # type: typing.Optional[int]
         except AttributeError:

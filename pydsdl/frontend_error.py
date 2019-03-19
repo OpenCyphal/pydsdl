@@ -7,11 +7,11 @@ import typing
 import urllib.parse
 
 
-class ParseError(Exception):       # PEP8 says that the "Exception" suffix is redundant and should not be used.
+class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is redundant and should not be used.
     """
-    This exception is raised in case if the parser discovers an error in the DSDL code, or if it encounters
+    This exception is raised in case if the front end discovers an error in the DSDL code, or if it encounters
     an internal failure that can be associated with a particular construct in the DSDL definition.
-    This is the base class for all exceptions raised by the parser's inner logic,
+    This is the base class for all exceptions raised by the front-end's inner logic,
     excepting its entry function which also can raise ValueError when provided with incorrect inputs.
     Fields:
         path    Source file path where the error has occurred. Optional, will be None if unknown.
@@ -58,9 +58,9 @@ class ParseError(Exception):       # PEP8 says that the "Exception" suffix is re
         return self.__class__.__name__ + ': ' + repr(self.__str__())
 
 
-class InternalError(ParseError):
+class InternalError(FrontendError):
     """
-    This exception is used to report internal errors in the parser itself that prevented it from
+    This exception is used to report internal errors in the front end itself that prevented it from
     processing the definitions.
     """
     def __init__(self,
@@ -82,7 +82,7 @@ class InternalError(ParseError):
         super(InternalError, self).__init__(text=text, path=path, line=line)
 
 
-class InvalidDefinitionError(ParseError):
+class InvalidDefinitionError(FrontendError):
     """
     This exception is used to point out mistakes and errors in DSDL definitions.
     """
@@ -91,29 +91,29 @@ class InvalidDefinitionError(ParseError):
 
 def _unittest_error() -> None:
     try:
-        raise ParseError('Hello world!')
+        raise FrontendError('Hello world!')
     except Exception as ex:
         assert str(ex) == 'Hello world!'
-        assert repr(ex) == "ParseError: 'Hello world!'"
+        assert repr(ex) == "FrontendError: 'Hello world!'"
 
     try:
-        raise ParseError('Hello world!', path='path/to/file.uavcan', line=123)
+        raise FrontendError('Hello world!', path='path/to/file.uavcan', line=123)
     except Exception as ex:
         assert str(ex) == 'path/to/file.uavcan:123: Hello world!'
-        assert repr(ex) == "ParseError: 'path/to/file.uavcan:123: Hello world!'"
+        assert repr(ex) == "FrontendError: 'path/to/file.uavcan:123: Hello world!'"
 
     try:
-        raise ParseError('Hello world!', path='path/to/file.uavcan')
+        raise FrontendError('Hello world!', path='path/to/file.uavcan')
     except Exception as ex:
         assert str(ex) == 'path/to/file.uavcan: Hello world!'
-        assert repr(ex) == "ParseError: 'path/to/file.uavcan: Hello world!'"
+        assert repr(ex) == "FrontendError: 'path/to/file.uavcan: Hello world!'"
 
 
 def _unittest_internal_error_github_reporting() -> None:
     try:
         raise InternalError(path='FILE_PATH',
                             line=42)
-    except ParseError as ex:
+    except FrontendError as ex:
         assert ex.path == 'FILE_PATH'
         assert ex.line == 42
         assert str(ex) == 'FILE_PATH:42: '
@@ -123,13 +123,13 @@ def _unittest_internal_error_github_reporting() -> None:
             try:    # TRY HARDER
                 raise InternalError(text='BASE TEXT',
                                     culprit=Exception('ERROR TEXT'))
-            except ParseError as ex:
+            except FrontendError as ex:
                 ex.set_error_location_if_unknown(path='FILE_PATH')
                 raise
-        except ParseError as ex:
+        except FrontendError as ex:
             ex.set_error_location_if_unknown(line=42)
             raise
-    except ParseError as ex:
+    except FrontendError as ex:
         print(ex)
         assert ex.path == 'FILE_PATH'
         assert ex.line == 42
@@ -145,5 +145,5 @@ def _unittest_internal_error_github_reporting() -> None:
     try:
         raise InternalError(text='BASE TEXT',
                             path='FILE_PATH')
-    except ParseError as ex:
+    except FrontendError as ex:
         assert str(ex) == 'FILE_PATH: BASE TEXT'

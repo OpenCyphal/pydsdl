@@ -13,7 +13,7 @@ from fractions import Fraction
 from parsimonious import NodeVisitor, Grammar
 from parsimonious.nodes import Node
 
-from .parse_error import ParseError
+from .frontend_error import FrontendError
 from . import data_type
 from . import expression
 
@@ -81,7 +81,7 @@ class ParseTreeTransformer(NodeVisitor):
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = ParseError,
+    unwrapped_exceptions = FrontendError,
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)

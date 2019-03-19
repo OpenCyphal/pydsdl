@@ -5,7 +5,7 @@
 
 import os
 import typing
-from .parse_error import InvalidDefinitionError
+from .frontend_error import InvalidDefinitionError
 from .data_type import Version, CompoundType
 
 

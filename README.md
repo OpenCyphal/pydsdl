@@ -6,7 +6,7 @@ PyDSDL
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pydsdl.svg)](https://test.pypi.org/project/pydsdl/)
 
 
-**PyDSDL is a [UAVCAN](https://uavcan.org) DSDL parser implemented in Python.**
+**PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler front end implemented in Python.**
 
 ## Requirements
 
@@ -44,17 +44,17 @@ The application invokes the function `pydsdl.parse_namespace()`.
 It returns a list of top-level compound type definitions found in the provided namespace.
 If errors are found, a corresponding exception will be raised (see below).
 
-The function has an optional callable argument that will be invoked when the parser encounters a
+The function has an optional callable argument that will be invoked when the front end encounters a
 `@print <expression>` directive in a definition.
 The callable is provided with the value to print (which can have an arbitrary type, whatever the expression
 has yielded upon its evaluation) and the location of the print statement for diagnostic purposes.
 If the function is not provided, `@print` statements will not produce any output besides the log,
 but their expressions will be evaluated nevertheless (and a failed evaluation will still be treated as a fatal error).
 
-As demanded by the specification, the parser rejects unregulated fixed port ID by default.
+As demanded by the specification, the front end rejects unregulated fixed port ID by default.
 To allow unregulated fixed port ID, pass the parameter `allow_unregulated_fixed_port_id` as True.
 
-Assertion checks can be computationally taxing, e.g., if the parser is asked to prove correctness of binary layouts.
+Assertion checks can be computationally taxing, e.g., if the front end is asked to prove correctness of binary layouts.
 To accelerate parsing, assertion checks can be skipped by passing the parameter `skip_assertion_checks` as True.
 
 #### Data type model
@@ -110,15 +110,15 @@ The corresponding data model is shown below:
 The root exception types defined in `pydsdl.parse_error` are used to represent errors occuring during the
 parsing process:
 
-* `ParseError` - contains properties `path:str` and `line:int`, both of which are optional,
+* `FrontendError` - contains properties `path:str` and `line:int`, both of which are optional,
 which (if set) point out to the exact location where the error has occurred: the path of the file and
 the line number within the file (starting from one). If line is set, path is also set.
-  * `InternalError` - an error that occurred within the parser itself, at no fault of the parsed definition.
+  * `InternalError` - an error that occurred within the front end itself, at no fault of the parsed definition.
   * `InvalidDefinitionError` - represents a problem with the parsed definition.
 This type is inherited by a dozen of specialized error exception classes; however, the class hierarchy beneath
 this type is unstable and should not be used by the application directly.
 
-Converting a `ParseError` (or derived) object to `str` yields an error message in a conventional error format
+Converting a `FrontendError` (or derived) object to `str` yields an error message in a conventional error format
 suitable for error parsers of most IDEs; for example:
 
 ```
@@ -148,7 +148,7 @@ else:
         for f in t.fields:
             print('\t', str(f.data_type), f.name)
         for c in t.constants:
-            print('\t', str(c.data_type), c.name, '=', str(c.value))
+            print('\t', str(c.data_type), c.name, '=', str(c.value.native_value))
 ```
 
 ## Development

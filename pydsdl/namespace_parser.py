@@ -11,7 +11,7 @@ from collections import defaultdict
 from .data_type import CompoundType, ServiceType
 from .dsdl_definition import DSDLDefinition
 from .dsdl_parser import parse_definition, ConfigurationOptions, PrintDirectiveOutputHandler
-from .parse_error import ParseError, InternalError, InvalidDefinitionError
+from .frontend_error import FrontendError, InternalError, InvalidDefinitionError
 
 
 DSDL_FILE_GLOB = '*.uavcan'
@@ -108,7 +108,7 @@ def parse_namespace(root_namespace_directory:        str,
 
     :return: A list of CompoundType.
 
-    :raises: ParseError, OSError (if directories do not exist or inaccessible)
+    :raises: FrontendError, OSError (if directories do not exist or inaccessible)
     """
     # Add the own root namespace to the set of lookup directories, remove duplicates
     lookup_directories = list(set(list(lookup_directories) + [root_namespace_directory]))
@@ -177,7 +177,7 @@ def _parse_namespace_definitions(target_definitions:    typing.List[DSDLDefiniti
             parsed = parse_definition(tdd,
                                       lookup_definitions,
                                       configuration_options=configuration_options)
-        except ParseError as ex:    # pragma: no cover
+        except FrontendError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
         except Exception as ex:     # pragma: no cover

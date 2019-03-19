@@ -8,7 +8,7 @@ from .version import __version__, __license__
 from . import _non_intrusive_test
 from .namespace_parser import parse_namespace
 from . import data_type
-from . import parse_error
+from . import frontend_error
 
 
 if sys.version_info[:2] < (3, 5):   # pragma: no cover
