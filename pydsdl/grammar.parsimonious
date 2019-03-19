@@ -54,7 +54,7 @@ expression      = ex_logical
 expression_list = expression (_? "," _? expression)*
 
 # An atom is a basic part of an expression, such as literals or attributes (local or external)
-atom = parenthetical / literal / versioned_type_name / identifier
+atom = parenthetical / versioned_type_name / literal / identifier
 
 # Parenthetical expressions are used for managing precedence.
 parenthetical = "(" _? expression _? ")"
