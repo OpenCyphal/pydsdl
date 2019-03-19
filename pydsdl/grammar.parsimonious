@@ -12,8 +12,8 @@ statement   = directive / service_response_marker / attribute
 attribute   = constant / field / padding_field
 
 # Fields and constants are main elements of a data type definition.
-constant      = attribute_type _ name_component _? "=" _? expression
-field         = attribute_type _ name_component
+constant      = attribute_type _ identifier _? "=" _? expression
+field         = attribute_type _ identifier
 padding_field = ~r"void[1-9]\d*"
 
 # Type reference as used in attribute declarations.
@@ -45,7 +45,7 @@ service_response_marker = "---"
 
 # Directives may have an expression, depending on their semantics.
 # The expression must yield a type that is expected by the directive.
-directive = "@" name_component (_ expression)?
+directive = "@" identifier (_ expression)?
 
 # The rest of the rules is used to define expressions. The aliasing is added for clarity.
 # Since DSDL definitions cannot be used to describe runtime logic, all expressions are constant expressions,

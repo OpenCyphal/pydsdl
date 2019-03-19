@@ -179,7 +179,7 @@ class ParseTreeTransformer(NodeVisitor):
                         children: typing.Tuple[Node, str, typing.Union[Node, tuple]]) -> None:
         _at, name, exp = children
         assert _at.text == '@'
-        assert isinstance(name, str)
+        assert isinstance(name, self._Identifier)
         if isinstance(exp, Node):
             assert not exp.children
             exp = None
@@ -190,7 +190,7 @@ class ParseTreeTransformer(NodeVisitor):
             assert isinstance(exp, expression.Any)
 
         line_number = _get_line_number(node)
-        self._statement_stream_processor.on_directive(line_number, name, exp)
+        self._statement_stream_processor.on_directive(line_number, name.native_value, exp)
 
     #
     # Expressions
