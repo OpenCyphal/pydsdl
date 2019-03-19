@@ -9,7 +9,6 @@ import functools
 from fractions import Fraction
 
 from .parse_error import InvalidDefinitionError
-from . import data_type
 
 
 _OperatorReturnType = typing.TypeVar('_OperatorReturnType')
@@ -114,6 +113,8 @@ class Any:
 
     #
     # Attribute access operator. It is a binary operator as well, but its semantics is slightly different.
+    # Implementations must invoke super()._attribute() when they encounter an unknown attribute, to allow
+    # the parent classes to handle the requested attribute as a fallback option.
     #
     def _attribute(self, name: 'String') -> 'Any': raise UndefinedAttributeError
 
@@ -192,10 +193,13 @@ class Rational(Primitive):
         Returns the inferior as a native integer,
         unless it cannot be represented as such without the loss of precision; i.e., if denominator != 1.
         """
-        if self._value.denominator == 1:
+        if self.is_integer():
             return self._value.numerator
         else:
             raise InvalidOperandError('Rational %s is not an integer' % self._value)
+
+    def is_integer(self) -> bool:
+        return self._value.denominator == 1
 
     def __hash__(self) -> int:
         return hash(self._value)
@@ -557,59 +561,10 @@ class Set(Container):
         elif name.native_value == 'count':  # "size" and "length" can be ambiguous, "cardinality" is long
             out = Rational(len(self._value))
         else:
-            raise UndefinedAttributeError
+            out = super(Set, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
         assert isinstance(out, Any)
         return out
-
-
-class Type(Any):
-    TYPE_NAME = 'type'
-
-    def __init__(self, type_descriptor: data_type.DataType):
-        if not isinstance(type_descriptor, data_type.DataType):
-            raise ValueError('Invalid type descriptor: ' + repr(type_descriptor))
-
-        self._value = type_descriptor
-
-    def __hash__(self) -> int:
-        return hash(str(self)) + 2 ** 64 * hash(type(self._value))
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, Type):
-            same_type = isinstance(other._value, type(self._value)) and \
-                        isinstance(self._value, type(other._value))
-            return same_type and str(self) == str(other)
-        else:
-            return NotImplemented
-
-    def __str__(self) -> str:
-        return str(self._value)
-
-    def _attribute(self, name: 'String') -> 'Any':
-        # Constant resolution
-        if isinstance(self._value, data_type.CompoundType):
-            for c in self._value.constants:
-                if c.name == name.native_value:
-                    return self._convert_constant_value_to_expression_value(c.value, c.data_type)
-            else:
-                raise InvalidOperandError('The field %r is not defined for data type %s' %
-                                          (name.native_value, self._value))
-        else:
-            raise UndefinedOperatorError
-
-    @staticmethod
-    def _convert_constant_value_to_expression_value(constant_value: typing.Any,
-                                                    constant_type: data_type.DataType) -> Any:
-        if isinstance(constant_type, data_type.ArithmeticType):
-            assert isinstance(constant_value, (int, Fraction))
-            return Rational(constant_value)
-        elif isinstance(constant_type, data_type.BooleanType):
-            assert isinstance(constant_value, bool)
-            return Boolean(constant_value)
-        else:
-            raise InvalidOperandError('The constant of type %s cannot be represented as an expression value' %
-                                      (constant_type, ))
 
 
 #

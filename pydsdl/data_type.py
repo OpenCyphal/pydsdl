@@ -9,14 +9,14 @@ import string
 import typing
 import itertools
 from fractions import Fraction
+
+from . import expression
 from .port_id_ranges import MAX_SUBJECT_ID, MAX_SERVICE_ID
 
 
 BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)])
 
-IntegerValueRange = typing.NamedTuple('IntegerValueRange', [('min', int), ('max', int)])
-
-FloatValueRange = typing.NamedTuple('FloatValueRange', [('min', float), ('max', float)])
+ValueRange = typing.NamedTuple('ValueRange', [('min', Fraction), ('max', Fraction)])
 
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
@@ -110,12 +110,14 @@ class DeprecatedDependencyError(TypeParameterError):
     pass
 
 
-class DataType:
+class DataType(expression.Any):
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
         - uavcan.node.Heartbeat.1.0[<=36]
         - truncated float16[<=36]
     """
+
+    TYPE_NAME = 'type'
 
     @property
     def bit_length_range(self) -> BitLengthRange:
@@ -135,8 +137,25 @@ class DataType:
         """
         raise NotImplementedError
 
+    def _attribute(self, name: expression.String) -> expression.Any:
+        if name.native_value == '_bit_length_':
+            return expression.Set(map(expression.Rational, self.compute_bit_length_values()))
+        else:
+            return super(DataType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, DataType):
+            same_type = isinstance(other, type(self)) and \
+                        isinstance(self, type(other))
+            return same_type and str(self) == str(other)
+        else:
+            return NotImplemented
 
 
 class PrimitiveType(DataType):
@@ -200,6 +219,10 @@ class ArithmeticType(PrimitiveType):
                  cast_mode: PrimitiveType.CastMode):
         super(ArithmeticType, self).__init__(bit_length, cast_mode)
 
+    @property
+    def inclusive_value_range(self) -> ValueRange:   # pragma: no cover
+        raise NotImplementedError
+
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
@@ -214,7 +237,7 @@ class IntegerType(ArithmeticType):
             raise InvalidBitLengthError('Bit length of integer types cannot be less than 2')
 
     @property
-    def inclusive_value_range(self) -> IntegerValueRange:   # pragma: no cover
+    def inclusive_value_range(self) -> ValueRange:   # pragma: no cover
         raise NotImplementedError
 
     def __str__(self) -> str:   # pragma: no cover
@@ -228,10 +251,10 @@ class SignedIntegerType(IntegerType):
         super(SignedIntegerType, self).__init__(bit_length, cast_mode)
 
     @property
-    def inclusive_value_range(self) -> IntegerValueRange:
+    def inclusive_value_range(self) -> ValueRange:
         uint_max_half = ((1 << self.bit_length) - 1) // 2
-        return IntegerValueRange(min=-uint_max_half - 1,
-                                 max=+uint_max_half)
+        return ValueRange(min=Fraction(-uint_max_half - 1),
+                          max=Fraction(+uint_max_half))
 
     def __str__(self) -> str:
         return self._cast_mode_name + ' int' + str(self.bit_length)
@@ -244,8 +267,9 @@ class UnsignedIntegerType(IntegerType):
         super(UnsignedIntegerType, self).__init__(bit_length, cast_mode)
 
     @property
-    def inclusive_value_range(self) -> IntegerValueRange:
-        return IntegerValueRange(min=0, max=(1 << self.bit_length) - 1)
+    def inclusive_value_range(self) -> ValueRange:
+        return ValueRange(min=Fraction(0),
+                          max=Fraction((1 << self.bit_length) - 1))
 
     def __str__(self) -> str:
         return self._cast_mode_name + ' uint' + str(self.bit_length)
@@ -259,24 +283,24 @@ class FloatType(ArithmeticType):
 
         try:
             self._magnitude = {
-                16: 65504.0,
-                32: 3.40282346638528859812e+38,
-                64: 1.79769313486231570815e+308,
-            }[self.bit_length]
+                16: Fraction(65504),
+                32: Fraction('3.40282346638528859812e+38'),
+                64: Fraction('1.79769313486231570815e+308'),
+            }[self.bit_length]  # type: Fraction
         except KeyError:
             raise InvalidBitLengthError('Invalid bit length for float type: %d' % bit_length) from None
 
     @property
-    def inclusive_value_range(self) -> FloatValueRange:
-        return FloatValueRange(min=-self._magnitude,
-                               max=+self._magnitude)
+    def inclusive_value_range(self) -> ValueRange:
+        return ValueRange(min=-self._magnitude,
+                          max=+self._magnitude)
 
     def __str__(self) -> str:
         return self._cast_mode_name + ' float' + str(self.bit_length)
 
 
 def _unittest_primitive() -> None:
-    from pytest import raises, approx
+    from pytest import raises
 
     assert str(BooleanType(PrimitiveType.CastMode.SATURATED)) == 'saturated bool'
 
@@ -290,7 +314,7 @@ def _unittest_primitive() -> None:
 
     assert str(FloatType(64, PrimitiveType.CastMode.SATURATED)) == 'saturated float64'
     assert FloatType(32, PrimitiveType.CastMode.SATURATED).bit_length_range == (32, 32)
-    assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (approx(-65504), approx(65504))
+    assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-65504, +65504)
 
     with raises(InvalidBitLengthError):
         FloatType(8, PrimitiveType.CastMode.TRUNCATED)
@@ -542,7 +566,7 @@ def _unittest_dynamic_array() -> None:
     assert outer.compute_bit_length_values() == {4, 12, 20, 28, 36}
 
 
-class Attribute:
+class Attribute:    # TODO: should extend expression.Any to support advanced introspection/reflection.
     def __init__(self,
                  data_type: DataType,
                  name: str,
@@ -581,58 +605,62 @@ class Constant(Attribute):
     def __init__(self,
                  data_type: DataType,
                  name: str,
-                 value: typing.Any,
+                 value: expression.Any,
                  initialization_expression: str):
         super(Constant, self).__init__(data_type, name)
         self._initialization_expression = str(initialization_expression)
 
+        if not isinstance(value, expression.Primitive):
+            raise ValueError('The constant value must be a primitive expression value')
+
+        self._value = value
+        del value
+
+        # Interestingly, both the type of the constant and its value are instances of the same meta-type: expression.
+        # BooleanType inherits from expression.Any, same as expression.Boolean.
         # Type check
-        if isinstance(data_type, BooleanType):
-            if isinstance(value, bool):
-                self._value = bool(value)  # type: typing.Union[Fraction, int, bool]
-            else:
+        if isinstance(data_type, BooleanType):      # Boolean constant
+            if not isinstance(self._value, expression.Boolean):
                 raise InvalidConstantValueError('Invalid value for boolean constant: %r' % value)
 
-        elif isinstance(data_type, IntegerType):
-            if isinstance(value, int):
-                self._value = int(value)
-            elif isinstance(value, str):
-                if len(value.encode('utf8')) != 1:
+        elif isinstance(data_type, IntegerType):    # Integer constant
+            if isinstance(self._value, expression.Rational):
+                if not self._value.is_integer():
+                    raise InvalidConstantValueError('The value of an integer constant must be an integer; got %s' %
+                                                    self._value)
+            elif isinstance(self._value, expression.String):
+                as_bytes = value.native_value.encode('utf8')
+                if len(as_bytes) != 1:
                     raise InvalidConstantValueError('A constant string must be exactly one ASCII character long')
 
                 if not isinstance(data_type, UnsignedIntegerType) or data_type.bit_length != 8:
                     raise InvalidConstantValueError('Constant strings can be used only with uint8')
 
-                self._value = ord(value.encode('utf8'))
+                self._value = expression.Rational(ord(as_bytes))    # Replace string with integer
             else:
-                raise InvalidConstantValueError('Invalid value type for integer constant: %r' % value)
+                raise InvalidConstantValueError('Invalid value type for integer constant: %r' % self._value)
 
-        elif isinstance(data_type, FloatType):
-            # Remember, bool is a subtype of int
-            if isinstance(value, (int, float, Fraction)) and not isinstance(value, bool):  # Implicit conversion
-                self._value = Fraction(value)
-            else:
+        elif isinstance(data_type, FloatType):      # Floating point constant
+            if not isinstance(value, expression.Rational):
                 raise InvalidConstantValueError('Invalid value type for float constant: %r' % value)
 
         else:
             raise InvalidTypeError('Invalid constant type: %r' % data_type)
 
-        del value
-        assert isinstance(self._value, (bool, int, Fraction))
-        assert isinstance(self.data_type, FloatType)   == isinstance(self._value, Fraction)
-        assert isinstance(self.data_type, BooleanType) == isinstance(self._value, bool)
-        # Note that bool is a subclass of int, so we don't check against IntegerType
+        assert isinstance(self._value, expression.Any)
+        assert isinstance(self._value, expression.Rational) == isinstance(self.data_type, (FloatType, IntegerType))
+        assert isinstance(self._value, expression.Boolean)  == isinstance(self.data_type, BooleanType)
 
         # Range check
-        if not isinstance(data_type, BooleanType):
-            assert isinstance(data_type, (IntegerType, FloatType))
+        if isinstance(self._value, expression.Rational):
+            assert isinstance(data_type, ArithmeticType)
             rng = data_type.inclusive_value_range
-            if not (rng.min <= self._value <= rng.max):
+            if not (rng.min <= self._value.native_value <= rng.max):
                 raise InvalidConstantValueError('Constant value %r exceeds the range of its data type %r' %
                                                 (self._value, data_type))
 
     @property
-    def value(self) -> typing.Union[Fraction, int, bool]:
+    def value(self) -> expression.Any:
         return self._value
 
     @property
@@ -656,7 +684,7 @@ def _unittest_attribute() -> None:
     assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
 
     data_type = SignedIntegerType(32, PrimitiveType.CastMode.SATURATED)
-    const = Constant(data_type, 'FOO_CONST', -123, '-0x7B')
+    const = Constant(data_type, 'FOO_CONST', expression.Rational(-123), '-0x7B')
     assert str(const) == 'saturated int32 FOO_CONST = -123'
     assert const.data_type is data_type
     assert const.name == 'FOO_CONST'
@@ -810,6 +838,17 @@ class CompoundType(DataType):
     def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
 
+    def _attribute(self, name: expression.String) -> expression.Any:
+        """
+        This is the handler for DSDL expressions like uavcan.node.Heartbeat.1.0.MODE_OPERATIONAL.
+        """
+        for c in self.constants:
+            if c.name == name.native_value:
+                assert isinstance(c.value, expression.Any)
+                return c.value
+
+        return super(CompoundType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+
     def __str__(self) -> str:
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
 
@@ -920,21 +959,21 @@ class ServiceType(CompoundType):
                  deprecated:          bool,
                  fixed_port_id:       typing.Optional[int],
                  source_file_path:    str):
-        request_meta_type = UnionType if request_is_union else StructureType
+        request_meta_type = UnionType if request_is_union else StructureType  # type: type
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_attributes,
                                                deprecated=deprecated,
                                                fixed_port_id=None,
-                                               source_file_path='')
+                                               source_file_path='')  # type: CompoundType
 
-        response_meta_type = UnionType if response_is_union else StructureType
+        response_meta_type = UnionType if response_is_union else StructureType  # type: type
         self._response_type = response_meta_type(name=name + '.Response',
                                                  version=version,
                                                  attributes=response_attributes,
                                                  deprecated=deprecated,
                                                  fixed_port_id=None,
-                                                 source_file_path='')
+                                                 source_file_path='')  # type: CompoundType
 
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),

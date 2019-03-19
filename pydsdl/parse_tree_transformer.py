@@ -4,6 +4,7 @@
 #
 
 import os
+import enum
 import typing
 import logging
 import functools
@@ -13,7 +14,7 @@ from parsimonious import NodeVisitor, Grammar
 from parsimonious.nodes import Node
 
 from .parse_error import ParseError
-from .data_type import PrimitiveType, Version
+from . import data_type
 from . import expression
 
 
@@ -42,7 +43,12 @@ class StatementStreamProcessor:
         """The correctness of the marker placement is not validated by the caller."""
         raise NotImplementedError
 
-    def on_freestanding_identifier(self, name: str) -> expression.Any:
+    def resolve_top_level_identifier(self, name: str) -> expression.Any:
+        """Must throw an appropriate exception if the reference cannot be resolved."""
+        raise NotImplementedError
+
+    def resolve_versioned_data_type(self, name: str, version: data_type.Version) -> data_type.CompoundType:
+        """Must throw an appropriate exception if the data type is not found."""
         raise NotImplementedError
 
 
@@ -93,25 +99,69 @@ class ParseTreeTransformer(NodeVisitor):
         print('PADDING FIELD', node.text)   # TODO: ENDPOINT HANDLING
 
     #
-    # Type references
+    # Types and identifiers
     #
-    visit_cast_mode = NodeVisitor.lift_child
+    class _VariableLengthArrayBoundary(enum.Enum):
+        INCLUSIVE = 0
+        EXCLUSIVE = 1
 
-    def visit_cast_mode_saturated(self, _node: Node, _children: typing.Sequence[Node]) -> PrimitiveType.CastMode:
-        return PrimitiveType.CastMode.SATURATED
+    class _Identifier(expression.String):
+        pass
 
-    def visit_cast_mode_truncated(self, _node: Node, _children: typing.Sequence[Node]) -> PrimitiveType.CastMode:
-        return PrimitiveType.CastMode.TRUNCATED
+    visit_cast_mode                      = NodeVisitor.lift_child
+    visit_array_variable_length_boundary = NodeVisitor.lift_child
 
-    def visit_type_version(self, _node: Node, children: typing.Sequence[int]) -> Version:
-        major, _, minor = children
-        assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
-        return Version(major=major.as_native_integer(),
-                       minor=minor.as_native_integer())
+    def visit_array_declarator(self, _node: Node, children: tuple) \
+            -> typing.Tuple[typing.Optional[_VariableLengthArrayBoundary], expression.Any]:
+        _, _, maybe_boundary, exp, _, _ = children
+        if maybe_boundary:
+            boundary = maybe_boundary[0][0]
+            assert isinstance(boundary, self._VariableLengthArrayBoundary)
+        else:
+            boundary = None
+
+        assert isinstance(exp, expression.Any)
+        return boundary, exp
+
+    def visit_array_variable_length_boundary_inclusive(self, _n: Node, _c: tuple) -> _VariableLengthArrayBoundary:
+        return self._VariableLengthArrayBoundary.INCLUSIVE
+
+    def visit_array_variable_length_boundary_exclusive(self, _n: Node, _c: tuple) -> _VariableLengthArrayBoundary:
+        return self._VariableLengthArrayBoundary.EXCLUSIVE
+
+    def visit_identifier(self, _node: Node, children: tuple) -> _Identifier:
+        name, = children
+        assert isinstance(name, str)
+        return self._Identifier(name)
 
     @_logged_transformation
-    def visit_composite_name(self, node: Node, _children: typing.Tuple) -> str:
-        pass
+    def visit_versioned_type_name(self, _node: Node, children: tuple) -> data_type.CompoundType:
+        name, _, version = children
+        assert isinstance(name, str) and name
+        assert isinstance(version, data_type.Version)
+        return self._statement_stream_processor.resolve_versioned_data_type(name, version)
+
+    def visit_cast_mode_saturated(self, _node: Node, _children: tuple) -> data_type.PrimitiveType.CastMode:
+        return data_type.PrimitiveType.CastMode.SATURATED
+
+    def visit_cast_mode_truncated(self, _node: Node, _children: tuple) -> data_type.PrimitiveType.CastMode:
+        return data_type.PrimitiveType.CastMode.TRUNCATED
+
+    def visit_version_number_pair(self, _node: Node, children: typing.Sequence[int]) -> data_type.Version:
+        major, _, minor = children
+        assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
+        return data_type.Version(major=major.as_native_integer(),
+                                 minor=minor.as_native_integer())
+
+    @_logged_transformation
+    def visit_composite_name(self, _node: Node, children: typing.Tuple) -> str:
+        out = children[0]   # type: str
+        assert isinstance(out, str)
+        for _sep, component in children[1]:
+            assert isinstance(_sep, Node) and _sep.text == '.'
+            assert isinstance(component, str)
+            out += data_type.CompoundType.NAME_COMPONENT_SEPARATOR + component
+        return out
 
     def visit_name_component(self, node: Node, _children: typing.Tuple) -> str:
         out = node.text
@@ -146,7 +196,6 @@ class ParseTreeTransformer(NodeVisitor):
     # Expressions
     #
     visit_expression = NodeVisitor.lift_child
-    visit_atom       = NodeVisitor.lift_child
 
     visit_op2_log = NodeVisitor.lift_child
     visit_op2_cmp = NodeVisitor.lift_child
@@ -154,6 +203,13 @@ class ParseTreeTransformer(NodeVisitor):
     visit_op2_add = NodeVisitor.lift_child
     visit_op2_mul = NodeVisitor.lift_child
     visit_op2_exp = NodeVisitor.lift_child
+
+    def visit_atom(self, _node: Node, children: tuple) -> expression.Any:
+        atom, = children
+        if isinstance(atom, self._Identifier):
+            atom = self._statement_stream_processor.resolve_top_level_identifier(atom.native_value)
+        assert isinstance(atom, expression.Any)
+        return atom
 
     @_logged_transformation
     def visit_parenthetical(self, _node: Node, children: tuple) -> expression.Any:

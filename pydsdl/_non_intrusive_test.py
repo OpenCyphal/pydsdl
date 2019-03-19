@@ -1056,7 +1056,7 @@ def _unittest_dsdl_parser_basics() -> None:
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
                 void16
-                ns.B.1.23 field
+                ns.Bar.1.23 field
                 # Yields 8074.4
                 float64 b = {+10 * (-2 / -3) // 4 % 5, 123, 1/2, 1}
                 bool a = !true
@@ -1066,8 +1066,12 @@ def _unittest_dsdl_parser_basics() -> None:
                 @deprecated
                 @union
                 @assert true
+                @assert ns.Foo.1.0.THE_CONSTANT == 42
                 ''')),
-        []
+        [
+            _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42'),
+            _define('ns/Bar.1.0.uavcan', 'int8 the_field'),
+        ]
     )
 
 
