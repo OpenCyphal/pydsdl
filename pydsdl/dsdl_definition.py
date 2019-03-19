@@ -124,6 +124,17 @@ class DSDLDefinition:
     def file_path(self) -> str:
         return self._file_path
 
+    def __eq__(self, other: object) -> bool:
+        """
+        Two definitions will compare equal if they share the same name AND version number.
+        Definitions of the same name but different versions are not considered equal.
+        """
+        if isinstance(other, DSDLDefinition):
+            return self.full_name == other.full_name and \
+                   self.version == other.version
+        else:
+            return NotImplemented
+
     def __str__(self) -> str:
         return 'DSDLDefinition(name=%r, version=%r, fixed_port_id=%r, file_path=%r)' % \
             (self.full_name, self.version, self.fixed_port_id, self.file_path)

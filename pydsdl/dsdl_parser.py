@@ -8,9 +8,9 @@ import logging
 
 import parsimonious
 
+from . import data_type
 from .frontend_error import InvalidDefinitionError, FrontendError, InternalError
 from .dsdl_definition import DSDLDefinition
-from .data_type import CompoundType, TypeParameterError
 from .parse_tree_transformer import ParseTreeTransformer, StatementStreamProcessor
 from . import expression
 
@@ -31,15 +31,19 @@ class DSDLSyntaxError(InvalidDefinitionError):
     pass
 
 
-class UndefinedDataTypeError(InvalidDefinitionError):
-    pass
-
-
 class SemanticError(InvalidDefinitionError):
     pass
 
 
+class UndefinedDataTypeError(SemanticError):
+    pass
+
+
 class AssertionCheckFailureError(SemanticError):
+    pass
+
+
+class UndefinedIdentifierError(SemanticError):
     pass
 
 
@@ -48,13 +52,19 @@ _logger = logging.getLogger(__name__)
 
 def parse_definition(definition:            DSDLDefinition,
                      lookup_definitions:    typing.Sequence[DSDLDefinition],
-                     configuration_options: ConfigurationOptions) -> CompoundType:
+                     configuration_options: ConfigurationOptions) -> data_type.CompoundType:
     _logger.info('Parsing definition %r', definition)
 
     try:
-        parser = _Parser(definition, configuration_options)
+        # Remove the target definition from the lookup list in order to prevent
+        # infinite recursion on self-referential definitions.
+        lookup_definitions = list(filter(lambda d: d != definition, lookup_definitions))
 
-        transformer = ParseTreeTransformer(parser)
+        proc = _Processor(definition,
+                          lookup_definitions,
+                          configuration_options)
+
+        transformer = ParseTreeTransformer(proc)
 
         with open(definition.file_path) as f:
             transformer.parse(f.read())
@@ -62,7 +72,7 @@ def parse_definition(definition:            DSDLDefinition,
         raise KeyboardInterrupt     # TODO
     except parsimonious.ParseError as ex:
         raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())
-    except TypeParameterError as ex:
+    except data_type.TypeParameterError as ex:
         raise SemanticError(str(ex), path=definition.file_path)
     except FrontendError as ex:       # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
@@ -78,11 +88,13 @@ def parse_definition(definition:            DSDLDefinition,
         raise InternalError(culprit=ex, path=definition.file_path)
 
 
-class _Parser(StatementStreamProcessor):
+class _Processor(StatementStreamProcessor):
     def __init__(self,
-                 definition: DSDLDefinition,
+                 definition:            DSDLDefinition,
+                 lookup_definitions:    typing.Sequence[DSDLDefinition],
                  configuration_options: ConfigurationOptions):
         self._definition = definition
+        self._lookup_definitions = lookup_definitions
         self._configuration = configuration_options
 
     def on_directive(self,
@@ -125,3 +137,31 @@ class _Parser(StatementStreamProcessor):
 
     def on_service_response_marker(self) -> None:
         print('SERVICE RESPONSE MARKER')        # TODO: IMPLEMENT
+
+    def resolve_top_level_identifier(self, name: str) -> expression.Any:
+        # TODO: handling of special identifiers such as _offset_.
+        raise UndefinedIdentifierError
+
+    def resolve_versioned_data_type(self, name: str, version: data_type.Version) -> data_type.CompoundType:
+        if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in name:
+            full_name = name
+        else:
+            full_name = data_type.CompoundType.NAME_COMPONENT_SEPARATOR.join([self._definition.full_namespace, name])
+            _logger.info('The full name of a relatively referred type %r is reconstructed as %r', name, full_name)
+
+        del name
+        found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
+        if not found:
+            raise UndefinedDataTypeError('Data type %r version %r could be found' % (full_name, version))
+        if len(found) > 1:
+            raise InternalError('Conflicting definitions: %r' % found)
+
+        target_definition = found[0]
+        assert isinstance(target_definition, DSDLDefinition)
+        assert target_definition.full_name == full_name
+        assert target_definition.version == version
+
+        # TODO: this is highly inefficient, we need caching.
+        return parse_definition(target_definition,
+                                lookup_definitions=self._lookup_definitions,
+                                configuration_options=self._configuration)

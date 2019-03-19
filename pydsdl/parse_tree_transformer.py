@@ -105,9 +105,6 @@ class ParseTreeTransformer(NodeVisitor):
         INCLUSIVE = 0
         EXCLUSIVE = 1
 
-    class _Identifier(expression.String):
-        pass
-
     visit_cast_mode                      = NodeVisitor.lift_child
     visit_array_variable_length_boundary = NodeVisitor.lift_child
 
@@ -129,14 +126,15 @@ class ParseTreeTransformer(NodeVisitor):
     def visit_array_variable_length_boundary_exclusive(self, _n: Node, _c: tuple) -> _VariableLengthArrayBoundary:
         return self._VariableLengthArrayBoundary.EXCLUSIVE
 
-    def visit_identifier(self, _node: Node, children: tuple) -> _Identifier:
-        name, = children
-        assert isinstance(name, str)
-        return self._Identifier(name)
-
     @_logged_transformation
     def visit_versioned_type_name(self, _node: Node, children: tuple) -> data_type.CompoundType:
-        name, _, version = children
+        name, tail_components, _, version = children
+        assert isinstance(name, str)
+        for _sep, component in tail_components:
+            assert isinstance(_sep, Node) and _sep.text == data_type.CompoundType.NAME_COMPONENT_SEPARATOR
+            assert isinstance(component, str)
+            name += data_type.CompoundType.NAME_COMPONENT_SEPARATOR + component
+
         assert isinstance(name, str) and name
         assert isinstance(version, data_type.Version)
         return self._statement_stream_processor.resolve_versioned_data_type(name, version)
@@ -153,17 +151,7 @@ class ParseTreeTransformer(NodeVisitor):
         return data_type.Version(major=major.as_native_integer(),
                                  minor=minor.as_native_integer())
 
-    @_logged_transformation
-    def visit_composite_name(self, _node: Node, children: typing.Tuple) -> str:
-        out = children[0]   # type: str
-        assert isinstance(out, str)
-        for _sep, component in children[1]:
-            assert isinstance(_sep, Node) and _sep.text == '.'
-            assert isinstance(component, str)
-            out += data_type.CompoundType.NAME_COMPONENT_SEPARATOR + component
-        return out
-
-    def visit_name_component(self, node: Node, _children: typing.Tuple) -> str:
+    def visit_identifier(self, node: Node, _children: typing.Tuple) -> str:
         out = node.text
         assert isinstance(out, str) and out
         return out
@@ -179,7 +167,7 @@ class ParseTreeTransformer(NodeVisitor):
                         children: typing.Tuple[Node, str, typing.Union[Node, tuple]]) -> None:
         _at, name, exp = children
         assert _at.text == '@'
-        assert isinstance(name, self._Identifier)
+        assert isinstance(name, str)
         if isinstance(exp, Node):
             assert not exp.children
             exp = None
@@ -190,7 +178,7 @@ class ParseTreeTransformer(NodeVisitor):
             assert isinstance(exp, expression.Any)
 
         line_number = _get_line_number(node)
-        self._statement_stream_processor.on_directive(line_number, name.native_value, exp)
+        self._statement_stream_processor.on_directive(line_number, name, exp)
 
     #
     # Expressions
@@ -206,13 +194,13 @@ class ParseTreeTransformer(NodeVisitor):
 
     def visit_atom(self, _node: Node, children: tuple) -> expression.Any:
         atom, = children
-        if isinstance(atom, self._Identifier):
-            atom = self._statement_stream_processor.resolve_top_level_identifier(atom.native_value)
+        if isinstance(atom, str):   # Identifier resolution
+            atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
         assert isinstance(atom, expression.Any)
         return atom
 
     @_logged_transformation
-    def visit_parenthetical(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_parenthesized(self, _node: Node, children: tuple) -> expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, expression.Any)
         return exp
@@ -275,7 +263,6 @@ class ParseTreeTransformer(NodeVisitor):
     def visit_op2_add_add(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.add
     def visit_op2_add_sub(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.subtract
     def visit_op2_mul_mul(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.multiply
-    def visit_op2_mul_fdv(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.floor_divide
     def visit_op2_mul_div(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.divide
     def visit_op2_mul_mod(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.modulo
     def visit_op2_exp_pow(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.power

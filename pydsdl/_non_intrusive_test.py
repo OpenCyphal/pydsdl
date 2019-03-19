@@ -1056,21 +1056,21 @@ def _unittest_dsdl_parser_basics() -> None:
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
                 void16
-                ns.Bar.1.23 field
+                #ns.Bar.1.23 field
                 # Yields 8074.4
-                float64 b = {+10 * (-2 / -3) // 4 % 5, 123, 1/2, 1}
+                float64 b = {+10 * (-2 / -3) / 4 % 5, 123, 1/2, 1}
                 bool a = !true
-                float16 a = (123456 + 0x_ab_cd_ef) // 0b1111_1111 ** 2 - 0o123_456 * 2.7
+                float16 a = (123456 + 0x_ab_cd_ef) / 0b1111_1111 ** 2 - 0o123_456 * 2.7
                 @print "Hello\r\nworld!"
                 @print
                 @deprecated
                 @union
                 @assert true
-                @assert ns.Foo.1.0.THE_CONSTANT == 42
+                #@assert ns.Foo.1.0.THE_CONSTANT == 42
                 ''')),
         [
-            _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42'),
-            _define('ns/Bar.1.0.uavcan', 'int8 the_field'),
+            _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42\n'),
+            _define('ns/Bar.1.23.uavcan', 'int8 the_field\n'),
         ]
     )
 

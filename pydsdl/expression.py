@@ -99,9 +99,6 @@ class Any:
     def _multiply(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
     def _multiply_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    def _floor_divide(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _floor_divide_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
-
     def _divide(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
     def _divide_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
@@ -288,9 +285,6 @@ class Rational(Primitive):
 
     def _multiply(self, right: 'Any') -> 'Rational':
         return self._generic_arithmetic(right, operator.mul)
-
-    def _floor_divide(self, right: 'Any') -> 'Rational':
-        return self._generic_arithmetic(right, operator.floordiv)
 
     def _divide(self, right: 'Any') -> 'Rational':
         return self._generic_arithmetic(right, operator.truediv)
@@ -524,12 +518,6 @@ class Set(Container):
     def _multiply_right(self, left: 'Any') -> 'Set':
         return self._elementwise(multiply, left, swap=True)
 
-    def _floor_divide(self, right: 'Any') -> 'Set':
-        return self._elementwise(floor_divide, right)
-
-    def _floor_divide_right(self, left: 'Any') -> 'Set':
-        return self._elementwise(floor_divide, left, swap=True)
-
     def _divide(self, right: 'Any') -> 'Set':
         return self._elementwise(divide, right)
 
@@ -685,11 +673,6 @@ def multiply(left: Any, right: Any) -> Any:                     # noinspection P
 
 
 @_auto_swap()
-def floor_divide(left: Any, right: Any) -> Any:                 # noinspection PyProtectedMember
-    return left._floor_divide(right)
-
-
-@_auto_swap()
 def divide(left: Any, right: Any) -> Any:                       # noinspection PyProtectedMember
     return left._divide(right)
 
@@ -705,7 +688,12 @@ def power(left: Any, right: Any) -> Any:                        # noinspection P
 
 
 # Special case - no argument-swapped alternative defined.
-def attribute(value: Any, name: String) -> Any:
+# We accept both native strings and String in order to support both dynamically computed attributes and
+# statically defined attributes.
+def attribute(value: Any, name: typing.Union[str, String]) -> Any:
+    if isinstance(name, str):
+        name = String(name)
+
     if isinstance(value, Any) and isinstance(name, String):     # noinspection PyProtectedMember
         return value._attribute(name)
     else:
