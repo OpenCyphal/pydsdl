@@ -68,7 +68,8 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
             result = fun(self, node, children)
             return result
         finally:
-            _logger.debug('Transformation: %s(%s) --> %r', node.expr_name, _print_node(children), result)
+            _logger.debug('Transformation: %s(%s) --> %r (source text: %r)',
+                          node.expr_name, _print_node(children), result, node.text)
 
     return wrapper
 
