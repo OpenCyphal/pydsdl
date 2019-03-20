@@ -97,6 +97,18 @@ class _Processor(StatementStreamProcessor):
         self._lookup_definitions = lookup_definitions
         self._configuration = configuration_options
 
+    def on_constant(self,
+                    constant_type: data_type.DataType,
+                    name: str,
+                    initialization_expression: expression.Any) -> None:
+        print('CONSTANT', constant_type, name, initialization_expression)
+
+    def on_field(self, field_type: data_type.DataType, name: str) -> None:
+        print('FIELD', field_type, name)
+
+    def on_padding_field(self, padding_field_type: data_type.VoidType) -> None:
+        print('PADDING', padding_field_type)
+
     def on_directive(self,
                      line_number: int,
                      directive_name: str,
@@ -108,9 +120,9 @@ class _Processor(StatementStreamProcessor):
                          (': %s' % associated_expression_value)
                          if associated_expression_value is not None else
                          ' (no value to print)')
-            ph = self._configuration.print_handler
-            if ph:
-                ph(self._definition, line_number, associated_expression_value)
+            (self._configuration.print_handler or (lambda *_: None))(self._definition,
+                                                                     line_number,
+                                                                     associated_expression_value)
 
         elif directive_name == 'assert':
             if isinstance(associated_expression_value, expression.Boolean):

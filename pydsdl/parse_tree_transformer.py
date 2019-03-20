@@ -32,6 +32,18 @@ class StatementStreamProcessor:
     processed DSDL definition.
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
+    def on_constant(self,
+                    constant_type: data_type.DataType,
+                    name: str,
+                    initialization_expression: expression.Any) -> None:
+        raise NotImplementedError
+
+    def on_field(self, field_type: data_type.DataType, name: str) -> None:
+        raise NotImplementedError
+
+    def on_padding_field(self, padding_field_type: data_type.VoidType) -> None:
+        raise NotImplementedError
+
     def on_directive(self,
                      line_number: int,
                      directive_name: str,
@@ -103,12 +115,46 @@ class ParseTreeTransformer(NodeVisitor):
 
     # ================================================= Core elements ================================================
 
-    def visit_identifier(self, node: Node, _children: typing.Tuple) -> str:
-        assert isinstance(node.text, str) and node.text
-        return node.text
+    visit_statement           = _make_typesafe_child_lifter(type(None))   # Make sure all sub-nodes have been handled,
+    visit_statement_attribute = _make_typesafe_child_lifter(type(None))   # because processing terminates here.
+    visit_statement_directive = _make_typesafe_child_lifter(type(None))
+
+    def visit_statement_constant(self, _node: Node, children: tuple) -> None:
+        constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
+        assert isinstance(constant_type, data_type.DataType) and isinstance(name, str) and name
+        assert isinstance(exp, expression.Any)
+        self._statement_stream_processor.on_constant(constant_type, name, exp)
+
+    def visit_statement_field(self, _node: Node, children: tuple) -> None:
+        field_type, _space, name = children
+        assert isinstance(field_type, data_type.DataType) and isinstance(name, str) and name
+        self._statement_stream_processor.on_field(field_type, name)
+
+    def visit_statement_padding_field(self, _node: Node, children: tuple) -> None:
+        void_type = children[0]
+        assert isinstance(void_type, data_type.VoidType)
+        self._statement_stream_processor.on_padding_field(void_type)
 
     def visit_statement_service_response_marker(self, _node: Node, _children: typing.Tuple) -> None:
         self._statement_stream_processor.on_service_response_marker()
+
+    def visit_statement_directive_with_expression(self, node: Node, children: tuple) -> None:
+        _at, name, _space, exp = children
+        assert isinstance(name, str) and name and isinstance(exp, expression.Any)
+        self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
+                                                      directive_name=name,
+                                                      associated_expression_value=exp)
+
+    def visit_statement_directive_without_expression(self, node: Node, children: tuple) -> None:
+        _at, name = children
+        assert isinstance(name, str) and name
+        self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
+                                                      directive_name=name,
+                                                      associated_expression_value=None)
+
+    def visit_identifier(self, node: Node, _children: typing.Tuple) -> str:
+        assert isinstance(node.text, str) and node.text
+        return node.text
 
     # ================================================== Data types ==================================================
 
@@ -121,28 +167,17 @@ class ParseTreeTransformer(NodeVisitor):
 
     PrimitiveTypeConstructor = typing.Callable[[data_type.PrimitiveType.CastMode], data_type.PrimitiveType]
 
-    @staticmethod
-    def _unwrap_array_capacity(ex: expression.Any) -> int:
-        assert isinstance(ex, expression.Any)
-        if isinstance(ex, expression.Rational):
-            out = ex.as_native_integer()
-            assert isinstance(out, int)     # Oh mypy, why are you so weird
-            return out
-        else:
-            raise expression.InvalidOperandError('Array capacity expression must yield a rational, not %s' %
-                                                 ex.TYPE_NAME)
-
     def visit_type_array_variable_inclusive(self, _node: Node, children: tuple) -> data_type.DynamicArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return data_type.DynamicArrayType(element_type, self._unwrap_array_capacity(length))
+        return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length))
 
     def visit_type_array_variable_exclusive(self, _node: Node, children: tuple) -> data_type.DynamicArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return data_type.DynamicArrayType(element_type, self._unwrap_array_capacity(length) - 1)
+        return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
     def visit_type_array_fixed(self, _node: Node, children: tuple) -> data_type.StaticArrayType:
         element_type, _s0, _bl, _s1, length, _s2, _br = children
-        return data_type.StaticArrayType(element_type, self._unwrap_array_capacity(length))
+        return data_type.StaticArrayType(element_type, _unwrap_array_capacity(length))
 
     def visit_type_versioned(self, _node: Node, children: tuple) -> data_type.CompoundType:
         name, name_tail, _, version = children
@@ -334,3 +369,13 @@ def _print_node(n: typing.Any) -> str:
 def _get_line_number(node: Node) -> int:
     """Returns the one-based line number where the specified node is located."""
     return int(node.full_text.count('\n', 0, node.start) + 1)
+
+
+def _unwrap_array_capacity(ex: expression.Any) -> int:
+    assert isinstance(ex, expression.Any)
+    if isinstance(ex, expression.Rational):
+        out = ex.as_native_integer()
+        assert isinstance(out, int)     # Oh mypy, why are you so weird
+        return out
+    else:
+        raise expression.InvalidOperandError('Array capacity expression must yield a rational, not %s' % ex.TYPE_NAME)

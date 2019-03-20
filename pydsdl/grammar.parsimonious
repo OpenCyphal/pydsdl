@@ -19,7 +19,7 @@ statement_attribute = statement_constant
 
 statement_constant      = type _ identifier _? "=" _? expression
 statement_field         = type _ identifier
-statement_padding_field = type_void
+statement_padding_field = type_void ""  # The trailing empty symbol is to prevent the node from being optimized away.
 
 statement_service_response_marker = "---"  # Separates request/response, specifies that the definition is a service.
 
@@ -39,9 +39,9 @@ type_array = type_array_variable_inclusive
            / type_array_variable_exclusive
            / type_array_fixed
 
-type_array_variable_inclusive = type_scalar _? "[" _? op2_cmp_leq _? expression _? "]"  # Expression must yield integer.
-type_array_variable_exclusive = type_scalar _? "[" _? op2_cmp_lss _? expression _? "]"
-type_array_fixed              = type_scalar _? "[" _?                expression _? "]"
+type_array_variable_inclusive = type_scalar _? "[" _? "<=" _? expression _? "]"  # Expression must yield integer.
+type_array_variable_exclusive = type_scalar _? "[" _? "<"  _? expression _? "]"
+type_array_fixed              = type_scalar _? "[" _?         expression _? "]"
 
 type_scalar = type_versioned
             / type_primitive
