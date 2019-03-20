@@ -33,23 +33,19 @@ class DSDLSyntaxError(InvalidDefinitionError):
     pass
 
 
-class SemanticError(InvalidDefinitionError):
+class UndefinedDataTypeError(InvalidDefinitionError):
     pass
 
 
-class UndefinedDataTypeError(SemanticError):
+class AssertionCheckFailureError(InvalidDefinitionError):
     pass
 
 
-class AssertionCheckFailureError(SemanticError):
+class UndefinedIdentifierError(InvalidDefinitionError):
     pass
 
 
-class UndefinedIdentifierError(SemanticError):
-    pass
-
-
-class InvalidDirectiveUsageError(SemanticError):
+class InvalidDirectiveUsageError(InvalidDefinitionError):
     pass
 
 
@@ -75,8 +71,6 @@ def parse_definition(definition:            DSDLDefinition,
         return out
     except parsimonious.ParseError as ex:
         raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())
-    except data_type.TypeParameterError as ex:
-        raise SemanticError(str(ex), path=definition.file_path)
     except FrontendError as ex:       # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
         raise
@@ -172,14 +166,14 @@ class _TypeBuilder(StatementStreamProcessor):
                 'deprecated': self._on_deprecated_directive,
             }[directive_name]
         except KeyError:
-            raise SemanticError('Unknown directive %r' % directive_name)
+            raise InvalidDirectiveUsageError('Unknown directive %r' % directive_name)
         else:
             assert callable(handler)
             return handler(line_number, associated_expression_value)
 
     def on_service_response_marker(self) -> None:
         if len(self._structs) > 1:
-            raise SemanticError('Duplicated service response marker')
+            raise InvalidDefinitionError('Duplicated service response marker')
 
         self._structs.append(DataStructureBuilder())
         assert len(self._structs) == 2
@@ -190,7 +184,7 @@ class _TypeBuilder(StatementStreamProcessor):
             assert isinstance(blv, set) and len(blv) > 0 and all(map(lambda x: isinstance(x, int), blv))
             return expression.Set(map(expression.Rational, blv))
         else:
-            raise UndefinedIdentifierError(name)
+            raise UndefinedIdentifierError('Undefined identifier: %r' % name)
 
     def resolve_versioned_data_type(self, name: str, version: data_type.Version) -> data_type.CompoundType:
         if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in name:
@@ -202,7 +196,8 @@ class _TypeBuilder(StatementStreamProcessor):
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
         if not found:
-            raise UndefinedDataTypeError('Data type %r version %r could be found' % (full_name, version))
+            raise UndefinedDataTypeError('Data type %r version %d.%d could not be found' %
+                                         (full_name, version.major, version.minor))
         if len(found) > 1:
             raise InternalError('Conflicting definitions: %r' % found)
 

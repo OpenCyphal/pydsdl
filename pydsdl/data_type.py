@@ -719,9 +719,9 @@ def _unittest_attribute() -> None:
     assert str(const) == 'saturated int32 FOO_CONST = -123'
     assert const.data_type is data_type
     assert const.name == 'FOO_CONST'
-    assert const.value == -123
+    assert const.value == expression.Rational(-123)
 
-    assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=-123)' % data_type
+    assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=rational(-123))' % data_type
 
 
 class CompoundType(DataType):
@@ -763,7 +763,7 @@ class CompoundType(DataType):
                         ((self._version.major + self._version.minor) > 0)
 
         if not version_valid:
-            raise InvalidVersionError('Invalid version numbers: %r', self._version)
+            raise InvalidVersionError('Invalid version numbers: %s.%s' % (self._version.major, self._version.minor))
 
         # Attribute check
         used_names = set()      # type: typing.Set[str]
