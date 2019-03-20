@@ -117,7 +117,7 @@ class DataType(expression.Any):
         - truncated float16[<=36]
     """
 
-    TYPE_NAME = 'type'
+    TYPE_NAME = 'metatype'
 
     @property
     def bit_length_range(self) -> BitLengthRange:

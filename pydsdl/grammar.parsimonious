@@ -19,7 +19,7 @@ statement_attribute = statement_constant /
 
 statement_constant      = type _ identifier _? "=" _? expression
 statement_field         = type _ identifier
-statement_padding_field = type
+statement_padding_field = type_fundamental_name_void
 
 statement_service_response_marker = "---"  # Separates request/response, specifies that the definition is a service.
 

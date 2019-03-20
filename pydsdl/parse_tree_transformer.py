@@ -91,98 +91,25 @@ class ParseTreeTransformer(NodeVisitor):
         """If the node has children, replace the node with them."""
         return tuple(children) or node
 
-    #
-    # Fields
-    #
-    @_logged_transformation
-    def visit_padding_field(self, node: Node, _children: typing.Sequence[Node]) -> None:
-        print('PADDING FIELD', node.text)   # TODO: ENDPOINT HANDLING
+    # ================================================= Core elements ================================================
 
-    #
-    # Types and identifiers
-    #
-    class _VariableLengthArrayBoundary(enum.Enum):
-        INCLUSIVE = 0
-        EXCLUSIVE = 1
+    def visit_identifier(self, node: Node, _children: typing.Tuple) -> str:
+        assert isinstance(node.text, str) and node.text
+        return node.text
 
-    visit_cast_mode                      = NodeVisitor.lift_child
-    visit_array_variable_length_boundary = NodeVisitor.lift_child
+    def visit_statement_service_response_marker(self, _node: Node, _children: typing.Tuple) -> None:
+        self._statement_stream_processor.on_service_response_marker()
 
-    def visit_array_declarator(self, _node: Node, children: tuple) \
-            -> typing.Tuple[typing.Optional[_VariableLengthArrayBoundary], expression.Any]:
-        _, _, maybe_boundary, exp, _, _ = children
-        if maybe_boundary:
-            boundary = maybe_boundary[0][0]
-            assert isinstance(boundary, self._VariableLengthArrayBoundary)
-        else:
-            boundary = None
+    # ================================================== Data types ==================================================
 
-        assert isinstance(exp, expression.Any)
-        return boundary, exp
-
-    def visit_array_variable_length_boundary_inclusive(self, _n: Node, _c: tuple) -> _VariableLengthArrayBoundary:
-        return self._VariableLengthArrayBoundary.INCLUSIVE
-
-    def visit_array_variable_length_boundary_exclusive(self, _n: Node, _c: tuple) -> _VariableLengthArrayBoundary:
-        return self._VariableLengthArrayBoundary.EXCLUSIVE
-
-    @_logged_transformation
-    def visit_versioned_type_name(self, _node: Node, children: tuple) -> data_type.CompoundType:
-        name, tail_components, _, version = children
-        assert isinstance(name, str)
-        for _sep, component in tail_components:
-            assert isinstance(_sep, Node) and _sep.text == data_type.CompoundType.NAME_COMPONENT_SEPARATOR
-            assert isinstance(component, str)
-            name += data_type.CompoundType.NAME_COMPONENT_SEPARATOR + component
-
-        assert isinstance(name, str) and name
-        assert isinstance(version, data_type.Version)
-        return self._statement_stream_processor.resolve_versioned_data_type(name, version)
-
-    def visit_cast_mode_saturated(self, _node: Node, _children: tuple) -> data_type.PrimitiveType.CastMode:
-        return data_type.PrimitiveType.CastMode.SATURATED
-
-    def visit_cast_mode_truncated(self, _node: Node, _children: tuple) -> data_type.PrimitiveType.CastMode:
-        return data_type.PrimitiveType.CastMode.TRUNCATED
-
-    def visit_version_number_pair(self, _node: Node, children: typing.Sequence[int]) -> data_type.Version:
+    def visit_type_version_specifier(self, _node: Node, children: typing.Sequence[int]) -> data_type.Version:
         major, _, minor = children
         assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
         return data_type.Version(major=major.as_native_integer(),
                                  minor=minor.as_native_integer())
 
-    def visit_identifier(self, node: Node, _children: typing.Tuple) -> str:
-        out = node.text
-        assert isinstance(out, str) and out
-        return out
+    # ================================================== Expressions ==================================================
 
-    #
-    # Directives and control sequences
-    #
-    def visit_service_response_marker(self, _node: Node, _children: typing.Tuple) -> None:
-        self._statement_stream_processor.on_service_response_marker()
-
-    def visit_directive(self,
-                        node: Node,
-                        children: typing.Tuple[Node, str, typing.Union[Node, tuple]]) -> None:
-        _at, name, exp = children
-        assert _at.text == '@'
-        assert isinstance(name, str)
-        if isinstance(exp, Node):
-            assert not exp.children
-            exp = None
-        else:
-            assert isinstance(exp, tuple) and len(exp) == 1
-            assert isinstance(exp[0], tuple) and len(exp[0]) == 2
-            _, exp = exp[0]
-            assert isinstance(exp, expression.Any)
-
-        line_number = _get_line_number(node)
-        self._statement_stream_processor.on_directive(line_number, name, exp)
-
-    #
-    # Expressions
-    #
     visit_expression = NodeVisitor.lift_child
 
     visit_op2_log = NodeVisitor.lift_child
@@ -192,26 +119,31 @@ class ParseTreeTransformer(NodeVisitor):
     visit_op2_mul = NodeVisitor.lift_child
     visit_op2_exp = NodeVisitor.lift_child
 
-    def visit_atom(self, _node: Node, children: tuple) -> expression.Any:
-        atom, = children
-        if isinstance(atom, str):   # Identifier resolution
-            atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
-        assert isinstance(atom, expression.Any)
-        return atom
+    def visit_expression_list(self, _node: Node, children: tuple) -> typing.Tuple[expression.Any, ...]:
+        out = []    # type: typing.List[expression.Any]
+        if children:
+            children = children[0]
+            assert len(children) == 2
+            out = [children[0]]
+            for _, _, _, exp in children[1]:
+                out.append(exp)
+
+        assert all(map(lambda x: isinstance(x, expression.Any), out))
+        return tuple(out)
 
     @_logged_transformation
-    def visit_parenthesized(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_expression_parenthesized(self, _node: Node, children: tuple) -> expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, expression.Any)
         return exp
 
-    def visit_expression_list(self, _node: Node, children: tuple) -> typing.Tuple[expression.Any, ...]:
-        assert len(children) == 2
-        out = [children[0]]
-        for _, _, _, exp in children[1]:
-            out.append(exp)
-        assert all(map(lambda x: isinstance(x, expression.Any), out))
-        return tuple(out)
+    def visit_expression_atom(self, _node: Node, children: tuple) -> expression.Any:
+        atom, = children
+        if isinstance(atom, str):   # Identifier resolution
+            atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
+
+        assert isinstance(atom, expression.Any)
+        return atom
 
     def _visit_binary_operator_chain(self, _node: Node, children: tuple) -> expression.Any:
         left = children[0]
@@ -268,39 +200,42 @@ class ParseTreeTransformer(NodeVisitor):
     def visit_op2_exp_pow(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.power
     def visit_op2_attrib(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.attribute
 
-    #
-    # Literals.
-    #
-    visit_literal = NodeVisitor.lift_child
-    visit_boolean = NodeVisitor.lift_child
+    # ================================================== Literals ==================================================
+
+    visit_literal         = NodeVisitor.lift_child
+    visit_literal_boolean = NodeVisitor.lift_child
+    visit_literal_string  = NodeVisitor.lift_child
 
     @_logged_transformation
-    def visit_set(self, _node: Node, children: tuple) -> expression.Set:
+    def visit_literal_set(self, _node: Node, children: tuple) -> expression.Set:
         _, _, exp_list, _, _ = children
         assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
         return expression.Set(exp_list)
 
-    def visit_real(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+    def visit_literal_real(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
         return expression.Rational(Fraction(node.text))
 
-    def visit_integer(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+    def visit_literal_integer(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
         return expression.Rational(int(node.text, base=0))
 
-    def visit_decimal_integer(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+    def visit_literal_integer_decimal(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
         return expression.Rational(int(node.text))
 
-    def visit_boolean_true(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
+    def visit_literal_boolean_true(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
         return expression.Boolean(True)
 
-    def visit_boolean_false(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
+    def visit_literal_boolean_false(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
         return expression.Boolean(False)
 
     @_logged_transformation
-    def visit_string(self, node: Node, _children: typing.Sequence[Node]) -> expression.String:
+    def visit_literal_string_single_quoted(self, node: Node, _children: typing.Sequence[Node]) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
-        out = eval(node.text)
-        assert isinstance(out, str)
-        return expression.String(out)
+        return expression.String(eval(node.text))
+
+    @_logged_transformation
+    def visit_literal_string_double_quoted(self, node: Node, _children: typing.Sequence[Node]) -> expression.String:
+        # TODO: manual handling of strings, incl. escape sequences and hex char notation
+        return expression.String(eval(node.text))
 
 
 #
