@@ -38,8 +38,12 @@ class DataStructureBuilder:
 
     @property
     def constants(self) -> typing.List[data_type.Constant]:
-        assert all(map(lambda x: isinstance(x, data_type.Constant), self._fields))
+        assert all(map(lambda x: isinstance(x, data_type.Constant), self._constants))
         return self._constants
+
+    @property
+    def attributes(self) -> typing.List[data_type.Attribute]:  # noinspection PyTypeChecker
+        return self.fields + self.constants
 
     @property
     def empty(self) -> bool:

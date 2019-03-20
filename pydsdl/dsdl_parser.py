@@ -14,6 +14,7 @@ from .dsdl_definition import DSDLDefinition
 from .parse_tree_processor import ParseTreeProcessor, StatementStreamProcessor
 from .data_structure_builder import DataStructureBuilder
 from . import expression
+from .port_id_ranges import is_valid_regulated_service_id, is_valid_regulated_subject_id
 
 
 # Arguments: emitting definition, line number, value to print or None. The return value is ignored and should be None.
@@ -58,23 +59,20 @@ _logger = logging.getLogger(__name__)
 def parse_definition(definition:            DSDLDefinition,
                      lookup_definitions:    typing.Sequence[DSDLDefinition],
                      configuration_options: ConfigurationOptions) -> data_type.CompoundType:
-    _logger.info('Parsing definition %r', definition)
+    _logger.info('Parsing definition %r...', definition)
+
+    # Remove the target definition from the lookup list in order to prevent
+    # infinite recursion on self-referential definitions.
+    lookup_definitions = list(filter(lambda d: d != definition, lookup_definitions))
 
     try:
-        # Remove the target definition from the lookup list in order to prevent
-        # infinite recursion on self-referential definitions.
-        lookup_definitions = list(filter(lambda d: d != definition, lookup_definitions))
-
-        proc = _Processor(definition,
-                          lookup_definitions,
-                          configuration_options)
-
+        builder = _TypeBuilder(definition, lookup_definitions, configuration_options)
         with open(definition.file_path) as f:
-            ParseTreeProcessor(proc).parse(f.read())
+            ParseTreeProcessor(builder).parse(f.read())
 
-        raise KeyboardInterrupt     # TODO
-
-        return proc.finalize()
+        out = builder.finalize()
+        _logger.info('Definition %r parsed as %r', definition, out)
+        return out
     except parsimonious.ParseError as ex:
         raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())
     except data_type.TypeParameterError as ex:
@@ -93,7 +91,7 @@ def parse_definition(definition:            DSDLDefinition,
         raise InternalError(culprit=ex, path=definition.file_path)
 
 
-class _Processor(StatementStreamProcessor):
+class _TypeBuilder(StatementStreamProcessor):
     def __init__(self,
                  definition:            DSDLDefinition,
                  lookup_definitions:    typing.Sequence[DSDLDefinition],
@@ -106,7 +104,49 @@ class _Processor(StatementStreamProcessor):
         self._is_deprecated = False
 
     def finalize(self) -> data_type.CompoundType:
-        pass
+        if len(self._structs) == 1:     # Message type
+            struct, = self._structs     # type: DataStructureBuilder,
+            if struct.union:
+                out = data_type.UnionType(name=self._definition.full_name,
+                                          version=self._definition.version,
+                                          attributes=struct.attributes,
+                                          deprecated=self._is_deprecated,
+                                          fixed_port_id=self._definition.fixed_port_id,
+                                          source_file_path=self._definition.file_path)    # type: data_type.CompoundType
+            else:
+                out = data_type.StructureType(name=self._definition.full_name,
+                                              version=self._definition.version,
+                                              attributes=struct.attributes,
+                                              deprecated=self._is_deprecated,
+                                              fixed_port_id=self._definition.fixed_port_id,
+                                              source_file_path=self._definition.file_path)
+        else:  # Service type
+            request, response = self._structs   # type: DataStructureBuilder, DataStructureBuilder
+            # noinspection SpellCheckingInspection
+            out = data_type.ServiceType(name=self._definition.full_name,            # pozabito vse na svete
+                                        version=self._definition.version,           # serdce zamerlo v grudi
+                                        request_attributes=request.attributes,      # tolko nebo tolko veter
+                                        response_attributes=response.attributes,    # tolko radost vperedi
+                                        request_is_union=request.union,             # tolko nebo tolko veter
+                                        response_is_union=response.union,           # tolko radost vperedi
+                                        deprecated=self._is_deprecated,
+                                        fixed_port_id=self._definition.fixed_port_id,
+                                        source_file_path=self._definition.file_path)
+
+        if not self._configuration.allow_unregulated_fixed_port_id:
+            port_id = out.fixed_port_id
+            if port_id is not None:
+                is_service_type = isinstance(out, data_type.ServiceType)
+                f = is_valid_regulated_service_id if is_service_type else is_valid_regulated_subject_id
+                if not f(port_id, out.root_namespace):
+                    raise data_type.InvalidFixedPortIDError('Regulated port ID %r for %s type %r is not valid. '
+                                                            'Consider using allow_unregulated_fixed_port_id.' %
+                                                            (port_id,
+                                                             'service' if is_service_type else 'message',
+                                                             out.full_name))
+
+        assert isinstance(out, data_type.CompoundType)
+        return out
 
     def on_constant(self,
                     constant_type: data_type.DataType,

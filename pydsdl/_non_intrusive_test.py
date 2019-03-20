@@ -1056,19 +1056,18 @@ def _unittest_dsdl_parser_basics() -> None:
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
                 @deprecated
-                @union
                 void16
                 int8          [<=123+456] array_inclusive
                 truncated int8[< 123+456] array_exclusive
                 saturated int8[  123+456] array_fixed
                 #ns.Bar.1.23 field
-                float64 b = +10 * (-2 / -3) / 4 % 5
-                bool a = !true
-                float32 a = (123456 + 0x_ab_cd_ef) / 0b1111_1111 ** 2 - 0o123_456 * 2.7
+                float64 a = +10 * (-2 / -3) / 4 % 5
+                bool    b = !true
+                float32 c = (123456 + 0x_ab_cd_ef) / 0b1111_1111 ** 2 - 0o123_456 * 2.7
                 @print "Hello\r\nworld!"
                 @print
                 @assert true
-                #@assert ns.Foo.1.0.THE_CONSTANT == 42
+                @assert ns.Foo.1.0.THE_CONSTANT == 42
                 ''')),
         [
             _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42\n'),
@@ -1082,6 +1081,10 @@ def _unittest_dsdl_parser_expressions() -> None:
     _parse_definition(
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
+                @assert 'moments of eternity'     != "strangers stealing someone else's dreams"  # I've seen it all
+                @assert 'hunting for the mystery' != 'running for your life in times like these' # I've seen it all
+                @assert "I remember the time once it a life" != 'oh baby'  # got you here in my head, here in my head
+                @assert false == ('oh' == 'maybe')
                 @assert true
                 @assert 1 == 2 - 1
                 @assert -10 == +20 / -2

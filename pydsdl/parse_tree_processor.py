@@ -98,6 +98,15 @@ def _make_typesafe_child_lifter(expected_type: type, logged: bool = False) -> _V
 
 # noinspection PyMethodMayBeStatic
 class ParseTreeProcessor(NodeVisitor):
+    """
+    This class processes the parse tree, evaluates the expressions and emits a high-level representation
+    of the processed description. Essentially it does most of the ground work related to supporting the DSDL
+    language, which is bad because it makes the class unnecessarily complex and hard to maintain. Shall it be
+    needed to extend the language, please consider refactoring the logic by adding an intermediate abstract
+    syntax tree in order to separate the semantic analysis from the grammar-related logic. If that is done,
+    expression evaluation will be performed at the AST level rather than at the parse tree level, as it is
+    done currently.
+    """
     # Populating the default grammar (see the NodeVisitor API).
     grammar = Grammar(open(_GRAMMAR_DEFINITION_FILE_PATH).read())
 
