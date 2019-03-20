@@ -103,7 +103,7 @@ class ParseTreeProcessor(NodeVisitor):
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = FrontendError, data_type.TypeParameterError
+    unwrapped_exceptions = FrontendError,
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)

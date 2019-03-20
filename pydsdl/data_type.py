@@ -11,6 +11,7 @@ import itertools
 from fractions import Fraction
 
 from . import expression
+from .frontend_error import InvalidDefinitionError
 from .port_id_ranges import MAX_SUBJECT_ID, MAX_SERVICE_ID
 
 
@@ -61,7 +62,7 @@ _DISALLOWED_NAME_PATTERNS = [
 ]
 
 
-class TypeParameterError(ValueError):
+class TypeParameterError(InvalidDefinitionError):
     """This exception is not related to parsing errors, so it does not inherit from the same root."""
     pass
 
