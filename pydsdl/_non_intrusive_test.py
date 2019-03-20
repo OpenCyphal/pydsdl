@@ -1056,6 +1056,9 @@ def _unittest_dsdl_parser_basics() -> None:
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
                 void16
+                int8[<=123+456] array_inclusive
+                truncated int8[< 123+456] array_exclusive
+                saturated int8[  123+456] array_fixed
                 #ns.Bar.1.23 field
                 # Yields 8074.4
                 float64 b = {+10 * (-2 / -3) / 4 % 5, 123, 1/2, 1}

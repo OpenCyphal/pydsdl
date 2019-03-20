@@ -4,7 +4,6 @@
 #
 
 import os
-import enum
 import typing
 import logging
 import functools
@@ -53,9 +52,9 @@ class StatementStreamProcessor:
 
 
 #
-# Decorators for use with the transformer.
+# Decorators and helpers for use with the transformer.
 #
-_VisitorHandler = typing.Callable[['ParseTreeTransformer', Node, typing.Any], typing.Any]
+_VisitorHandler = typing.Callable[['ParseTreeTransformer', Node, tuple], typing.Any]
 
 
 def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
@@ -63,7 +62,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     Simply logs the resulting transformation upon its completion.
     """
     @functools.wraps(fun)
-    def wrapper(self: 'ParseTreeTransformer', node: Node, children: typing.Any) -> typing.Any:
+    def wrapper(self: 'ParseTreeTransformer', node: Node, children: tuple) -> typing.Any:
         result = '<TRANSFORMATION FAILED>'  # type: typing.Any
         try:
             result = fun(self, node, children)
@@ -72,6 +71,16 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
             _logger.debug('Transformation: %s(%s) --> %r', node.expr_name, _print_node(children), result)
 
     return wrapper
+
+
+def _make_typesafe_child_lifter(expected_type: type, logged: bool = False) -> _VisitorHandler:
+    def visitor_handler(_self: 'ParseTreeTransformer', _node: Node, children: tuple) -> typing.Any:
+        sole_child, = children
+        assert isinstance(sole_child, expected_type), \
+            'The child should have been of type %r, not %r: %r' % (expected_type, type(sole_child), sole_child)
+        return sole_child
+
+    return _logged_transformation(visitor_handler) if logged else visitor_handler
 
 
 # noinspection PyMethodMayBeStatic
@@ -102,11 +111,80 @@ class ParseTreeTransformer(NodeVisitor):
 
     # ================================================== Data types ==================================================
 
-    def visit_type_version_specifier(self, _node: Node, children: typing.Sequence[int]) -> data_type.Version:
+    visit_type           = _make_typesafe_child_lifter(data_type.DataType)
+    visit_type_array     = _make_typesafe_child_lifter(data_type.ArrayType, logged=True)
+    visit_type_scalar    = _make_typesafe_child_lifter(data_type.DataType, logged=True)
+    visit_type_primitive = _make_typesafe_child_lifter(data_type.PrimitiveType)
+
+    visit_type_primitive_name = NodeVisitor.lift_child
+
+    PrimitiveTypeConstructor = typing.Callable[[data_type.PrimitiveType.CastMode], data_type.PrimitiveType]
+
+    @staticmethod
+    def _unwrap_array_capacity(ex: expression.Any) -> int:
+        assert isinstance(ex, expression.Any)
+        if isinstance(ex, expression.Rational):
+            out = ex.as_native_integer()
+            assert isinstance(out, int)     # Oh mypy, why are you so weird
+            return out
+        else:
+            raise expression.InvalidOperandError('Array capacity expression must yield a rational, not %s' %
+                                                 ex.TYPE_NAME)
+
+    def visit_type_array_variable_inclusive(self, _node: Node, children: tuple) -> data_type.DynamicArrayType:
+        element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
+        return data_type.DynamicArrayType(element_type, self._unwrap_array_capacity(length))
+
+    def visit_type_array_variable_exclusive(self, _node: Node, children: tuple) -> data_type.DynamicArrayType:
+        element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
+        return data_type.DynamicArrayType(element_type, self._unwrap_array_capacity(length) - 1)
+
+    def visit_type_array_fixed(self, _node: Node, children: tuple) -> data_type.StaticArrayType:
+        element_type, _s0, _bl, _s1, length, _s2, _br = children
+        return data_type.StaticArrayType(element_type, self._unwrap_array_capacity(length))
+
+    def visit_type_versioned(self, _node: Node, children: tuple) -> data_type.CompoundType:
+        name, name_tail, _, version = children
+        assert isinstance(name, str) and name and isinstance(version, data_type.Version)
+        for _, component in name_tail:
+            assert isinstance(component, str)
+            name += data_type.CompoundType.NAME_COMPONENT_SEPARATOR + component
+
+        return self._statement_stream_processor.resolve_versioned_data_type(name, version)
+
+    def visit_type_version_specifier(self, _node: Node, children: tuple) -> data_type.Version:
         major, _, minor = children
         assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
         return data_type.Version(major=major.as_native_integer(),
                                  minor=minor.as_native_integer())
+
+    def visit_type_primitive_truncated(self, _node: Node, children: tuple) -> data_type.PrimitiveType:
+        _kw, _sp, cons = children
+        return cons(data_type.PrimitiveType.CastMode.TRUNCATED)
+
+    def visit_type_primitive_saturated(self, _node: Node, children: tuple) -> data_type.PrimitiveType:
+        _, cons = children
+        return cons(data_type.PrimitiveType.CastMode.SATURATED)
+
+    def visit_type_primitive_name_boolean(self, _node: Node, _children: tuple) -> PrimitiveTypeConstructor:
+        return lambda cm: data_type.BooleanType(cm)     # lambda is only needed to make mypy shut up
+
+    def visit_type_primitive_name_unsigned_integer(self, _node: Node, children: tuple) -> PrimitiveTypeConstructor:
+        return lambda cm: data_type.UnsignedIntegerType(children[-1], cm)
+
+    def visit_type_primitive_name_signed_integer(self, _node: Node, children: tuple) -> PrimitiveTypeConstructor:
+        return lambda cm: data_type.SignedIntegerType(children[-1], cm)
+
+    def visit_type_primitive_name_floating_point(self, _node: Node, children: tuple) -> PrimitiveTypeConstructor:
+        return lambda cm: data_type.FloatType(children[-1], cm)
+
+    def visit_type_void(self, _node: Node, children: tuple) -> data_type.VoidType:
+        _, width = children
+        assert isinstance(width, int)
+        return data_type.VoidType(width)
+
+    def visit_type_bit_length_suffix(self, node: Node, _children: tuple) -> int:
+        return int(node.text)
 
     # ================================================== Expressions ==================================================
 
@@ -166,17 +244,17 @@ class ParseTreeTransformer(NodeVisitor):
     visit_ex_logical_not = NodeVisitor.lift_child
     visit_ex_inversion   = NodeVisitor.lift_child
 
-    def visit_op1_form_log_not(self, _node: Node, children: typing.Tuple[Node, Node, expression.Any]) -> expression.Any:
+    def visit_op1_form_log_not(self, _node: Node, children: tuple) -> expression.Any:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, expression.Any)
         return expression.logical_not(exp)
 
-    def visit_op1_form_inv_pos(self, _node: Node, children: typing.Tuple[Node, Node, expression.Any]) -> expression.Any:
+    def visit_op1_form_inv_pos(self, _node: Node, children: tuple) -> expression.Any:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, expression.Any)
         return expression.positive(exp)
 
-    def visit_op1_form_inv_neg(self, _node: Node, children: typing.Tuple[Node, Node, expression.Any]) -> expression.Any:
+    def visit_op1_form_inv_neg(self, _node: Node, children: tuple) -> expression.Any:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, expression.Any)
         return expression.negative(exp)
@@ -202,38 +280,35 @@ class ParseTreeTransformer(NodeVisitor):
 
     # ================================================== Literals ==================================================
 
-    visit_literal         = NodeVisitor.lift_child
-    visit_literal_boolean = NodeVisitor.lift_child
-    visit_literal_string  = NodeVisitor.lift_child
+    visit_literal         = _make_typesafe_child_lifter(expression.Any, logged=True)
+    visit_literal_boolean = _make_typesafe_child_lifter(expression.Boolean)
+    visit_literal_string  = _make_typesafe_child_lifter(expression.String)
 
-    @_logged_transformation
     def visit_literal_set(self, _node: Node, children: tuple) -> expression.Set:
         _, _, exp_list, _, _ = children
         assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
         return expression.Set(exp_list)
 
-    def visit_literal_real(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+    def visit_literal_real(self, node: Node, _children: tuple) -> expression.Rational:
         return expression.Rational(Fraction(node.text))
 
-    def visit_literal_integer(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+    def visit_literal_integer(self, node: Node, _children: tuple) -> expression.Rational:
         return expression.Rational(int(node.text, base=0))
 
-    def visit_literal_integer_decimal(self, node: Node, _children: typing.Sequence[Node]) -> expression.Rational:
+    def visit_literal_integer_decimal(self, node: Node, _children: tuple) -> expression.Rational:
         return expression.Rational(int(node.text))
 
-    def visit_literal_boolean_true(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
+    def visit_literal_boolean_true(self, _node: Node, _children: tuple) -> expression.Boolean:
         return expression.Boolean(True)
 
-    def visit_literal_boolean_false(self, _node: Node, _children: typing.Sequence[Node]) -> expression.Boolean:
+    def visit_literal_boolean_false(self, _node: Node, _children: tuple) -> expression.Boolean:
         return expression.Boolean(False)
 
-    @_logged_transformation
-    def visit_literal_string_single_quoted(self, node: Node, _children: typing.Sequence[Node]) -> expression.String:
+    def visit_literal_string_single_quoted(self, node: Node, _children: tuple) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         return expression.String(eval(node.text))
 
-    @_logged_transformation
-    def visit_literal_string_double_quoted(self, node: Node, _children: typing.Sequence[Node]) -> expression.String:
+    def visit_literal_string_double_quoted(self, node: Node, _children: tuple) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         return expression.String(eval(node.text))
 
