@@ -7,60 +7,83 @@ comment     = ~r"#[^\r\n]*"
 end_of_line = ~r"\r?\n"                             # Unix/Windows
 _           = ~r"[ \t]+"                            # Whitespace
 
-# Possible kinds of statements.
-statement   = directive / service_response_marker / attribute
-attribute   = constant / field / padding_field
+# =================================================== Core elements ===================================================
 
-# Fields and constants are main elements of a data type definition.
-constant      = attribute_type _ identifier _? "=" _? expression
-field         = attribute_type _ identifier
-padding_field = ~r"void[1-9]\d*"
+statement = statement_directive /
+            statement_service_response_marker /
+            statement_attribute
 
-# Type reference as used in attribute declarations.
-attribute_type = (versioned_type_name / primitive_attribute_type) (_? array_declarator)?
+statement_attribute = statement_constant /
+                      statement_field /
+                      statement_padding_field
 
-# TODO: an abstract type reference rule including either a versioned type name or a primitive type with cast mode!
-primitive_attribute_type = primitive_attribute_type_with_cast_mode / primitive_attribute_type_without_cast_mode
-primitive_attribute_type_with_cast_mode    = cast_mode _ identifier
-primitive_attribute_type_without_cast_mode = identifier
+statement_constant      = type _ identifier _? "=" _? expression
+statement_field         = type _ identifier
+statement_padding_field = type
 
-cast_mode           = cast_mode_saturated / cast_mode_truncated
-cast_mode_saturated = "saturated"
-cast_mode_truncated = "truncated"
+statement_service_response_marker = "---"  # Separates request/response, specifies that the definition is a service.
 
-# The capacity specification expression must yield a positive integer.
-array_declarator = "[" _? (array_variable_length_boundary _?)? expression _? "]"
+statement_directive = statement_directive_with_expression /
+                      statement_directive_without_expression
+statement_directive_with_expression    = "@" identifier _ expression  # The expression type must match the directive.
+statement_directive_without_expression = "@" identifier
 
-array_variable_length_boundary = array_variable_length_boundary_inclusive / array_variable_length_boundary_exclusive
-array_variable_length_boundary_inclusive = "<="  # Specified first because the other option shares same prefix.
-array_variable_length_boundary_exclusive = "<"
+identifier = ~r"[a-zA-Z_][a-zA-Z0-9_]*"
 
-versioned_type_name = identifier ("." identifier)* "." version_number_pair
-identifier          = ~r"[a-zA-Z_][a-zA-Z0-9_]*"
-version_number_pair = decimal_integer "." decimal_integer
+# ==================================================== Data types ====================================================
 
-# Separates service request from service response, and also specifies that the current definition is of a service kind.
-service_response_marker = "---"
+type = type_array /
+       type_scalar
 
-# Directives may have an expression, depending on their semantics.
-# The expression must yield a type that is expected by the directive.
-directive = "@" identifier (_ expression)?
+type_array = type_array_variable_inclusive /
+             type_array_variable_exclusive /
+             type_array_fixed
 
-# The rest of the rules is used to define expressions. The aliasing is added for clarity.
-# Since DSDL definitions cannot be used to describe runtime logic, all expressions are constant expressions,
-# evaluated at the time of parsing.
-expression      = ex_logical
-expression_list = expression (_? "," _? expression)*
+type_array_variable_inclusive = type_scalar _? "[" _? op2_cmp_leq _? expression _? "]"  # Expression must yield integer.
+type_array_variable_exclusive = type_scalar _? "[" _? op2_cmp_lss _? expression _? "]"
+type_array_fixed              = type_scalar _? "[" _?                expression _? "]"
 
-# An atom is a basic part of an expression, such as literals or attributes (local or external)
-atom = parenthesized / versioned_type_name / literal / identifier
+type_scalar = type_versioned /
+              type_fundamental
 
-# Parenthetical expressions are used for managing precedence.
-parenthesized = "(" _? expression _? ")"
+type_versioned         = identifier ("." identifier)* "." type_version_specifier
+type_version_specifier = literal_integer_decimal "." literal_integer_decimal
+
+type_fundamental = type_fundamental_truncated /
+                   type_fundamental_saturated
+
+type_fundamental_truncated =  "truncated" _   type_fundamental_name
+type_fundamental_saturated = ("saturated" _)? type_fundamental_name     # Defaults to this.
+
+type_fundamental_name = type_fundamental_name_boolean /
+                        type_fundamental_name_void /
+                        type_fundamental_name_unsigned_integer /
+                        type_fundamental_name_signed_integer /
+                        type_fundamental_name_floating_point
+
+type_fundamental_name_boolean          = "bool"
+type_fundamental_name_void             = "void"  type_bit_width_suffix
+type_fundamental_name_unsigned_integer = "uint"  type_bit_width_suffix
+type_fundamental_name_signed_integer   = "int"   type_bit_width_suffix
+type_fundamental_name_floating_point   = "float" type_bit_width_suffix
+
+type_bit_width_suffix = ~"[1-9]\d*"
+
+# ==================================================== Expressions ====================================================
+
+expression = ex_logical    # Aliased for clarity.
+
+expression_list = (expression (_? "," _? expression)*)?     # May be empty.
+
+expression_parenthesized = "(" _? expression _? ")"         # Used for managing precedence.
+
+expression_atom = expression_parenthesized /                # Ordering matters.
+                  type /
+                  literal /
+                  identifier
 
 # Operators. The precedence relations are expressed in the rules; the order here is from lower to higher.
-# Operators that share common prefix (e.g. < and <=, // and /, and so on) are arranged so that the longest form
-# comes first; otherwise it would be unreachable.
+# Operators that share common prefix (e.g. < and <=) are arranged so that the longest form is specified first.
 ex_logical        = ex_logical_not    (_? op2_log _? ex_logical_not)*
 ex_logical_not    = op1_form_log_not / ex_comparison
 ex_comparison     = ex_bitwise        (_? op2_cmp _? ex_bitwise)*
@@ -69,7 +92,7 @@ ex_additive       = ex_multiplicative (_? op2_add _? ex_multiplicative)*
 ex_multiplicative = ex_inversion      (_? op2_mul _? ex_inversion)*
 ex_inversion      = op1_form_inv_pos / op1_form_inv_neg / ex_exponential
 ex_exponential    = ex_attribute      (_? op2_exp _? ex_inversion)?     # Right recursion
-ex_attribute      = atom              (_? op2_attrib _? identifier)*
+ex_attribute      = expression_atom   (_? op2_attrib _? identifier)*
 
 # Unary operator forms are moved into separate rules for ease of parsing.
 op1_form_log_not = "!" _? ex_logical_not    # Right recursion
@@ -114,33 +137,44 @@ op2_exp_pow = "**"
 # The most tightly bound binary operator - attribute reference.
 op2_attrib = "."
 
-# Literals. Reals are defined first to avoid ambiguities.
-literal = set / real / integer / string / boolean
+# ===================================================== Literals =====================================================
 
-# Set literal. Empty sets are currently not allowed.
-set = "{" _? expression_list _? "}"
+literal = literal_set /         # Ordering is important to avoid ambiguities.
+          literal_real /
+          literal_integer /
+          literal_string /
+          literal_boolean
 
-# Integers.
-integer             = binary_integer / octal_integer / hexadecimal_integer / decimal_integer
-binary_integer      = ~r"0[bB](_?(0|1))+"
-octal_integer       = ~r"0[oO](_?[0-7])+"
-hexadecimal_integer = ~r"0[xX](_?[0-9a-fA-F])+"
-decimal_integer     = ~r"(0(_?0)*)+|([1-9](_?[0-9])*)"
+# Set.
+literal_set = "{" _? expression_list _? "}"
 
-# Reals (floats). Exponent notation is defined first to avoid ambiguities.
-real                   = exponent_notation_real / point_notation_real
-exponent_notation_real = (point_notation_real / real_digits) real_exponent
-point_notation_real    = (real_digits? real_fraction) / (real_digits ".")
-real_fraction          = "." real_digits
-real_exponent          = ~r"[eE][+-]?" real_digits
-real_digits            = ~r"[0-9](_?[0-9])*"
+# Integer.
+literal_integer = literal_integer_binary /
+                  literal_integer_octal /
+                  literal_integer_hexadecimal /
+                  literal_integer_decimal
+literal_integer_binary      = ~r"0[bB](_?(0|1))+"
+literal_integer_octal       = ~r"0[oO](_?[0-7])+"
+literal_integer_hexadecimal = ~r"0[xX](_?[0-9a-fA-F])+"
+literal_integer_decimal     = ~r"(0(_?0)*)+|([1-9](_?[0-9])*)"
 
-# String literals.
-string               = single_quoted_string / double_quoted_string
-single_quoted_string = ~r"'[^'\\]*(\\[^\r\n][^'\\]*)*'"
-double_quoted_string = ~r'"[^"\\]*(\\[^\r\n][^"\\]*)*"'
+# Real. Exponent notation is defined first to avoid ambiguities.
+literal_real = literal_real_exponent_notation /
+               literal_real_point_notation
+literal_real_exponent_notation = (literal_real_point_notation / literal_real_digits) literal_real_exponent
+literal_real_point_notation    = (literal_real_digits? literal_real_fraction) / (literal_real_digits ".")
+literal_real_fraction          = "." literal_real_digits
+literal_real_exponent          = ~r"[eE][+-]?" literal_real_digits
+literal_real_digits            = ~r"[0-9](_?[0-9])*"
 
-# Boolean literals.
-boolean = boolean_true / boolean_false
-boolean_true  = "true"
-boolean_false = "false"
+# String.
+literal_string = literal_string_single_quoted /
+                 literal_string_double_quoted
+literal_string_single_quoted = ~r"'[^'\\]*(\\[^\r\n][^'\\]*)*'"
+literal_string_double_quoted = ~r'"[^"\\]*(\\[^\r\n][^"\\]*)*"'
+
+# Boolean.
+literal_boolean = literal_boolean_true /
+                  literal_boolean_false
+literal_boolean_true  = "true"
+literal_boolean_false = "false"
