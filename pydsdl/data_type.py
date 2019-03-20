@@ -82,10 +82,6 @@ class InvalidVersionError(TypeParameterError):
     pass
 
 
-class ConstantTypeMismatchError(TypeParameterError):
-    pass
-
-
 class InvalidConstantValueError(TypeParameterError):
     pass
 
@@ -108,6 +104,44 @@ class MalformedUnionError(TypeParameterError):
 
 class DeprecatedDependencyError(TypeParameterError):
     pass
+
+
+def compute_cumulative_bit_length_values(fields: typing.Sequence['Field'],
+                                         assume_tagged_union_aggregation: bool) -> typing.Set[int]:
+    assert all(map(lambda x: isinstance(x, Field), fields))
+    if assume_tagged_union_aggregation:
+        if len(fields) < UnionType.MIN_NUMBER_OF_VARIANTS:  # We don't know how to compute the tag length in this case.
+            raise MalformedUnionError('Unions with less than %d fields are not allowed' %
+                                      UnionType.MIN_NUMBER_OF_VARIANTS)
+
+        tag_bit_length = (len(fields) - 1).bit_length()
+        assert tag_bit_length > 0
+
+        # Unions are easy to handle because when serialized, a union is essentially just a single field,
+        # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
+        # add the tag length to each element. Easy.
+        combinations = set()     # type: typing.Set[int]
+        for f in fields:
+            combinations |= f.data_type.compute_bit_length_values()
+
+        out = set(map(lambda c: tag_bit_length + c, combinations))  # type: typing.Set[int]
+    else:
+        # As far as bit length combinations are concerned, structures are similar to static arrays.
+        # Please refer to the bit length computation method for static arrays for reference.
+        # The difference here is that the length value sets are not homogeneous across fields, as they
+        # can be of different types, which sets structures apart from arrays. So instead of looking for
+        # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
+        # For large structures with dynamic arrays this can be very computationally expensive.
+        blv_sets = [x.data_type.compute_bit_length_values() for x in fields]
+        combinations = itertools.product(*blv_sets)     # type: ignore
+
+        # The interface prohibits empty sets at the output
+        out = set(map(sum, combinations)) or {0}        # type: ignore
+
+    assert isinstance(out, set)
+    assert len(out) > 0
+    assert all(map(lambda x: isinstance(x, int), out))
+    return out
 
 
 class DataType(expression.Any):
@@ -567,14 +601,14 @@ def _unittest_dynamic_array() -> None:
 
 
 class Attribute:    # TODO: should extend expression.Any to support advanced introspection/reflection.
-    def __init__(self,
-                 data_type: DataType,
-                 name: str,
-                 skip_name_check: bool = False):
+    def __init__(self, data_type: DataType, name: str):
         self._data_type = data_type
         self._name = str(name)
 
-        if not skip_name_check:
+        if isinstance(data_type, VoidType):
+            if self._name:
+                raise InvalidNameError('Void-typed fields can be used only for padding and cannot be named')
+        else:
             _check_name(self._name)
 
     @property
@@ -598,20 +632,21 @@ class Field(Attribute):
 
 class PaddingField(Field):
     def __init__(self, data_type: VoidType):
-        super(PaddingField, self).__init__(data_type, '', skip_name_check=True)
+        if not isinstance(data_type, VoidType):
+            raise TypeParameterError('Padding fields must be of the void type')
+
+        super(PaddingField, self).__init__(data_type, '')
 
 
 class Constant(Attribute):
     def __init__(self,
                  data_type: DataType,
                  name: str,
-                 value: expression.Any,
-                 initialization_expression: str):
+                 value: expression.Any):
         super(Constant, self).__init__(data_type, name)
-        self._initialization_expression = str(initialization_expression)
 
         if not isinstance(value, expression.Primitive):
-            raise ValueError('The constant value must be a primitive expression value')
+            raise InvalidConstantValueError('The constant value must be a primitive expression value')
 
         self._value = value
         del value
@@ -621,7 +656,7 @@ class Constant(Attribute):
         # Type check
         if isinstance(data_type, BooleanType):      # Boolean constant
             if not isinstance(self._value, expression.Boolean):
-                raise InvalidConstantValueError('Invalid value for boolean constant: %r' % value)
+                raise InvalidConstantValueError('Invalid value for boolean constant: %r' % self._value)
 
         elif isinstance(data_type, IntegerType):    # Integer constant
             if isinstance(self._value, expression.Rational):
@@ -629,7 +664,7 @@ class Constant(Attribute):
                     raise InvalidConstantValueError('The value of an integer constant must be an integer; got %s' %
                                                     self._value)
             elif isinstance(self._value, expression.String):
-                as_bytes = value.native_value.encode('utf8')
+                as_bytes = self._value.native_value.encode('utf8')
                 if len(as_bytes) != 1:
                     raise InvalidConstantValueError('A constant string must be exactly one ASCII character long')
 
@@ -641,8 +676,8 @@ class Constant(Attribute):
                 raise InvalidConstantValueError('Invalid value type for integer constant: %r' % self._value)
 
         elif isinstance(data_type, FloatType):      # Floating point constant
-            if not isinstance(value, expression.Rational):
-                raise InvalidConstantValueError('Invalid value type for float constant: %r' % value)
+            if not isinstance(self._value, expression.Rational):
+                raise InvalidConstantValueError('Invalid value type for float constant: %r' % self._value)
 
         else:
             raise InvalidTypeError('Invalid constant type: %r' % data_type)
@@ -656,23 +691,18 @@ class Constant(Attribute):
             assert isinstance(data_type, ArithmeticType)
             rng = data_type.inclusive_value_range
             if not (rng.min <= self._value.native_value <= rng.max):
-                raise InvalidConstantValueError('Constant value %r exceeds the range of its data type %r' %
+                raise InvalidConstantValueError('Constant value %s exceeds the range of its data type %s' %
                                                 (self._value, data_type))
 
     @property
     def value(self) -> expression.Any:
         return self._value
 
-    @property
-    def initialization_expression(self) -> str:
-        return self._initialization_expression
-
     def __str__(self) -> str:
         return '%s %s = %s' % (self.data_type, self.name, self.value)
 
     def __repr__(self) -> str:
-        return 'Constant(data_type=%r, name=%r, value=%r, initialization_expression=%r)' % \
-            (self.data_type, self.name, self._value, self._initialization_expression)
+        return 'Constant(data_type=%r, name=%r, value=%r)' % (self.data_type, self.name, self._value)
 
 
 def _unittest_attribute() -> None:
@@ -684,15 +714,13 @@ def _unittest_attribute() -> None:
     assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
 
     data_type = SignedIntegerType(32, PrimitiveType.CastMode.SATURATED)
-    const = Constant(data_type, 'FOO_CONST', expression.Rational(-123), '-0x7B')
+    const = Constant(data_type, 'FOO_CONST', expression.Rational(-123))
     assert str(const) == 'saturated int32 FOO_CONST = -123'
     assert const.data_type is data_type
     assert const.name == 'FOO_CONST'
     assert const.value == -123
-    assert const.initialization_expression == '-0x7B'
 
-    assert repr(const) == \
-        'Constant(data_type=%r, name=\'FOO_CONST\', value=-123, initialization_expression=\'-0x7B\')' % data_type
+    assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=-123)' % data_type
 
 
 class CompoundType(DataType):
@@ -905,14 +933,7 @@ class UnionType(CompoundType):
                               max=self.tag_bit_length + max([b.max for b in blr]))
 
     def compute_bit_length_values(self) -> typing.Set[int]:
-        # Unions are easy to handle because when serialized, a union is essentially just a single field,
-        # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
-        # add the tag length to each element. Easy.
-        combinations = set()     # type: typing.Set[int]
-        for f in self.fields:
-            combinations |= f.data_type.compute_bit_length_values()
-
-        return set(map(lambda c: self.tag_bit_length + c, combinations))
+        return compute_cumulative_bit_length_values(self.fields, assume_tagged_union_aggregation=True)
 
 
 class StructureType(CompoundType):
@@ -923,29 +944,7 @@ class StructureType(CompoundType):
                               max=sum([b.max for b in blr]))
 
     def compute_bit_length_values(self) -> typing.Set[int]:
-        return self.get_field_offset_values(field_index=len(self.fields))
-
-    def get_field_offset_values(self, field_index: int) -> typing.Set[int]:
-        """
-        This function is mostly useful for field alignment and offset checks.
-        :param field_index: Limits the output set as if the structure were to end before the
-                            specified field index. If set to len(self.fields), makes the function
-                            behave as compute_bit_length_values().
-        """
-        if not (0 <= field_index <= len(self.fields)):      # pragma: no cover
-            raise ValueError('Invalid field index: %d' % field_index)
-
-        # As far as bit length combinations are concerned, structures are similar to static arrays.
-        # Please refer to the bit length computation method for static arrays for reference.
-        # The difference here is that the length value sets are not homogeneous across fields, as they
-        # can be of different types, which sets structures apart from arrays. So instead of looking for
-        # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
-        # For large structures with dynamic arrays this can be very computationally expensive.
-        blv_sets = [x.data_type.compute_bit_length_values() for x in self.fields[:field_index]]
-        combinations = itertools.product(*blv_sets)
-
-        # The interface prohibits empty sets at the output
-        return set(map(sum, combinations)) or {0}
+        return compute_cumulative_bit_length_values(self.fields, assume_tagged_union_aggregation=False)
 
 
 class ServiceType(CompoundType):

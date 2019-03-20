@@ -1055,19 +1055,18 @@ def _unittest_dsdl_parser_basics() -> None:
     _parse_definition(
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
+                @deprecated
+                @union
                 void16
                 int8          [<=123+456] array_inclusive
                 truncated int8[< 123+456] array_exclusive
                 saturated int8[  123+456] array_fixed
                 #ns.Bar.1.23 field
-                # Yields 8074.4
-                float64 b = {+10 * (-2 / -3) / 4 % 5, 123, 1/2, 1}
+                float64 b = +10 * (-2 / -3) / 4 % 5
                 bool a = !true
-                float16 a = (123456 + 0x_ab_cd_ef) / 0b1111_1111 ** 2 - 0o123_456 * 2.7
+                float32 a = (123456 + 0x_ab_cd_ef) / 0b1111_1111 ** 2 - 0o123_456 * 2.7
                 @print "Hello\r\nworld!"
                 @print
-                @deprecated
-                @union
                 @assert true
                 #@assert ns.Foo.1.0.THE_CONSTANT == 42
                 ''')),

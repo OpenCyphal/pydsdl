@@ -12,7 +12,7 @@ from fractions import Fraction
 from parsimonious import NodeVisitor, Grammar
 from parsimonious.nodes import Node
 
-from .frontend_error import FrontendError
+from .frontend_error import FrontendError, InternalError
 from . import data_type
 from . import expression
 
@@ -35,7 +35,7 @@ class StatementStreamProcessor:
     def on_constant(self,
                     constant_type: data_type.DataType,
                     name: str,
-                    initialization_expression: expression.Any) -> None:
+                    value: expression.Any) -> None:
         raise NotImplementedError
 
     def on_field(self, field_type: data_type.DataType, name: str) -> None:
@@ -66,7 +66,7 @@ class StatementStreamProcessor:
 #
 # Decorators and helpers for use with the transformer.
 #
-_VisitorHandler = typing.Callable[['ParseTreeTransformer', Node, tuple], typing.Any]
+_VisitorHandler = typing.Callable[['ParseTreeProcessor', Node, tuple], typing.Any]
 
 
 def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
@@ -74,7 +74,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     Simply logs the resulting transformation upon its completion.
     """
     @functools.wraps(fun)
-    def wrapper(self: 'ParseTreeTransformer', node: Node, children: tuple) -> typing.Any:
+    def wrapper(self: 'ParseTreeProcessor', node: Node, children: tuple) -> typing.Any:
         result = '<TRANSFORMATION FAILED>'  # type: typing.Any
         try:
             result = fun(self, node, children)
@@ -87,7 +87,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
 
 
 def _make_typesafe_child_lifter(expected_type: type, logged: bool = False) -> _VisitorHandler:
-    def visitor_handler(_self: 'ParseTreeTransformer', _node: Node, children: tuple) -> typing.Any:
+    def visitor_handler(_self: 'ParseTreeProcessor', _node: Node, children: tuple) -> typing.Any:
         sole_child, = children
         assert isinstance(sole_child, expected_type), \
             'The child should have been of type %r, not %r: %r' % (expected_type, type(sole_child), sole_child)
@@ -97,13 +97,13 @@ def _make_typesafe_child_lifter(expected_type: type, logged: bool = False) -> _V
 
 
 # noinspection PyMethodMayBeStatic
-class ParseTreeTransformer(NodeVisitor):
+class ParseTreeProcessor(NodeVisitor):
     # Populating the default grammar (see the NodeVisitor API).
     grammar = Grammar(open(_GRAMMAR_DEFINITION_FILE_PATH).read())
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = FrontendError,
+    unwrapped_exceptions = FrontendError, data_type.TypeParameterError
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
@@ -115,11 +115,11 @@ class ParseTreeTransformer(NodeVisitor):
 
     # ================================================= Core elements ================================================
 
-    visit_statement           = _make_typesafe_child_lifter(type(None))   # Make sure all sub-nodes have been handled,
-    visit_statement_attribute = _make_typesafe_child_lifter(type(None))   # because processing terminates here.
-    visit_statement_directive = _make_typesafe_child_lifter(type(None))
+    visit_statement           = _make_typesafe_child_lifter(type(None))  # Make sure all sub-nodes have been handled,
+    visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
+    visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
-    def visit_statement_constant(self, _node: Node, children: tuple) -> None:
+    def visit_statement_constant(self, node: Node, children: tuple) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
         assert isinstance(constant_type, data_type.DataType) and isinstance(name, str) and name
         assert isinstance(exp, expression.Any)
@@ -254,7 +254,13 @@ class ParseTreeTransformer(NodeVisitor):
     def visit_expression_atom(self, _node: Node, children: tuple) -> expression.Any:
         atom, = children
         if isinstance(atom, str):   # Identifier resolution
-            atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
+            new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
+            if not isinstance(new_atom, expression.Any):
+                raise InternalError('Identifier %r resolved as %r, expected expression' % (atom, type(new_atom)))
+
+            _logger.debug('Identifier resolution: %r --> %s', atom, new_atom.TYPE_NAME)
+            atom = new_atom
+            del new_atom
 
         assert isinstance(atom, expression.Any)
         return atom
