@@ -9,7 +9,8 @@ import tempfile
 from textwrap import dedent
 from . import expression
 from .frontend_error import InvalidDefinitionError
-from .dsdl_parser import parse_definition, DSDLSyntaxError, ConfigurationOptions
+from .parser import DSDLSyntaxError
+from .dsdl_parser import parse_definition, ConfigurationOptions
 from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
 from .dsdl_definition import DSDLDefinition, FileNameFormatError
 from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType

@@ -130,8 +130,7 @@ class DSDLDefinition:
         Definitions of the same name but different versions are not considered equal.
         """
         if isinstance(other, DSDLDefinition):
-            return self.full_name == other.full_name and \
-                   self.version == other.version
+            return self.full_name == other.full_name and self.version == other.version
         else:
             return NotImplemented
 

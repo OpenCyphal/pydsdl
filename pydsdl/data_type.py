@@ -186,8 +186,7 @@ class DataType(expression.Any):
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, DataType):
-            same_type = isinstance(other, type(self)) and \
-                        isinstance(self, type(other))
+            same_type = isinstance(other, type(self)) and isinstance(self, type(other))
             return same_type and str(self) == str(other)
         else:
             return NotImplemented

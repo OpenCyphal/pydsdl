@@ -6,12 +6,10 @@
 import typing
 import logging
 
-import parsimonious
-
 from . import data_type
 from .frontend_error import InvalidDefinitionError, FrontendError, InternalError
 from .dsdl_definition import DSDLDefinition
-from .parse_tree_processor import ParseTreeProcessor, StatementStreamProcessor
+from .parser import StatementStreamProcessor, parse
 from .data_structure_builder import DataStructureBuilder
 from . import expression
 from .port_id_ranges import is_valid_regulated_service_id, is_valid_regulated_subject_id
@@ -27,10 +25,6 @@ class ConfigurationOptions:
         self.print_handler = None                       # type: typing.Optional[PrintDirectiveOutputHandler]
         self.allow_unregulated_fixed_port_id = False
         self.skip_assertion_checks = False
-
-
-class DSDLSyntaxError(InvalidDefinitionError):
-    pass
 
 
 class UndefinedDataTypeError(InvalidDefinitionError):
@@ -64,23 +58,14 @@ def parse_definition(definition:            DSDLDefinition,
     try:
         builder = _TypeBuilder(definition, lookup_definitions, configuration_options)
         with open(definition.file_path) as f:
-            ParseTreeProcessor(builder).parse(f.read())  # type: ignore
+            parse(f.read(), builder)
 
         out = builder.finalize()
         _logger.info('Definition %r parsed as %r', definition, out)
         return out
-    except parsimonious.ParseError as ex:
-        raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())  # type: ignore
     except FrontendError as ex:                     # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
-        raise
-    except parsimonious.VisitationError as ex:      # pragma: no cover
-        try:
-            line = int(ex.original_class.line())    # type: typing.Optional[int]
-        except AttributeError:
-            line = None
-        # Treat as internal because all intentional errors are not wrapped into VisitationError.
-        raise InternalError(str(ex), path=definition.file_path, line=line)
+        raise ex
     except Exception as ex:                         # pragma: no cover
         raise InternalError(culprit=ex, path=definition.file_path)
 

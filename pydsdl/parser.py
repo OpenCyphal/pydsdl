@@ -7,22 +7,39 @@ import os
 import typing
 import logging
 import functools
+import fractions
 
-from fractions import Fraction
-from parsimonious import NodeVisitor, Grammar
-from parsimonious.nodes import Node
-
-from .frontend_error import FrontendError, InternalError
+from . import frontend_error
 from . import data_type
 from . import expression
 
-
-_GRAMMAR_DEFINITION_FILE_PATH = os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')
-
-_FULL_BIT_WIDTH_SET = list(range(1, 65))
+import parsimonious
+from parsimonious.nodes import Node as _Node
 
 
-_logger = logging.getLogger(__name__)
+class DSDLSyntaxError(frontend_error.InvalidDefinitionError):
+    pass
+
+
+def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> None:
+    """
+    The entry point of the parser. As the text is being parsed, the processor invokes appropriate
+    methods in the statement stream processor.
+    """
+    try:
+        if text and text[-1] != '\n':
+            raise DSDLSyntaxError('A blank line at the end of the file is required unless the file is empty')
+
+        _ParseTreeProcessor(statement_stream_processor).parse(text)  # type: ignore
+    except parsimonious.ParseError as ex:
+        raise DSDLSyntaxError('Syntax error', line=ex.line())  # type: ignore
+    except parsimonious.VisitationError as ex:  # pragma: no cover
+        try:
+            line = int(ex.original_class.line())  # type: typing.Optional[int]
+        except AttributeError:
+            line = None
+        # Treat as internal because all intentional errors are not wrapped into VisitationError.
+        raise frontend_error.InternalError(str(ex), line=line)
 
 
 class StatementStreamProcessor:
@@ -63,11 +80,11 @@ class StatementStreamProcessor:
         raise NotImplementedError
 
 
-#
-# Decorators and helpers for use with the transformer.
-#
+_logger = logging.getLogger(__name__)
+
+
 _Children = typing.Tuple[typing.Any, ...]
-_VisitorHandler = typing.Callable[['ParseTreeProcessor', Node, _Children], typing.Any]
+_VisitorHandler = typing.Callable[['_ParseTreeProcessor', _Node, _Children], typing.Any]
 _PrimitiveTypeConstructor = typing.Callable[[data_type.PrimitiveType.CastMode], data_type.PrimitiveType]
 
 
@@ -76,7 +93,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     Simply logs the resulting transformation upon its completion.
     """
     @functools.wraps(fun)
-    def wrapper(self: 'ParseTreeProcessor', node: Node, children: _Children) -> typing.Any:
+    def wrapper(self: '_ParseTreeProcessor', node: _Node, children: _Children) -> typing.Any:
         result = '<TRANSFORMATION FAILED>'  # type: typing.Any
         try:
             result = fun(self, node, children)
@@ -89,7 +106,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
 
 
 def _make_typesafe_child_lifter(expected_type: typing.Type[object], logged: bool = False) -> _VisitorHandler:
-    def visitor_handler(_self: 'ParseTreeProcessor', _node: Node, children: _Children) -> typing.Any:
+    def visitor_handler(_self: '_ParseTreeProcessor', _n: _Node, children: _Children) -> typing.Any:
         sole_child, = children
         assert isinstance(sole_child, expected_type), \
             'The child should have been of type %r, not %r: %r' % (expected_type, type(sole_child), sole_child)
@@ -103,7 +120,7 @@ def _make_binary_operator_handler(operator: expression.BinaryOperator[expression
 
 
 # noinspection PyMethodMayBeStatic
-class ParseTreeProcessor(NodeVisitor):
+class _ParseTreeProcessor(parsimonious.NodeVisitor):
     """
     This class processes the parse tree, evaluates the expressions and emits a high-level representation
     of the processed description. Essentially it does most of the ground work related to supporting the DSDL
@@ -114,17 +131,18 @@ class ParseTreeProcessor(NodeVisitor):
     done currently.
     """
     # Populating the default grammar (see the NodeVisitor API).
-    grammar = Grammar(open(_GRAMMAR_DEFINITION_FILE_PATH).read())  # type: ignore
+    grammar = parsimonious.Grammar(  # type: ignore
+        open(os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')).read())
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = FrontendError,  # type: ignore
+    unwrapped_exceptions = frontend_error.FrontendError,  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
         self._statement_stream_processor = statement_stream_processor   # type: StatementStreamProcessor
 
-    def generic_visit(self, node: Node, children: typing.Sequence[typing.Any]) -> typing.Any:
+    def generic_visit(self, node: _Node, children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
         return tuple(children) or node
 
@@ -134,40 +152,40 @@ class ParseTreeProcessor(NodeVisitor):
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
-    def visit_statement_constant(self, _node: Node, children: _Children) -> None:
+    def visit_statement_constant(self, _n: _Node, children: _Children) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
         assert isinstance(constant_type, data_type.DataType) and isinstance(name, str) and name
         assert isinstance(exp, expression.Any)
         self._statement_stream_processor.on_constant(constant_type, name, exp)
 
-    def visit_statement_field(self, _node: Node, children: _Children) -> None:
+    def visit_statement_field(self, _n: _Node, children: _Children) -> None:
         field_type, _space, name = children
         assert isinstance(field_type, data_type.DataType) and isinstance(name, str) and name
         self._statement_stream_processor.on_field(field_type, name)
 
-    def visit_statement_padding_field(self, _node: Node, children: _Children) -> None:
+    def visit_statement_padding_field(self, _n: _Node, children: _Children) -> None:
         void_type = children[0]
         assert isinstance(void_type, data_type.VoidType)
         self._statement_stream_processor.on_padding_field(void_type)
 
-    def visit_statement_service_response_marker(self, _node: Node, _children: _Children) -> None:
+    def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:
         self._statement_stream_processor.on_service_response_marker()
 
-    def visit_statement_directive_with_expression(self, node: Node, children: _Children) -> None:
+    def visit_statement_directive_with_expression(self, node: _Node, children: _Children) -> None:
         _at, name, _space, exp = children
         assert isinstance(name, str) and name and isinstance(exp, expression.Any)
         self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
                                                       directive_name=name,
                                                       associated_expression_value=exp)
 
-    def visit_statement_directive_without_expression(self, node: Node, children: _Children) -> None:
+    def visit_statement_directive_without_expression(self, node: _Node, children: _Children) -> None:
         _at, name = children
         assert isinstance(name, str) and name
         self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
                                                       directive_name=name,
                                                       associated_expression_value=None)
 
-    def visit_identifier(self, node: Node, _children: _Children) -> str:
+    def visit_identifier(self, node: _Node, _c: _Children) -> str:
         assert isinstance(node.text, str) and node.text
         return node.text
 
@@ -178,21 +196,21 @@ class ParseTreeProcessor(NodeVisitor):
     visit_type_scalar    = _make_typesafe_child_lifter(data_type.DataType, logged=True)
     visit_type_primitive = _make_typesafe_child_lifter(data_type.PrimitiveType)
 
-    visit_type_primitive_name = NodeVisitor.lift_child
+    visit_type_primitive_name = parsimonious.NodeVisitor.lift_child
 
-    def visit_type_array_variable_inclusive(self, _node: Node, children: _Children) -> data_type.DynamicArrayType:
+    def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) -> data_type.DynamicArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
         return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_array_variable_exclusive(self, _node: Node, children: _Children) -> data_type.DynamicArrayType:
+    def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) -> data_type.DynamicArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
         return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
-    def visit_type_array_fixed(self, _node: Node, children: _Children) -> data_type.StaticArrayType:
+    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> data_type.StaticArrayType:
         element_type, _s0, _bl, _s1, length, _s2, _br = children
         return data_type.StaticArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_versioned(self, _node: Node, children: _Children) -> data_type.CompoundType:
+    def visit_type_versioned(self, _n: _Node, children: _Children) -> data_type.CompoundType:
         name, name_tail, _, version = children
         assert isinstance(name, str) and name and isinstance(version, data_type.Version)
         for _, component in name_tail:
@@ -201,52 +219,52 @@ class ParseTreeProcessor(NodeVisitor):
 
         return self._statement_stream_processor.resolve_versioned_data_type(name, version)
 
-    def visit_type_version_specifier(self, _node: Node, children: _Children) -> data_type.Version:
+    def visit_type_version_specifier(self, _n: _Node, children: _Children) -> data_type.Version:
         major, _, minor = children
         assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
         return data_type.Version(major=major.as_native_integer(),
                                  minor=minor.as_native_integer())
 
-    def visit_type_primitive_truncated(self, _node: Node, children: _Children) -> data_type.PrimitiveType:
-        _kw, _sp, cons = children  # type: Node, Node, _PrimitiveTypeConstructor
+    def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> data_type.PrimitiveType:
+        _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
         return cons(data_type.PrimitiveType.CastMode.TRUNCATED)
 
-    def visit_type_primitive_saturated(self, _node: Node, children: _Children) -> data_type.PrimitiveType:
-        _, cons = children  # type: Node, _PrimitiveTypeConstructor
+    def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> data_type.PrimitiveType:
+        _, cons = children  # type: _Node, _PrimitiveTypeConstructor
         return cons(data_type.PrimitiveType.CastMode.SATURATED)
 
-    def visit_type_primitive_name_boolean(self, _node: Node, _children: _Children) -> _PrimitiveTypeConstructor:
+    def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.BooleanType(cm)     # lambda is only needed to make mypy shut up
 
-    def visit_type_primitive_name_unsigned_integer(self, _node: Node, children: _Children) -> _PrimitiveTypeConstructor:
+    def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.UnsignedIntegerType(children[-1], cm)
 
-    def visit_type_primitive_name_signed_integer(self, _node: Node, children: _Children) -> _PrimitiveTypeConstructor:
+    def visit_type_primitive_name_signed_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.SignedIntegerType(children[-1], cm)
 
-    def visit_type_primitive_name_floating_point(self, _node: Node, children: _Children) -> _PrimitiveTypeConstructor:
+    def visit_type_primitive_name_floating_point(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.FloatType(children[-1], cm)
 
-    def visit_type_void(self, _node: Node, children: _Children) -> data_type.VoidType:
+    def visit_type_void(self, _n: _Node, children: _Children) -> data_type.VoidType:
         _, width = children
         assert isinstance(width, int)
         return data_type.VoidType(width)
 
-    def visit_type_bit_length_suffix(self, node: Node, _children: _Children) -> int:
+    def visit_type_bit_length_suffix(self, node: _Node, _c: _Children) -> int:
         return int(node.text)
 
     # ================================================== Expressions ==================================================
 
-    visit_expression = NodeVisitor.lift_child
+    visit_expression = parsimonious.NodeVisitor.lift_child
 
-    visit_op2_log = NodeVisitor.lift_child
-    visit_op2_cmp = NodeVisitor.lift_child
-    visit_op2_bit = NodeVisitor.lift_child
-    visit_op2_add = NodeVisitor.lift_child
-    visit_op2_mul = NodeVisitor.lift_child
-    visit_op2_exp = NodeVisitor.lift_child
+    visit_op2_log = parsimonious.NodeVisitor.lift_child
+    visit_op2_cmp = parsimonious.NodeVisitor.lift_child
+    visit_op2_bit = parsimonious.NodeVisitor.lift_child
+    visit_op2_add = parsimonious.NodeVisitor.lift_child
+    visit_op2_mul = parsimonious.NodeVisitor.lift_child
+    visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
-    def visit_expression_list(self, _node: Node, children: _Children) -> typing.Tuple[expression.Any, ...]:
+    def visit_expression_list(self, _n: _Node, children: _Children) -> typing.Tuple[expression.Any, ...]:
         out = []    # type: typing.List[expression.Any]
         if children:
             children = children[0]
@@ -259,18 +277,18 @@ class ParseTreeProcessor(NodeVisitor):
         return tuple(out)
 
     @_logged_transformation
-    def visit_expression_parenthesized(self, _node: Node, children: _Children) -> expression.Any:
+    def visit_expression_parenthesized(self, _n: _Node, children: _Children) -> expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, expression.Any)
         return exp
 
-    def visit_expression_atom(self, _node: Node, children: _Children) -> expression.Any:
+    def visit_expression_atom(self, _n: _Node, children: _Children) -> expression.Any:
         atom, = children
         if isinstance(atom, str):   # Identifier resolution
             new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
             if not isinstance(new_atom, expression.Any):
-                raise InternalError('Identifier %r resolved as %r, expected expression' % (atom, type(new_atom)))
-
+                raise frontend_error.InternalError('Identifier %r resolved as %r, expected expression' %
+                                                   (atom, type(new_atom)))
             _logger.debug('Identifier resolution: %r --> %s', atom, new_atom.TYPE_NAME)
             atom = new_atom
             del new_atom
@@ -278,7 +296,7 @@ class ParseTreeProcessor(NodeVisitor):
         assert isinstance(atom, expression.Any)
         return atom
 
-    def _visit_binary_operator_chain(self, _node: Node, children: _Children) -> expression.Any:
+    def _visit_binary_operator_chain(self, _n: _Node, children: _Children) -> expression.Any:
         left = children[0]
         assert isinstance(left, expression.Any)
         for _, operator, _, right in children[1]:
@@ -298,22 +316,22 @@ class ParseTreeProcessor(NodeVisitor):
     visit_ex_logical        = _visit_binary_operator_chain
 
     # These are implemented via unary forms, no handling required.
-    visit_ex_logical_not = NodeVisitor.lift_child
-    visit_ex_inversion   = NodeVisitor.lift_child
+    visit_ex_logical_not = parsimonious.NodeVisitor.lift_child
+    visit_ex_inversion   = parsimonious.NodeVisitor.lift_child
 
-    def visit_op1_form_log_not(self, _node: Node, children: _Children) -> expression.Any:
+    def visit_op1_form_log_not(self, _n: _Node, children: _Children) -> expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, Node) and isinstance(exp, expression.Any)
+        assert isinstance(_op, _Node) and isinstance(exp, expression.Any)
         return expression.logical_not(exp)
 
-    def visit_op1_form_inv_pos(self, _node: Node, children: _Children) -> expression.Any:
+    def visit_op1_form_inv_pos(self, _n: _Node, children: _Children) -> expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, Node) and isinstance(exp, expression.Any)
+        assert isinstance(_op, _Node) and isinstance(exp, expression.Any)
         return expression.positive(exp)
 
-    def visit_op1_form_inv_neg(self, _node: Node, children: _Children) -> expression.Any:
+    def visit_op1_form_inv_neg(self, _n: _Node, children: _Children) -> expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, Node) and isinstance(exp, expression.Any)
+        assert isinstance(_op, _Node) and isinstance(exp, expression.Any)
         return expression.negative(exp)
 
     visit_op2_log_or  = _make_binary_operator_handler(expression.logical_or)
@@ -334,7 +352,7 @@ class ParseTreeProcessor(NodeVisitor):
     visit_op2_mul_mod = _make_binary_operator_handler(expression.modulo)
     visit_op2_exp_pow = _make_binary_operator_handler(expression.power)
 
-    def visit_op2_attrib(self, _node: Node, _children: _Children) -> expression.AttributeOperator[expression.Any]:
+    def visit_op2_attrib(self, _n: _Node, _c: _Children) -> expression.AttributeOperator[expression.Any]:
         return expression.attribute
 
     # ================================================== Literals ==================================================
@@ -343,31 +361,31 @@ class ParseTreeProcessor(NodeVisitor):
     visit_literal_boolean = _make_typesafe_child_lifter(expression.Boolean)
     visit_literal_string  = _make_typesafe_child_lifter(expression.String)
 
-    def visit_literal_set(self, _node: Node, children: _Children) -> expression.Set:
+    def visit_literal_set(self, _n: _Node, children: _Children) -> expression.Set:
         _, _, exp_list, _, _ = children
         assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
         return expression.Set(exp_list)
 
-    def visit_literal_real(self, node: Node, _children: _Children) -> expression.Rational:
-        return expression.Rational(Fraction(node.text))
+    def visit_literal_real(self, node: _Node, _c: _Children) -> expression.Rational:
+        return expression.Rational(fractions.Fraction(node.text))
 
-    def visit_literal_integer(self, node: Node, _children: _Children) -> expression.Rational:
+    def visit_literal_integer(self, node: _Node, _c: _Children) -> expression.Rational:
         return expression.Rational(int(node.text, base=0))
 
-    def visit_literal_integer_decimal(self, node: Node, _children: _Children) -> expression.Rational:
+    def visit_literal_integer_decimal(self, node: _Node, _c: _Children) -> expression.Rational:
         return expression.Rational(int(node.text))
 
-    def visit_literal_boolean_true(self, _node: Node, _children: _Children) -> expression.Boolean:
+    def visit_literal_boolean_true(self, _n: _Node, _c: _Children) -> expression.Boolean:
         return expression.Boolean(True)
 
-    def visit_literal_boolean_false(self, _node: Node, _children: _Children) -> expression.Boolean:
+    def visit_literal_boolean_false(self, _n: _Node, _c: _Children) -> expression.Boolean:
         return expression.Boolean(False)
 
-    def visit_literal_string_single_quoted(self, node: Node, _children: _Children) -> expression.String:
+    def visit_literal_string_single_quoted(self, node: _Node, _c: _Children) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         return expression.String(eval(node.text))
 
-    def visit_literal_string_double_quoted(self, node: Node, _children: _Children) -> expression.String:
+    def visit_literal_string_double_quoted(self, node: _Node, _c: _Children) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         return expression.String(eval(node.text))
 
@@ -377,7 +395,7 @@ class ParseTreeProcessor(NodeVisitor):
 #
 def _print_node(n: typing.Any) -> str:
     """Simple printing helper; the default printing method from Parsimonious is no good."""
-    if isinstance(n, Node):
+    if isinstance(n, _Node):
         return '%s=%r%s' % (
             n.expr.name or '<anonymous>',
             n.text,
@@ -389,7 +407,7 @@ def _print_node(n: typing.Any) -> str:
         return repr(n)
 
 
-def _get_line_number(node: Node) -> int:
+def _get_line_number(node: _Node) -> int:
     """Returns the one-based line number where the specified node is located."""
     return int(node.full_text.count('\n', 0, node.start) + 1)
 
