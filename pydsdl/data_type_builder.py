@@ -14,11 +14,11 @@ from . import data_structure_builder
 from . import port_id_ranges
 
 
-class UndefinedDataTypeError(frontend_error.InvalidDefinitionError):
+class AssertionCheckFailureError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class AssertionCheckFailureError(frontend_error.InvalidDefinitionError):
+class UndefinedDataTypeError(frontend_error.InvalidDefinitionError):
     pass
 
 
@@ -26,7 +26,7 @@ class UndefinedIdentifierError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class InvalidDirectiveUsageError(frontend_error.InvalidDefinitionError):
+class InvalidDirectiveError(frontend_error.InvalidDefinitionError):
     pass
 
 
@@ -122,7 +122,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
                 'deprecated': self._on_deprecated_directive,
             }[directive_name]
         except KeyError:
-            raise InvalidDirectiveUsageError('Unknown directive %r' % directive_name)
+            raise InvalidDirectiveError('Unknown directive %r' % directive_name)
         else:
             assert callable(handler)
             return handler(line_number, associated_expression_value)
@@ -180,36 +180,36 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
             else:
                 _logger.debug('Assertion check successful at %s:%d', self._definition.file_path, line_number)
         elif value is None:
-            raise InvalidDirectiveUsageError('Assert directive requires an expression')
+            raise InvalidDirectiveError('Assert directive requires an expression')
         else:
-            raise InvalidDirectiveUsageError('The assertion check expression must yield a boolean, not %s' %
-                                             value.TYPE_NAME)
+            raise InvalidDirectiveError('The assertion check expression must yield a boolean, not %s' %
+                                        value.TYPE_NAME)
 
     def _on_union_directive(self, _ln: int, value: typing.Optional[expression.Any]) -> None:
         if value is not None:
-            raise InvalidDirectiveUsageError('The union directive does not expect an expression')
+            raise InvalidDirectiveError('The union directive does not expect an expression')
 
         if self._structs[-1].union:
-            raise InvalidDirectiveUsageError('Duplicated union directive')
+            raise InvalidDirectiveError('Duplicated union directive')
 
         if not self._structs[-1].empty:
-            raise InvalidDirectiveUsageError('The union directive must be placed before the first '
-                                             'attribute definition')
+            raise InvalidDirectiveError('The union directive must be placed before the first '
+                                        'attribute definition')
 
         self._structs[-1].make_union()
 
     def _on_deprecated_directive(self, _ln: int, value: typing.Optional[expression.Any]) -> None:
         if value is not None:
-            raise InvalidDirectiveUsageError('The deprecated directive does not expect an expression')
+            raise InvalidDirectiveError('The deprecated directive does not expect an expression')
 
         if self._is_deprecated:
-            raise InvalidDirectiveUsageError('Duplicated deprecated directive')
+            raise InvalidDirectiveError('Duplicated deprecated directive')
 
         if len(self._structs) > 1:
-            raise InvalidDirectiveUsageError('The deprecated directive cannot be placed in the response section')
+            raise InvalidDirectiveError('The deprecated directive cannot be placed in the response section')
 
         if not self._structs[-1].empty:
-            raise InvalidDirectiveUsageError('The deprecated directive must be placed before the first '
-                                             'attribute definition')
+            raise InvalidDirectiveError('The deprecated directive must be placed before the first '
+                                        'attribute definition')
 
         self._is_deprecated = True

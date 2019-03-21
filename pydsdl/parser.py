@@ -417,4 +417,5 @@ def _unwrap_array_capacity(ex: expression.Any) -> int:
         assert isinstance(out, int)     # Oh mypy, why are you so weird
         return out
     else:
-        raise expression.InvalidOperandError('Array capacity expression must yield a rational, not %s' % ex.TYPE_NAME)
+        raise frontend_error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
+                                                    ex.TYPE_NAME)

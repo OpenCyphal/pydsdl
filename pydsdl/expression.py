@@ -16,11 +16,7 @@ BinaryOperator    = typing.Callable[['Any', 'Any'], OperatorOutput]
 AttributeOperator = typing.Callable[['Any', typing.Union['String', str]], OperatorOutput]
 
 
-class ExpressionError(frontend_error.InvalidDefinitionError):
-    pass
-
-
-class InvalidOperandError(ExpressionError):
+class InvalidOperandError(frontend_error.InvalidDefinitionError):
     pass
 
 
