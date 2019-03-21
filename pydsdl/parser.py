@@ -520,3 +520,11 @@ def _unittest_parse_string_literal() -> None:
 
     with raises(DSDLSyntaxError, match='.*escape.*'):
         _parse_string_literal("'\\z'")
+
+    once('"evening"', 'evening')    # okay we support English, cool
+    once('"вечер"', 'вечер')        # and Russian too
+    once('"õhtust"', 'õhtust')      # heck, even Estonian
+
+    once('"night"', 'night')
+    once('"ночь"', 'ночь')
+    once('"öö"', 'öö')
