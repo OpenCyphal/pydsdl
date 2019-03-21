@@ -169,6 +169,16 @@ This is enforced statically with MyPy.
 
 Ensure compatibility with Python 3.5 and all newer versions.
 
+Do not import specific entities; instead, import only the package itself and then use verbose references,
+as shown below.
+If you really need to import a specific entity, consider prefixing it with an underscore to prevent
+scope leakage, unless you want it to be externally visible.
+
+```python
+from . import data_type                 # Good
+from .data_type import CompoundType     # Pls no
+```
+
 ### Writing tests
 
 100% coverage is required.

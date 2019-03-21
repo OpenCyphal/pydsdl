@@ -7,11 +7,11 @@ import os
 import typing
 import logging
 import fnmatch
-from collections import defaultdict
-from .data_type import CompoundType, ServiceType
-from .dsdl_definition import DSDLDefinition
-from .dsdl_parser import parse_definition, ConfigurationOptions, PrintDirectiveOutputHandler
-from .frontend_error import FrontendError, InternalError, InvalidDefinitionError
+import collections
+from . import data_type
+from . import dsdl_definition
+from . import dsdl_parser
+from . import frontend_error
 
 
 DSDL_FILE_GLOB = '*.uavcan'
@@ -21,7 +21,7 @@ _logger = logging.getLogger(__name__)
 _LOG_LIST_ITEM_PREFIX = ' ' * 4
 
 
-class NamespaceNameCollisionError(InvalidDefinitionError):
+class NamespaceNameCollisionError(frontend_error.InvalidDefinitionError):
     """
     Raised when there is more than one namespace under the same name.
     This may occur if there are identically named namespaces located in different directories.
@@ -29,14 +29,14 @@ class NamespaceNameCollisionError(InvalidDefinitionError):
     pass
 
 
-class NestedRootNamespaceError(InvalidDefinitionError):
+class NestedRootNamespaceError(frontend_error.InvalidDefinitionError):
     """
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
     """
     pass
 
 
-class FixedPortIDCollisionError(InvalidDefinitionError):
+class FixedPortIDCollisionError(frontend_error.InvalidDefinitionError):
     """
     Raised when there is more than one data type, or different major versions of the same data type
     using the same fixed port ID.
@@ -44,14 +44,14 @@ class FixedPortIDCollisionError(InvalidDefinitionError):
     pass
 
 
-class MinorVersionsNotBitCompatibleError(InvalidDefinitionError):
+class MinorVersionsNotBitCompatibleError(frontend_error.InvalidDefinitionError):
     """
     Raised when definitions under the same major version are not bit-compatible.
     """
     pass
 
 
-class MultipleDefinitionsUnderSameVersionError(InvalidDefinitionError):
+class MultipleDefinitionsUnderSameVersionError(frontend_error.InvalidDefinitionError):
     """
     For example:
         Type.1.0.uavcan
@@ -61,14 +61,14 @@ class MultipleDefinitionsUnderSameVersionError(InvalidDefinitionError):
     pass
 
 
-class VersionsOfDifferentKindError(InvalidDefinitionError):
+class VersionsOfDifferentKindError(frontend_error.InvalidDefinitionError):
     """
     Definitions that share the same name but are of different kinds.
     """
     pass
 
 
-class MinorVersionFixedPortIDError(InvalidDefinitionError):
+class MinorVersionFixedPortIDError(frontend_error.InvalidDefinitionError):
     """
     Different fixed port ID under the same major version, or a fixed port ID was removed under the same
     major version.
@@ -78,10 +78,10 @@ class MinorVersionFixedPortIDError(InvalidDefinitionError):
 
 def parse_namespace(root_namespace_directory:        str,
                     lookup_directories:              typing.Iterable[str],
-                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
+                    print_directive_output_handler:  typing.Optional[dsdl_parser.PrintDirectiveOutputHandler] = None,
                     allow_unregulated_fixed_port_id: bool = False,
                     skip_assertion_checks:           bool = False) -> \
-        typing.List[CompoundType]:
+        typing.List[data_type.CompoundType]:
     """
     Parse all DSDL definitions in the specified root namespace directory.
 
@@ -130,7 +130,7 @@ def parse_namespace(root_namespace_directory:        str,
     for x in target_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-    lookup_dsdl_definitions = []    # type: typing.List[DSDLDefinition]
+    lookup_dsdl_definitions = []    # type: typing.List[dsdl_definition.DSDLDefinition]
     for ld in lookup_directories:
         lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
@@ -139,7 +139,7 @@ def parse_namespace(root_namespace_directory:        str,
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     # Parse the constructed definitions
-    configuration_options = ConfigurationOptions()
+    configuration_options = dsdl_parser.ConfigurationOptions()
     configuration_options.print_handler = print_directive_output_handler
     configuration_options.allow_unregulated_fixed_port_id = bool(allow_unregulated_fixed_port_id)
     configuration_options.skip_assertion_checks = bool(skip_assertion_checks)
@@ -160,10 +160,10 @@ def parse_namespace(root_namespace_directory:        str,
     return types
 
 
-def _parse_namespace_definitions(target_definitions:    typing.List[DSDLDefinition],
-                                 lookup_definitions:    typing.List[DSDLDefinition],
-                                 configuration_options: ConfigurationOptions) -> \
-        typing.List[CompoundType]:
+def _parse_namespace_definitions(target_definitions:    typing.List[dsdl_definition.DSDLDefinition],
+                                 lookup_definitions:    typing.List[dsdl_definition.DSDLDefinition],
+                                 configuration_options: dsdl_parser.ConfigurationOptions) -> \
+        typing.List[data_type.CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
     Allow the target definitions to use the lookup definitions within themselves.
@@ -171,30 +171,30 @@ def _parse_namespace_definitions(target_definitions:    typing.List[DSDLDefiniti
     :param lookup_definitions:  Which definitions can be used by the parsed definitions.
     :return: A list of types.
     """
-    types = []  # type: typing.List[CompoundType]
+    types = []  # type: typing.List[data_type.CompoundType]
     for tdd in target_definitions:
         try:
-            parsed = parse_definition(tdd,
-                                      lookup_definitions,
-                                      configuration_options=configuration_options)
-        except FrontendError as ex:    # pragma: no cover
+            parsed = dsdl_parser.parse_definition(tdd,
+                                                  lookup_definitions,
+                                                  configuration_options=configuration_options)
+        except frontend_error.FrontendError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
         except Exception as ex:     # pragma: no cover
-            raise InternalError(culprit=ex, path=tdd.file_path) from ex
+            raise frontend_error.InternalError(culprit=ex, path=tdd.file_path) from ex
         else:
             types.append(parsed)
 
     return types
 
 
-def _ensure_no_fixed_port_id_collisions(types: typing.List[CompoundType]) -> None:
+def _ensure_no_fixed_port_id_collisions(types: typing.List[data_type.CompoundType]) -> None:
     for a in types:
         for b in types:
             different_names = a.full_name != b.full_name
             different_major_versions = a.version.major != b.version.major
             # Must be the same kind because port ID sets of subjects and services are orthogonal
-            same_kind = isinstance(a, ServiceType) == isinstance(b, ServiceType)
+            same_kind = isinstance(a, data_type.ServiceType) == isinstance(b, data_type.ServiceType)
             # Data types where the major version is zero are allowed to collide
             both_released = (a.version.major > 0) and (b.version.major > 0)
 
@@ -209,13 +209,13 @@ def _ensure_no_fixed_port_id_collisions(types: typing.List[CompoundType]) -> Non
                         )
 
 
-def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> None:
-    by_name = defaultdict(list)  # type: typing.DefaultDict[str, typing.List[CompoundType]]
+def _ensure_minor_version_compatibility(types: typing.List[data_type.CompoundType]) -> None:
+    by_name = collections.defaultdict(list)  # type: typing.DefaultDict[str, typing.List[data_type.CompoundType]]
     for t in types:
         by_name[t.full_name].append(t)
 
     for name, definitions in by_name.items():
-        by_major = defaultdict(list)    # type: typing.DefaultDict[int, typing.List[CompoundType]]
+        by_major = collections.defaultdict(list)    # type: typing.DefaultDict[int, typing.List[data_type.CompoundType]]
         for t in definitions:
             by_major[t.version.major].append(t)
 
@@ -237,15 +237,15 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                         )
 
                     # Must be of the same kind: both messages or both services
-                    if isinstance(a, ServiceType) != isinstance(b, ServiceType):
+                    if isinstance(a, data_type.ServiceType) != isinstance(b, data_type.ServiceType):
                         raise VersionsOfDifferentKindError(
                             'This definition is not of the same kind as %r' % b.source_file_path,
                             path=a.source_file_path
                         )
 
                     # Must be bit-compatible
-                    if isinstance(a, ServiceType):
-                        assert isinstance(b, ServiceType)
+                    if isinstance(a, data_type.ServiceType):
+                        assert isinstance(b, data_type.ServiceType)
                         ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
                             a.response_type.is_mutually_bit_compatible_with(b.response_type)
                     else:
@@ -296,7 +296,7 @@ def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> N
                                                   path=a)
 
 
-def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[DSDLDefinition]:
+def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[dsdl_definition.DSDLDefinition]:
     """
     Accepts a directory path, returns a list of abstract DSDL file representations.
     Those can be fed to the actual DSDL parser later.
@@ -317,9 +317,9 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
     for a in source_file_paths:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
-    output = []  # type: typing.List[DSDLDefinition]
+    output = []  # type: typing.List[dsdl_definition.DSDLDefinition]
     for fp in source_file_paths:
-        dsdl_def = DSDLDefinition(fp, root_namespace_path)
+        dsdl_def = dsdl_definition.DSDLDefinition(fp, root_namespace_path)
         output.append(dsdl_def)
 
     return output
@@ -350,7 +350,7 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
     print(dsdl_defs)
-    lut = {x.full_name: x for x in dsdl_defs}    # type: typing.Dict[str, DSDLDefinition]
+    lut = {x.full_name: x for x in dsdl_defs}    # type: typing.Dict[str, dsdl_definition.DSDLDefinition]
     assert len(lut) == 3
 
     assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])

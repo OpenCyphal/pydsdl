@@ -8,16 +8,15 @@ import enum
 import string
 import typing
 import itertools
-from fractions import Fraction
-
+import fractions
 from . import expression
-from .frontend_error import InvalidDefinitionError
-from .port_id_ranges import MAX_SUBJECT_ID, MAX_SERVICE_ID
+from . import frontend_error
+from . import port_id_ranges
 
 
 BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)])
 
-ValueRange = typing.NamedTuple('ValueRange', [('min', Fraction), ('max', Fraction)])
+ValueRange = typing.NamedTuple('ValueRange', [('min', fractions.Fraction), ('max', fractions.Fraction)])
 
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
 
@@ -62,7 +61,7 @@ _DISALLOWED_NAME_PATTERNS = [
 ]
 
 
-class TypeParameterError(InvalidDefinitionError):
+class TypeParameterError(frontend_error.InvalidDefinitionError):
     """This exception is not related to parsing errors, so it does not inherit from the same root."""
     pass
 
@@ -287,8 +286,8 @@ class SignedIntegerType(IntegerType):
     @property
     def inclusive_value_range(self) -> ValueRange:
         uint_max_half = ((1 << self.bit_length) - 1) // 2
-        return ValueRange(min=Fraction(-uint_max_half - 1),
-                          max=Fraction(+uint_max_half))
+        return ValueRange(min=fractions.Fraction(-uint_max_half - 1),
+                          max=fractions.Fraction(+uint_max_half))
 
     def __str__(self) -> str:
         return self._cast_mode_name + ' int' + str(self.bit_length)
@@ -302,8 +301,8 @@ class UnsignedIntegerType(IntegerType):
 
     @property
     def inclusive_value_range(self) -> ValueRange:
-        return ValueRange(min=Fraction(0),
-                          max=Fraction((1 << self.bit_length) - 1))
+        return ValueRange(min=fractions.Fraction(0),
+                          max=fractions.Fraction((1 << self.bit_length) - 1))
 
     def __str__(self) -> str:
         return self._cast_mode_name + ' uint' + str(self.bit_length)
@@ -317,10 +316,10 @@ class FloatType(ArithmeticType):
 
         try:
             self._magnitude = {
-                16: Fraction(65504),
-                32: Fraction('3.40282346638528859812e+38'),
-                64: Fraction('1.79769313486231570815e+308'),
-            }[self.bit_length]  # type: Fraction
+                16: fractions.Fraction(65504),
+                32: fractions.Fraction('3.40282346638528859812e+38'),
+                64: fractions.Fraction('1.79769313486231570815e+308'),
+            }[self.bit_length]  # type: fractions.Fraction
         except KeyError:
             raise InvalidBitLengthError('Invalid bit length for float type: %d' % bit_length) from None
 
@@ -653,7 +652,6 @@ class Constant(Attribute):
 
         # Interestingly, both the type of the constant and its value are instances of the same meta-type: expression.
         # BooleanType inherits from expression.Any, same as expression.Boolean.
-        # Type check
         if isinstance(data_type, BooleanType):      # Boolean constant
             if not isinstance(self._value, expression.Boolean):
                 raise InvalidConstantValueError('Invalid value for boolean constant: %r' % self._value)
@@ -777,10 +775,10 @@ class CompoundType(DataType):
         if port_id is not None:
             assert port_id is not None
             if isinstance(self, ServiceType):
-                if not (0 <= port_id <= MAX_SERVICE_ID):
+                if not (0 <= port_id <= port_id_ranges.MAX_SERVICE_ID):
                     raise InvalidFixedPortIDError('Fixed service ID %r is not valid' % port_id)
             else:
-                if not (0 <= port_id <= MAX_SUBJECT_ID):
+                if not (0 <= port_id <= port_id_ranges.MAX_SUBJECT_ID):
                     raise InvalidFixedPortIDError('Fixed subject ID %r is not valid' % port_id)
 
         # Consistent deprecation check.

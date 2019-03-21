@@ -5,19 +5,19 @@
 
 import typing
 import logging
-
 from . import data_type
-from .frontend_error import InvalidDefinitionError, FrontendError, InternalError
-from .dsdl_definition import DSDLDefinition
-from .parser import StatementStreamProcessor, parse
-from .data_structure_builder import DataStructureBuilder
 from . import expression
-from .port_id_ranges import is_valid_regulated_service_id, is_valid_regulated_subject_id
+from . import frontend_error
+from . import dsdl_definition
+from . import parser
+from . import data_structure_builder
+from . import port_id_ranges
 
 
 # Arguments: emitting definition, line number, value to print or None. The return value is ignored and should be None.
 # The lines are numbered starting from one.
-PrintDirectiveOutputHandler = typing.Callable[[DSDLDefinition, int, typing.Optional[expression.Any]], None]
+PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, typing.Optional[expression.Any]],
+                                              None]
 
 
 class ConfigurationOptions:
@@ -27,27 +27,27 @@ class ConfigurationOptions:
         self.skip_assertion_checks = False
 
 
-class UndefinedDataTypeError(InvalidDefinitionError):
+class UndefinedDataTypeError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class AssertionCheckFailureError(InvalidDefinitionError):
+class AssertionCheckFailureError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class UndefinedIdentifierError(InvalidDefinitionError):
+class UndefinedIdentifierError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class InvalidDirectiveUsageError(InvalidDefinitionError):
+class InvalidDirectiveUsageError(frontend_error.InvalidDefinitionError):
     pass
 
 
 _logger = logging.getLogger(__name__)
 
 
-def parse_definition(definition:            DSDLDefinition,
-                     lookup_definitions:    typing.Sequence[DSDLDefinition],
+def parse_definition(definition:            dsdl_definition.DSDLDefinition,
+                     lookup_definitions:    typing.Sequence[dsdl_definition.DSDLDefinition],
                      configuration_options: ConfigurationOptions) -> data_type.CompoundType:
     _logger.info('Parsing definition %r...', definition)
 
@@ -58,40 +58,40 @@ def parse_definition(definition:            DSDLDefinition,
     try:
         builder = _TypeBuilder(definition, lookup_definitions, configuration_options)
         with open(definition.file_path) as f:
-            parse(f.read(), builder)
+            parser.parse(f.read(), builder)
 
         out = builder.finalize()
         _logger.info('Definition %r parsed as %r', definition, out)
         return out
-    except FrontendError as ex:                     # pragma: no cover
+    except frontend_error.FrontendError as ex:                     # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
         raise ex
     except Exception as ex:                         # pragma: no cover
-        raise InternalError(culprit=ex, path=definition.file_path)
+        raise frontend_error.InternalError(culprit=ex, path=definition.file_path)
 
 
-class _TypeBuilder(StatementStreamProcessor):
+class _TypeBuilder(parser.StatementStreamProcessor):
     def __init__(self,
-                 definition:            DSDLDefinition,
-                 lookup_definitions:    typing.Sequence[DSDLDefinition],
+                 definition:            dsdl_definition.DSDLDefinition,
+                 lookup_definitions:    typing.Sequence[dsdl_definition.DSDLDefinition],
                  configuration_options: ConfigurationOptions):
         self._definition = definition
         self._lookup_definitions = lookup_definitions
         self._configuration = configuration_options
 
-        self._structs = [DataStructureBuilder()]
+        self._structs = [data_structure_builder.DataStructureBuilder()]
         self._is_deprecated = False
 
     def finalize(self) -> data_type.CompoundType:
         if len(self._structs) == 1:     # Message type
-            struct, = self._structs     # type: DataStructureBuilder,
+            struct, = self._structs     # type: data_structure_builder.DataStructureBuilder,
             if struct.union:
                 out = data_type.UnionType(name=self._definition.full_name,
                                           version=self._definition.version,
                                           attributes=struct.attributes,
                                           deprecated=self._is_deprecated,
                                           fixed_port_id=self._definition.fixed_port_id,
-                                          source_file_path=self._definition.file_path)    # type: data_type.CompoundType
+                                          source_file_path=self._definition.file_path)  # type: data_type.CompoundType
             else:
                 out = data_type.StructureType(name=self._definition.full_name,
                                               version=self._definition.version,
@@ -100,7 +100,7 @@ class _TypeBuilder(StatementStreamProcessor):
                                               fixed_port_id=self._definition.fixed_port_id,
                                               source_file_path=self._definition.file_path)
         else:  # Service type
-            request, response = self._structs   # type: DataStructureBuilder, DataStructureBuilder
+            request, response = self._structs
             # noinspection SpellCheckingInspection
             out = data_type.ServiceType(name=self._definition.full_name,            # pozabito vse na svete
                                         version=self._definition.version,           # serdce zamerlo v grudi
@@ -116,7 +116,8 @@ class _TypeBuilder(StatementStreamProcessor):
             port_id = out.fixed_port_id
             if port_id is not None:
                 is_service_type = isinstance(out, data_type.ServiceType)
-                f = is_valid_regulated_service_id if is_service_type else is_valid_regulated_subject_id
+                f = port_id_ranges.is_valid_regulated_service_id if is_service_type else \
+                    port_id_ranges.is_valid_regulated_subject_id
                 if not f(port_id, out.root_namespace):
                     raise data_type.InvalidFixedPortIDError('Regulated port ID %r for %s type %r is not valid. '
                                                             'Consider using allow_unregulated_fixed_port_id.' %
@@ -158,9 +159,9 @@ class _TypeBuilder(StatementStreamProcessor):
 
     def on_service_response_marker(self) -> None:
         if len(self._structs) > 1:
-            raise InvalidDefinitionError('Duplicated service response marker')
+            raise frontend_error.InvalidDefinitionError('Duplicated service response marker')
 
-        self._structs.append(DataStructureBuilder())
+        self._structs.append(data_structure_builder.DataStructureBuilder())
         assert len(self._structs) == 2
 
     def resolve_top_level_identifier(self, name: str) -> expression.Any:
@@ -184,10 +185,10 @@ class _TypeBuilder(StatementStreamProcessor):
             raise UndefinedDataTypeError('Data type %r version %d.%d could not be found' %
                                          (full_name, version.major, version.minor))
         if len(found) > 1:
-            raise InternalError('Conflicting definitions: %r' % found)
+            raise frontend_error.InternalError('Conflicting definitions: %r' % found)
 
         target_definition = found[0]
-        assert isinstance(target_definition, DSDLDefinition)
+        assert isinstance(target_definition, dsdl_definition.DSDLDefinition)
         assert target_definition.full_name == full_name
         assert target_definition.version == version
 

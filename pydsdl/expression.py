@@ -6,9 +6,8 @@
 import typing
 import operator
 import functools
-from fractions import Fraction
-
-from .frontend_error import InvalidDefinitionError
+import fractions
+from . import frontend_error
 
 
 OperatorOutput    = typing.TypeVar('OperatorOutput')
@@ -17,7 +16,7 @@ BinaryOperator    = typing.Callable[['Any', 'Any'], OperatorOutput]
 AttributeOperator = typing.Callable[['Any', typing.Union['String', str]], OperatorOutput]
 
 
-class ExpressionError(InvalidDefinitionError):
+class ExpressionError(frontend_error.InvalidDefinitionError):
     pass
 
 
@@ -176,13 +175,13 @@ class Boolean(Primitive):
 class Rational(Primitive):
     TYPE_NAME = 'rational'
 
-    def __init__(self, value: typing.Union[int, Fraction]):
-        if not isinstance(value, (int, Fraction)):
+    def __init__(self, value: typing.Union[int, fractions.Fraction]):
+        if not isinstance(value, (int, fractions.Fraction)):
             raise ValueError('Cannot construct a Rational instance from ' + type(value).__name__)
-        self._value = Fraction(value)  # type: Fraction
+        self._value = fractions.Fraction(value)  # type: fractions.Fraction
 
     @property
-    def native_value(self) -> Fraction:
+    def native_value(self) -> fractions.Fraction:
         return self._value
 
     def as_native_integer(self) -> int:
@@ -722,7 +721,7 @@ def _unittest_expressions() -> None:
                 ),
                 r(5)
             ),
-            r(Fraction(12, 5))
+            r(fractions.Fraction(12, 5))
         ).native_value
 
     assert add(s('123'), s('abc')).native_value == '123abc'  # type: ignore
@@ -746,8 +745,8 @@ def _unittest_expressions() -> None:
 
 
 def _unittest_textual_representations() -> None:
-    assert str(Rational(Fraction(123, 456))) == '41/152'
-    assert repr(Rational(Fraction(123, 456))) == 'rational(41/152)'
+    assert str(Rational(fractions.Fraction(123, 456))) == '41/152'
+    assert repr(Rational(fractions.Fraction(123, 456))) == 'rational(41/152)'
     assert str(Rational(-123)) == '-123'
     assert repr(Rational(-123)) == 'rational(-123)'
 
@@ -757,14 +756,14 @@ def _unittest_textual_representations() -> None:
     assert str(String('Hello\nworld!')) == r"'Hello\nworld!'"
     assert repr(String('Hello\nworld!')) == r"string('Hello\nworld!')"
 
-    tmp = str(Set([Rational(1), Rational(Fraction(-9, 7))]))
+    tmp = str(Set([Rational(1), Rational(fractions.Fraction(-9, 7))]))
     assert tmp == '{1, -9/7}' or tmp == '{-9/7, 1}'
 
-    tmp = repr(Set([Rational(1), Rational(Fraction(-9, 7))]))
+    tmp = repr(Set([Rational(1), Rational(fractions.Fraction(-9, 7))]))
     assert tmp == 'set({1, -9/7})' or tmp == 'set({-9/7, 1})'
 
-    tmp = str(Set([Set([Rational(1), Rational(Fraction(-9, 7))]),
-                   Set([Rational(Fraction(90, 7))])]))
+    tmp = str(Set([Set([Rational(1), Rational(fractions.Fraction(-9, 7))]),
+                   Set([Rational(fractions.Fraction(90, 7))])]))
     assert \
         tmp == '{{1, -9/7}, {90/7}}' or \
         tmp == '{{-9/7, 1}, {90/7}}' or \

@@ -8,13 +8,11 @@ import typing
 import logging
 import functools
 import fractions
-
+import parsimonious
+from parsimonious.nodes import Node as _Node
 from . import frontend_error
 from . import data_type
 from . import expression
-
-import parsimonious
-from parsimonious.nodes import Node as _Node
 
 
 class DSDLSyntaxError(frontend_error.InvalidDefinitionError):
