@@ -309,10 +309,10 @@ def _unittest_error() -> None:
     with raises(parser.DSDLSyntaxError):
         standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]')
 
-    with raises(frontend_error.InvalidDefinitionError, match='(?i).*array size.*'):
+    with raises(frontend_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array')
 
-    with raises(frontend_error.InvalidDefinitionError, match='(?i).*array size.*'):
+    with raises(frontend_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
 
     with raises(frontend_error.InvalidDefinitionError, match='(?i).*service response marker.*'):

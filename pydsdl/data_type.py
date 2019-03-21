@@ -413,13 +413,22 @@ def _unittest_void() -> None:
 
 
 class ArrayType(DataType):
-    def __init__(self, element_type: DataType):
+    def __init__(self,
+                 element_type: DataType,
+                 capacity: int):
         super(ArrayType, self).__init__()
         self._element_type = element_type
+        self._capacity = int(capacity)
+        if self._capacity < 1:
+            raise InvalidNumberOfElementsError('Array capacity cannot be less than 1')
 
     @property
     def element_type(self) -> DataType:
         return self._element_type
+
+    @property
+    def capacity(self) -> int:
+        return self._capacity
 
     @property
     def string_like(self) -> bool:
@@ -436,80 +445,66 @@ class ArrayType(DataType):
         raise NotImplementedError
 
 
-class StaticArrayType(ArrayType):
+class FixedLengthArrayType(ArrayType):
     def __init__(self,
                  element_type: DataType,
-                 size: int):
-        super(StaticArrayType, self).__init__(element_type)
-        self._size = int(size)
-
-        if self._size < 1:
-            raise InvalidNumberOfElementsError('Array size cannot be less than 1')
-
-    @property
-    def size(self) -> int:
-        return self._size
+                 capacity: int):
+        super(FixedLengthArrayType, self).__init__(element_type, capacity)
 
     @property
     def bit_length_range(self) -> BitLengthRange:
-        return BitLengthRange(min=self.element_type.bit_length_range.min * self.size,
-                              max=self.element_type.bit_length_range.max * self.size)
+        return BitLengthRange(min=self.element_type.bit_length_range.min * self.capacity,
+                              max=self.element_type.bit_length_range.max * self.capacity)
 
     def compute_bit_length_values(self) -> typing.Set[int]:
         # Combinatorics is tricky.
         # The cornerstone concept here is the standard library function "combinations_with_replacement()",
         # which implements the standard n-combination function.
-        combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(), self.size)
+        combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(),
+                                                               self.capacity)
         # We do not care about permutations because the final bit length is invariant to the order of
         # serialized elements. Having found all combinations, we need to obtain a set of resulting length values.
         return set(map(sum, combinations))
 
     def __str__(self) -> str:
-        return '%s[%d]' % (self.element_type, self.size)
+        return '%s[%d]' % (self.element_type, self.capacity)
 
     def __repr__(self) -> str:
-        return 'StaticArrayType(element_type=%r, size=%r)' % (self.element_type, self.size)
+        return 'FixedLengthArrayType(element_type=%r, capacity=%r)' % (self.element_type, self.capacity)
 
 
-def _unittest_static_array() -> None:
+def _unittest_fixed_array() -> None:
     from pytest import raises
 
     su8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.SATURATED)
     ti64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.TRUNCATED)
 
-    assert str(StaticArrayType(su8, 4)) == 'saturated uint8[4]'
-    assert str(StaticArrayType(ti64, 1)) == 'truncated int64[1]'
+    assert str(FixedLengthArrayType(su8, 4)) == 'saturated uint8[4]'
+    assert str(FixedLengthArrayType(ti64, 1)) == 'truncated int64[1]'
 
-    assert not StaticArrayType(su8, 4).string_like
-    assert not StaticArrayType(ti64, 1).string_like
+    assert not FixedLengthArrayType(su8, 4).string_like
+    assert not FixedLengthArrayType(ti64, 1).string_like
 
-    assert StaticArrayType(su8, 4).bit_length_range == (32, 32)
-    assert StaticArrayType(su8, 200).size == 200
-    assert StaticArrayType(ti64, 200).element_type is ti64
+    assert FixedLengthArrayType(su8, 4).bit_length_range == (32, 32)
+    assert FixedLengthArrayType(su8, 200).capacity == 200
+    assert FixedLengthArrayType(ti64, 200).element_type is ti64
 
     with raises(InvalidNumberOfElementsError):
-        StaticArrayType(ti64, 0)
+        FixedLengthArrayType(ti64, 0)
 
-    assert repr(StaticArrayType(ti64, 128)) == \
-        'StaticArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.TRUNCATED: 1>), size=128)'
+    assert repr(FixedLengthArrayType(ti64, 128)) == \
+        'FixedLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.TRUNCATED: 1>), ' \
+        'capacity=128)'
 
-    small = StaticArrayType(su8, 2)
+    small = FixedLengthArrayType(su8, 2)
     assert small.compute_bit_length_values() == {16}
 
 
-class DynamicArrayType(ArrayType):
+class VariableLengthArrayType(ArrayType):
     def __init__(self,
                  element_type: DataType,
-                 max_size: int):
-        super(DynamicArrayType, self).__init__(element_type)
-        self._max_size = int(max_size)
-
-        if self._max_size < 1:
-            raise InvalidNumberOfElementsError('Max array size cannot be less than 1')
-
-    @property
-    def max_size(self) -> int:
-        return self._max_size
+                 capacity: int):
+        super(VariableLengthArrayType, self).__init__(element_type, capacity)
 
     @property
     def string_like(self) -> bool:
@@ -518,13 +513,13 @@ class DynamicArrayType(ArrayType):
 
     @property
     def length_prefix_bit_length(self) -> int:
-        return self.max_size.bit_length()
+        return self.capacity.bit_length()
 
     @property
     def bit_length_range(self) -> BitLengthRange:
         return BitLengthRange(
             min=self.length_prefix_bit_length,
-            max=self.length_prefix_bit_length + self.element_type.bit_length_range.max * self.max_size
+            max=self.length_prefix_bit_length + self.element_type.bit_length_range.max * self.capacity
         )
 
     def compute_bit_length_values(self) -> typing.Set[int]:
@@ -532,51 +527,52 @@ class DynamicArrayType(ArrayType):
         # The idea here is that we treat the dynamic array as a combination of static arrays of different sizes,
         # from zero elements up to the maximum number of elements.
         output = set()           # type: typing.Set[int]
-        for size in range(self.max_size + 1):
-            combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(), size)
+        for capacity in range(self.capacity + 1):
+            combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(),
+                                                                   capacity)
             output |= set(map(lambda c: sum(c) + self.length_prefix_bit_length, combinations))
 
         return output
 
     def __str__(self) -> str:
-        return '%s[<=%d]' % (self.element_type, self.max_size)
+        return '%s[<=%d]' % (self.element_type, self.capacity)
 
     def __repr__(self) -> str:
-        return 'DynamicArrayType(element_type=%r, max_size=%r)' % (self.element_type, self.max_size)
+        return 'VariableLengthArrayType(element_type=%r, capacity=%r)' % (self.element_type, self.capacity)
 
 
-def _unittest_dynamic_array() -> None:
+def _unittest_variable_array() -> None:
     from pytest import raises
 
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     si64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.SATURATED)
 
-    assert str(DynamicArrayType(tu8, 4))    == 'truncated uint8[<=4]'
-    assert str(DynamicArrayType(si64, 255)) == 'saturated int64[<=255]'
+    assert str(VariableLengthArrayType(tu8, 4)) == 'truncated uint8[<=4]'
+    assert str(VariableLengthArrayType(si64, 255)) == 'saturated int64[<=255]'
 
-    assert DynamicArrayType(tu8, 4).string_like
-    assert not DynamicArrayType(si64, 1).string_like
+    assert VariableLengthArrayType(tu8, 4).string_like
+    assert not VariableLengthArrayType(si64, 1).string_like
 
     # Mind the length prefix!
-    assert DynamicArrayType(tu8, 3).bit_length_range == (2, 26)
-    assert DynamicArrayType(tu8, 1).bit_length_range == (1, 9)
-    assert DynamicArrayType(tu8, 255).bit_length_range == (8, 2048)
-    assert DynamicArrayType(tu8, 65535).bit_length_range == (16, 16 + 65535 * 8)
+    assert VariableLengthArrayType(tu8, 3).bit_length_range == (2, 26)
+    assert VariableLengthArrayType(tu8, 1).bit_length_range == (1, 9)
+    assert VariableLengthArrayType(tu8, 255).bit_length_range == (8, 2048)
+    assert VariableLengthArrayType(tu8, 65535).bit_length_range == (16, 16 + 65535 * 8)
 
-    assert DynamicArrayType(tu8, 200).max_size == 200
-    assert DynamicArrayType(tu8, 200).element_type is tu8
+    assert VariableLengthArrayType(tu8, 200).capacity == 200
+    assert VariableLengthArrayType(tu8, 200).element_type is tu8
 
     with raises(InvalidNumberOfElementsError):
-        DynamicArrayType(si64, 0)
+        VariableLengthArrayType(si64, 0)
 
-    assert repr(DynamicArrayType(si64, 128)) == \
-        'DynamicArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
-        'max_size=128)'
+    assert repr(VariableLengthArrayType(si64, 128)) == \
+        'VariableLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
+        'capacity=128)'
 
     # The following was computed manually; it is easy to validate:
     # we have zero, one, or two elements of 8 bits each; plus 2 bit wide tag; therefore:
     # {2 + 0, 2 + 8, 2 + 16}
-    small = DynamicArrayType(tu8, 2)
+    small = VariableLengthArrayType(tu8, 2)
     assert small.compute_bit_length_values() == {2, 10, 18}
 
     # This one gets a little tricky, so pull out a piece of paper an a pencil.
@@ -595,7 +591,7 @@ def _unittest_dynamic_array() -> None:
     #   18  18 | 36
     #
     # If we were to remove duplicates, we end up with: {4, 12, 20, 28, 36}
-    outer = StaticArrayType(small, 2)
+    outer = FixedLengthArrayType(small, 2)
     assert outer.compute_bit_length_values() == {4, 12, 20, 28, 36}
 
 
@@ -1126,8 +1122,8 @@ def _unittest_compound_types() -> None:
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
-    small = DynamicArrayType(tu8, 2)
-    outer = StaticArrayType(small, 2)   # bit length values: {4, 12, 20, 28, 36}
+    small = VariableLengthArrayType(tu8, 2)
+    outer = FixedLengthArrayType(small, 2)   # bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
     assert try_union_fields([

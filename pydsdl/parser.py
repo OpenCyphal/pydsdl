@@ -196,17 +196,17 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     visit_type_primitive_name = parsimonious.NodeVisitor.lift_child
 
-    def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) -> data_type.DynamicArrayType:
+    def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) -> data_type.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length))
+        return data_type.VariableLengthArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) -> data_type.DynamicArrayType:
+    def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) -> data_type.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length) - 1)
+        return data_type.VariableLengthArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
-    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> data_type.StaticArrayType:
+    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> data_type.FixedLengthArrayType:
         element_type, _s0, _bl, _s1, length, _s2, _br = children
-        return data_type.StaticArrayType(element_type, _unwrap_array_capacity(length))
+        return data_type.FixedLengthArrayType(element_type, _unwrap_array_capacity(length))
 
     def visit_type_versioned(self, _n: _Node, children: _Children) -> data_type.CompoundType:
         name, name_tail, _, version = children

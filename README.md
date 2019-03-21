@@ -68,8 +68,8 @@ all rooted in the common ancestor `DataType`:
         * `SignedIntegerType` - e.g., `int16`
         * `UnsignedIntegerType` - e.g., `uint32`
   * `ArrayType`
-    * `StaticArrayType` - e.g., `uint8[256]`
-    * `DynamicArrayType` - e.g., `uint8[<256]`
+    * `FixedLengthArrayType` - e.g., `uint8[256]`
+    * `VariableLengthArrayType` - e.g., `uint8[<256]`
   * `CompoundType` - see below
     * `UnionType` - message types or nested structures
     * `StructureType` - message types or nested structures
