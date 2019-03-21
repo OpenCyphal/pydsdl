@@ -24,3 +24,6 @@ git fetch https://github.com/erikrose/parsimonious $target_tag || exit 2
 
 # Now extract the stuff we need from what we just fetched, ignoring the rest.
 git read-tree --prefix=$LOCAL_DIRECTORY -vu FETCH_HEAD:$REMOTE_DIRECTORY || exit 3
+
+# Drop all parsimonious dependencies directly into its directory.
+wget https://raw.githubusercontent.com/benjaminp/six/1.12.0/six.py -P $LOCAL_DIRECTORY || exit 4
