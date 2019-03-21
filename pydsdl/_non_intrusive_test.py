@@ -407,14 +407,11 @@ def _unittest_error() -> None:
 
 @_in_n_out
 def _unittest_print() -> None:
-    _print_type = typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, typing.Optional[expression.Any]]]
-    printed_items = None  # type: _print_type
+    printed_items = None  # type: typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, str]]
 
-    def print_handler(definition: dsdl_definition.DSDLDefinition,
-                      line_number: int,
-                      value: typing.Optional[expression.Any]) -> None:
+    def print_handler(definition: dsdl_definition.DSDLDefinition, line_number: int, text: str) -> None:
         nonlocal printed_items
-        printed_items = definition, line_number, value
+        printed_items = definition, line_number, text
 
     config = dsdl_parser.ConfigurationOptions()
     config.print_handler = print_handler
@@ -433,13 +430,13 @@ def _unittest_print() -> None:
     assert printed_items
     assert printed_items[0].full_name == 'ns.A'
     assert printed_items[1] == 3
-    assert printed_items[2]
+    assert printed_items[2] == 'true'
 
     dsdl_parser.parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], config)
     assert printed_items
     assert printed_items[0].full_name == 'ns.B'
     assert printed_items[1] == 1
-    assert not printed_items[2]
+    assert printed_items[2] == 'false'
 
     dsdl_parser.parse_definition(
         _define(
@@ -454,38 +451,7 @@ def _unittest_print() -> None:
     assert printed_items
     assert printed_items[0].full_name == 'ns.Offset'
     assert printed_items[1] == 3
-    assert printed_items[2] == expression.Set([expression.Rational(8)])
-
-    # The nested type has the following set: {2, 10, 18}.
-    # We can have up to two elements of that type, so what we get can be expressed graphically as follows:
-    #    A   B | +
-    # ---------+------
-    #    2   2 |  4
-    #   10   2 | 12
-    #   18   2 | 20
-    #    2  10 | 12
-    #   10  10 | 20
-    #   18  10 | 28
-    #    2  18 | 20
-    #   10  18 | 28
-    #   18  18 | 36
-    # If we were to remove duplicates, we end up with: {4, 12, 20, 28, 36}
-    dsdl_parser.parse_definition(
-        _define(
-            'ns/ComplexOffset.1.0.uavcan',
-            dedent('''
-            Array.1.0[2] bar
-            @print _offset_
-            ''')),
-        [
-            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
-        ],
-        config
-    )
-    assert printed_items
-    assert printed_items[0].full_name == 'ns.ComplexOffset'
-    assert printed_items[1] == 3
-    assert printed_items[2] == expression.Set(map(expression.Rational, [4, 12, 20, 28, 36]))
+    assert printed_items[2] == "{8}"
 
 
 @_in_n_out

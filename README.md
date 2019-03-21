@@ -36,7 +36,7 @@ The library API is very simple and contains only the following entities
 
 * The main function `pydsdl.parse_namespace()`.
 * Data type model defined in the module `pydsdl.data_type`.
-* Parsing error exceptions defined in the module `pydsdl.parse_error`.
+* Exceptions defined in the module `pydsdl.frontend_error`.
 
 #### The main function `parse_namespace`
 
@@ -46,8 +46,7 @@ If errors are found, a corresponding exception will be raised (see below).
 
 The function has an optional callable argument that will be invoked when the front end encounters a
 `@print <expression>` directive in a definition.
-The callable is provided with the value to print (which can have an arbitrary type, whatever the expression
-has yielded upon its evaluation) and the location of the print statement for diagnostic purposes.
+The callable is provided with the string to print and the location of the print statement for diagnostic purposes.
 If the function is not provided, `@print` statements will not produce any output besides the log,
 but their expressions will be evaluated nevertheless (and a failed evaluation will still be treated as a fatal error).
 
@@ -104,7 +103,7 @@ The corresponding data model is shown below:
 
 #### Error model
 
-The root exception types defined in `pydsdl.parse_error` are used to represent errors occuring during the
+The root exception types defined in `pydsdl.frontend_error` are used to represent errors occurring during the
 parsing process:
 
 * `FrontendError` - contains properties `path:str` and `line:int`, both of which are optional,
@@ -130,9 +129,9 @@ import pydsdl
 
 try:
     compound_types = pydsdl.parse_namespace('path/to/root_namespace', ['path/to/dependencies'])
-except pydsdl.parse_error.InvalidDefinitionError as ex:
+except pydsdl.frontend_error.InvalidDefinitionError as ex:
     print(ex, file=sys.stderr)                      # The DSDL definition is invalid
-except pydsdl.parse_error.InternalError as ex:
+except pydsdl.frontend_error.InternalError as ex:
     print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
 else:
     for t in compound_types:

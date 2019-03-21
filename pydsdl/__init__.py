@@ -20,6 +20,7 @@ if sys.version_info[:2] < (3, 5):   # pragma: no cover
 _original_sys_path = sys.path
 sys.path = [os.path.join(os.path.dirname(__file__), 'third_party')] + sys.path
 
+# Never import anything that is not exposed here - API stability guarantees are only provided for the exposed items.
 from .version import __version__, __license__       # noqa
 from .namespace_parser import parse_namespace       # noqa
 from . import data_type                             # noqa

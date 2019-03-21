@@ -14,10 +14,9 @@ from . import data_structure_builder
 from . import port_id_ranges
 
 
-# Arguments: emitting definition, line number, value to print or None. The return value is ignored and should be None.
+# Arguments: emitting definition, line number, string to print. The return value is ignored and should be None.
 # The lines are numbered starting from one.
-PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, typing.Optional[expression.Any]],
-                                              None]
+PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
 
 
 class ConfigurationOptions:
@@ -199,7 +198,8 @@ class _TypeBuilder(parser.StatementStreamProcessor):
     def _on_print_directive(self, line_number: int, value: typing.Optional[expression.Any]) -> None:
         _logger.info('Print directive at %s:%d%s', self._definition.file_path, line_number,
                      (': %s' % value) if value is not None else ' (no value to print)')
-        (self._configuration.print_handler or (lambda *_: None))(self._definition, line_number, value)
+        (self._configuration.print_handler or (lambda *_: None))(self._definition, line_number,
+                                                                 str(value if value is not None else ''))
 
     def _on_assert_directive(self, line_number: int, value: typing.Optional[expression.Any]) -> None:
         if isinstance(value, expression.Boolean):
