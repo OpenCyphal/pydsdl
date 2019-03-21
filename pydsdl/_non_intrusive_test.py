@@ -10,7 +10,7 @@ from textwrap import dedent
 from . import expression
 from . import frontend_error
 from . import parser
-from . import dsdl_parser
+from . import data_type_builder
 from . import dsdl_definition
 from . import data_type
 from . import namespace_parser
@@ -25,9 +25,9 @@ _DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 def _parse_definition(definition:         dsdl_definition.DSDLDefinition,
                       lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) -> data_type.CompoundType:
-    return dsdl_parser.parse_definition(definition,
-                                        lookup_definitions,
-                                        dsdl_parser.ConfigurationOptions())
+    return definition.parse(lookup_definitions,
+                            print_directive_handler=lambda *_: None,
+                            allow_unregulated_fixed_port_id=False)
 
 
 def _define(rel_path: str, text: str) -> dsdl_definition.DSDLDefinition:
@@ -254,9 +254,7 @@ def _unittest_error() -> None:
     from pytest import raises
 
     def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> data_type.CompoundType:
-        cfg = dsdl_parser.ConfigurationOptions()
-        cfg.allow_unregulated_fixed_port_id = allow_unregulated
-        return dsdl_parser.parse_definition(_define(rel_path, definition + '\n'), [], cfg)
+        return _define(rel_path, definition + '\n').parse([], lambda *_: None, allow_unregulated)
 
     with raises(frontend_error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
@@ -344,10 +342,10 @@ def _unittest_error() -> None:
     with raises(parser.DSDLSyntaxError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
 
-    with raises(dsdl_parser.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
+    with raises(data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(dsdl_parser.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
+    with raises(data_type_builder.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
         _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
             [
@@ -373,7 +371,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(dsdl_parser.UndefinedDataTypeError):
+    with raises(data_type_builder.UndefinedDataTypeError):
         defs = [
             _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b'),
             _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b'),
@@ -407,51 +405,38 @@ def _unittest_error() -> None:
 
 @_in_n_out
 def _unittest_print() -> None:
-    printed_items = None  # type: typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, str]]
+    printed_items = None  # type: typing.Optional[typing.Tuple[int, str]]
 
-    def print_handler(definition: dsdl_definition.DSDLDefinition, line_number: int, text: str) -> None:
+    def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
-        printed_items = definition, line_number, text
+        printed_items = line_number, text
 
-    config = dsdl_parser.ConfigurationOptions()
-    config.print_handler = print_handler
+    _define(
+        'ns/A.1.0.uavcan',
+        '# line number 1\n'
+        '# line number 2\n'
+        '@print 2 + 2 == 4   # line number 3\n'
+        '# line number 4\n'
+    ).parse([], print_handler, False)
 
-    dsdl_parser.parse_definition(
-        _define(
-            'ns/A.1.0.uavcan',
-            '# line number 1\n'
-            '# line number 2\n'
-            '@print 2 + 2 == 4   # line number 3\n'
-            '# line number 4\n'
-        ),
-        [],
-        config
-    )
     assert printed_items
-    assert printed_items[0].full_name == 'ns.A'
-    assert printed_items[1] == 3
-    assert printed_items[2] == 'true'
+    assert printed_items[0] == 3
+    assert printed_items[1] == 'true'
 
-    dsdl_parser.parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], config)
+    _define('ns/B.1.0.uavcan', '@print false').parse([], print_handler, False)
     assert printed_items
-    assert printed_items[0].full_name == 'ns.B'
-    assert printed_items[1] == 1
-    assert printed_items[2] == 'false'
+    assert printed_items[0] == 1
+    assert printed_items[1] == 'false'
 
-    dsdl_parser.parse_definition(
-        _define(
-            'ns/Offset.1.0.uavcan',
-            '@print _offset_    # Not recorded\n'
-            'uint8 a\n'
-            '@print _offset_\n'
-        ),
-        [],
-        config
-    )
+    _define(
+        'ns/Offset.1.0.uavcan',
+        '@print _offset_    # Not recorded\n'
+        'uint8 a\n'
+        '@print _offset_\n'
+    ).parse([], print_handler, False)
     assert printed_items
-    assert printed_items[0].full_name == 'ns.Offset'
-    assert printed_items[1] == 3
-    assert printed_items[2] == "{8}"
+    assert printed_items[0] == 3
+    assert printed_items[1] == "{8}"
 
 
 @_in_n_out
@@ -542,7 +527,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(dsdl_parser.AssertionCheckFailureError):
+    with raises(data_type_builder.AssertionCheckFailureError):
         _parse_definition(
             _define(
                 'ns/G.1.0.uavcan',

@@ -10,15 +10,13 @@ import fnmatch
 import collections
 from . import data_type
 from . import dsdl_definition
-from . import dsdl_parser
 from . import frontend_error
 
-
-DSDL_FILE_GLOB = '*.uavcan'
-
-
-_logger = logging.getLogger(__name__)
-_LOG_LIST_ITEM_PREFIX = ' ' * 4
+# Invoked when the frontend encounters a print directive. Arguments:
+#   - the containing definition
+#   - line number, one based
+#   - text to print
+PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
 
 
 class NamespaceNameCollisionError(frontend_error.InvalidDefinitionError):
@@ -78,7 +76,7 @@ class MinorVersionFixedPortIDError(frontend_error.InvalidDefinitionError):
 
 def parse_namespace(root_namespace_directory:        str,
                     lookup_directories:              typing.Iterable[str],
-                    print_directive_output_handler:  typing.Optional[dsdl_parser.PrintDirectiveOutputHandler] = None,
+                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
                     allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[data_type.CompoundType]:
     """
@@ -135,13 +133,10 @@ def parse_namespace(root_namespace_directory:        str,
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     # Parse the constructed definitions
-    configuration_options = dsdl_parser.ConfigurationOptions()
-    configuration_options.print_handler = print_directive_output_handler
-    configuration_options.allow_unregulated_fixed_port_id = bool(allow_unregulated_fixed_port_id)
-
     types = _parse_namespace_definitions(target_dsdl_definitions,
                                          lookup_dsdl_definitions,
-                                         configuration_options)
+                                         print_directive_output_handler,
+                                         allow_unregulated_fixed_port_id)
 
     # Note that we check for collisions in the parsed namespace only.
     # We intentionally ignore (do not check for) possible collisions in the lookup directories,
@@ -155,9 +150,16 @@ def parse_namespace(root_namespace_directory:        str,
     return types
 
 
-def _parse_namespace_definitions(target_definitions:    typing.List[dsdl_definition.DSDLDefinition],
-                                 lookup_definitions:    typing.List[dsdl_definition.DSDLDefinition],
-                                 configuration_options: dsdl_parser.ConfigurationOptions) -> \
+_DSDL_FILE_GLOB = '*.uavcan'
+_LOG_LIST_ITEM_PREFIX = ' ' * 4
+
+_logger = logging.getLogger(__name__)
+
+
+def _parse_namespace_definitions(target_definitions:              typing.List[dsdl_definition.DSDLDefinition],
+                                 lookup_definitions:              typing.List[dsdl_definition.DSDLDefinition],
+                                 print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
+                                 allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[data_type.CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
@@ -166,12 +168,20 @@ def _parse_namespace_definitions(target_definitions:    typing.List[dsdl_definit
     :param lookup_definitions:  Which definitions can be used by the parsed definitions.
     :return: A list of types.
     """
+    def make_print_handler(definition: dsdl_definition.DSDLDefinition) -> typing.Callable[[int, str], None]:
+        def handler(line_number: int, text: str) -> None:
+            if print_directive_output_handler:
+                assert isinstance(line_number, int) and isinstance(text, str)
+                assert line_number > 0, 'Line numbers must be one-based'
+                print_directive_output_handler(definition, line_number, text)
+        return handler
+
     types = []  # type: typing.List[data_type.CompoundType]
     for tdd in target_definitions:
         try:
-            parsed = dsdl_parser.parse_definition(tdd,
-                                                  lookup_definitions,
-                                                  configuration_options=configuration_options)
+            parsed = tdd.parse(lookup_definitions,
+                               make_print_handler(tdd),
+                               allow_unregulated_fixed_port_id)
         except frontend_error.FrontendError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
@@ -305,7 +315,7 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
 
     source_file_paths = []  # type: typing.List[str]
     for root, _dirnames, filenames in walker:
-        for filename in fnmatch.filter(filenames, DSDL_FILE_GLOB):
+        for filename in fnmatch.filter(filenames, _DSDL_FILE_GLOB):
             source_file_paths.append(os.path.join(root, filename))
 
     _logger.debug('DSDL files in the namespace dir %r are listed below:', root_namespace_path)
@@ -350,11 +360,11 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])
     assert str(lut['foo.Qwerty']) == \
-        "DSDLDefinition(name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, " \
+        "DSDLDefinition(full_name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, " \
         "file_path='%s')" % lut['foo.Qwerty'].file_path
 
     assert str(lut['foo.nested.Foo']) == \
-        "DSDLDefinition(name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, " \
+        "DSDLDefinition(full_name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, " \
         "file_path='%s')" % lut['foo.nested.Foo'].file_path
 
     t = lut['foo.Qwerty']

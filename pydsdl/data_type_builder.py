@@ -14,17 +14,6 @@ from . import data_structure_builder
 from . import port_id_ranges
 
 
-# Arguments: emitting definition, line number, string to print. The return value is ignored and should be None.
-# The lines are numbered starting from one.
-PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
-
-
-class ConfigurationOptions:
-    def __init__(self) -> None:
-        self.print_handler = None                       # type: typing.Optional[PrintDirectiveOutputHandler]
-        self.allow_unregulated_fixed_port_id = False
-
-
 class UndefinedDataTypeError(frontend_error.InvalidDefinitionError):
     pass
 
@@ -44,38 +33,21 @@ class InvalidDirectiveUsageError(frontend_error.InvalidDefinitionError):
 _logger = logging.getLogger(__name__)
 
 
-def parse_definition(definition:            dsdl_definition.DSDLDefinition,
-                     lookup_definitions:    typing.Sequence[dsdl_definition.DSDLDefinition],
-                     configuration_options: ConfigurationOptions) -> data_type.CompoundType:
-    _logger.info('Parsing definition %r...', definition)
-
-    # Remove the target definition from the lookup list in order to prevent
-    # infinite recursion on self-referential definitions.
-    lookup_definitions = list(filter(lambda d: d != definition, lookup_definitions))
-
-    try:
-        builder = _TypeBuilder(definition, lookup_definitions, configuration_options)
-        with open(definition.file_path) as f:
-            parser.parse(f.read(), builder)
-
-        out = builder.finalize()
-        _logger.info('Definition %r parsed as %r', definition, out)
-        return out
-    except frontend_error.FrontendError as ex:                     # pragma: no cover
-        ex.set_error_location_if_unknown(path=definition.file_path)
-        raise ex
-    except Exception as ex:                         # pragma: no cover
-        raise frontend_error.InternalError(culprit=ex, path=definition.file_path)
-
-
-class _TypeBuilder(parser.StatementStreamProcessor):
+class DataTypeBuilder(parser.StatementStreamProcessor):
     def __init__(self,
-                 definition:            dsdl_definition.DSDLDefinition,
-                 lookup_definitions:    typing.Sequence[dsdl_definition.DSDLDefinition],
-                 configuration_options: ConfigurationOptions):
+                 definition:                      dsdl_definition.DSDLDefinition,
+                 lookup_definitions:              typing.Iterable[dsdl_definition.DSDLDefinition],
+                 print_directive_handler:         typing.Callable[[int, str], None],
+                 allow_unregulated_fixed_port_id: bool):
         self._definition = definition
-        self._lookup_definitions = lookup_definitions
-        self._configuration = configuration_options
+        self._lookup_definitions = list(lookup_definitions)
+        self._print_directive_handler = print_directive_handler
+        self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
+
+        assert isinstance(self._definition, dsdl_definition.DSDLDefinition)
+        assert all(map(lambda x: isinstance(x, dsdl_definition.DSDLDefinition), lookup_definitions))
+        assert callable(self._print_directive_handler)
+        assert isinstance(self._allow_unregulated_fixed_port_id, bool)
 
         self._structs = [data_structure_builder.DataStructureBuilder()]
         self._is_deprecated = False
@@ -110,7 +82,7 @@ class _TypeBuilder(parser.StatementStreamProcessor):
                                         fixed_port_id=self._definition.fixed_port_id,
                                         source_file_path=self._definition.file_path)
 
-        if not self._configuration.allow_unregulated_fixed_port_id:
+        if not self._allow_unregulated_fixed_port_id:
             port_id = out.fixed_port_id
             if port_id is not None:
                 is_service_type = isinstance(out, data_type.ServiceType)
@@ -189,17 +161,15 @@ class _TypeBuilder(parser.StatementStreamProcessor):
         assert isinstance(target_definition, dsdl_definition.DSDLDefinition)
         assert target_definition.full_name == full_name
         assert target_definition.version == version
-
-        # TODO: this is highly inefficient, we need caching.
-        return parse_definition(target_definition,
-                                lookup_definitions=self._lookup_definitions,
-                                configuration_options=self._configuration)
+        # Recursion is cool.
+        return target_definition.parse(lookup_definitions=self._lookup_definitions,
+                                       print_directive_handler=self._print_directive_handler,
+                                       allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id)
 
     def _on_print_directive(self, line_number: int, value: typing.Optional[expression.Any]) -> None:
         _logger.info('Print directive at %s:%d%s', self._definition.file_path, line_number,
                      (': %s' % value) if value is not None else ' (no value to print)')
-        (self._configuration.print_handler or (lambda *_: None))(self._definition, line_number,
-                                                                 str(value if value is not None else ''))
+        self._print_directive_handler(line_number, str(value if value is not None else ''))
 
     def _on_assert_directive(self, line_number: int, value: typing.Optional[expression.Any]) -> None:
         if isinstance(value, expression.Boolean):
