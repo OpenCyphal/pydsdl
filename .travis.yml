@@ -1,35 +1,19 @@
-matrix:
-  include:
-    - language: python
-      python: 3.5
-      before_script:
-        - pip install -r requirements.txt  # In Travis, plain pip always refers to the selected Python version. Nice.
-      script:
-        - ./test.sh
+language: python
+dist: xenial
 
-    - language: python
-      python: 3.6
-      before_script:
-        - pip install -r requirements.txt
-      script:
-        - ./test.sh
+os:
+  - linux   # Travis does not support Python on OSX or Windows. Should we migrate to a different CI service?
 
-    - language: python
-      python: 3.7-dev                           # TODO: Replace with plain "3.7" when supported by Travis
-      before_script:
-        - pip install -r requirements.txt
-      script:
-        - ./test.sh
-        - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
-        - ./test_namespace.py dsdl-test/uavcan
+python:
+  - 3.5
+  - 3.6
+  - 3.7-dev     # TODO: Replace with plain "3.7" when supported by Travis
+  - 3.8-dev     # TODO: Replace with plain "3.8" when supported by Travis
 
-    - os: linux
-      dist: xenial
-      language: python
-      python: 3.8-dev                           # TODO: Replace with plain "3.8" when supported by Travis
-      before_script:
-        - pip install -r requirements.txt
-      script:
-        - ./test.sh
-        - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
-        - ./test_namespace.py dsdl-test/uavcan
+before_script:
+  - pip install -r requirements.txt
+
+script:
+  - ./test.sh
+  - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
+  - ./test_namespace.py dsdl-test/uavcan
