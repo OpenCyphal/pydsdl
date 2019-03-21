@@ -27,3 +27,6 @@ git read-tree --prefix=$LOCAL_DIRECTORY -vu FETCH_HEAD:$REMOTE_DIRECTORY || exit
 
 # Drop all parsimonious dependencies directly into its directory.
 wget https://raw.githubusercontent.com/benjaminp/six/1.12.0/six.py -P $LOCAL_DIRECTORY || exit 4
+
+# We don't want to keep its tests around, they're no use for us anyway.
+rm -rf $LOCAL_DIRECTORY/tests/
