@@ -6,6 +6,7 @@
 import os
 import typing
 import logging
+import itertools
 import functools
 import fractions
 import parsimonious
@@ -380,12 +381,10 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return expression.Boolean(False)
 
     def visit_literal_string_single_quoted(self, node: _Node, _c: _Children) -> expression.String:
-        # TODO: manual handling of strings, incl. escape sequences and hex char notation
-        return expression.String(eval(node.text))
+        return _parse_string_literal(node.text)
 
     def visit_literal_string_double_quoted(self, node: _Node, _c: _Children) -> expression.String:
-        # TODO: manual handling of strings, incl. escape sequences and hex char notation
-        return expression.String(eval(node.text))
+        return _parse_string_literal(node.text)
 
 
 #
@@ -419,3 +418,105 @@ def _unwrap_array_capacity(ex: expression.Any) -> int:
     else:
         raise frontend_error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
                                                     ex.TYPE_NAME)
+
+
+def _parse_string_literal(literal: str) -> expression.String:
+    assert literal[0] == literal[-1]
+    assert literal[0] in '\'\"'
+    assert len(literal) >= 2
+
+    quote_symbol = literal[0]
+    iterator = iter(literal[1:-1])
+
+    def _next_symbol() -> str:
+        try:
+            s = next(iterator)
+        except StopIteration:
+            return ''
+
+        if s != '\\':
+            assert s != quote_symbol, 'Unescaped quotes cannot appear inside string literals. Bad grammar?'
+            return s
+
+        s = next(iterator).lower()
+        if s == 'x':
+            h = ''
+            for _ in range(2):
+                s = next(iterator).lower()
+                if s not in '0123456789abcdef':
+                    raise DSDLSyntaxError('Invalid hex character: %r' % s)
+                h += s
+            return chr(int(h, 16))
+
+        try:
+            return {
+                'r':  '\r',
+                'n':  '\n',
+                't':  '\t',
+                '"':  '"',
+                "'":  "'",
+                '\\': '\\',
+            }[s]
+        except KeyError:
+            raise DSDLSyntaxError('Invalid escape sequence') from None
+
+    out = ''
+    for index in itertools.count():
+        try:
+            symbol = _next_symbol()
+        except DSDLSyntaxError as ex:
+            raise DSDLSyntaxError('The string literal is malformed after index %d: %s' % (index, ex.text))
+        except StopIteration:
+            raise DSDLSyntaxError('Unexpected end of string literal after index %d' % index) from None
+        else:
+            if len(symbol) == 0:
+                break
+            else:
+                assert len(symbol) == 1
+                out += symbol
+
+    return expression.String(out)
+
+
+def _unittest_parse_string_literal() -> None:
+    from pytest import raises
+
+    def once(literal: str, value: str) -> None:
+        try:
+            assert _parse_string_literal(literal).native_value == value
+        except DSDLSyntaxError:
+            print('FAILED ON:', literal, repr(value))
+            raise
+
+    def auto_repr(text: str) -> None:
+        r = repr(text)
+        once(r, text)
+
+    auto_repr('')
+    auto_repr('123')
+    auto_repr('"')
+    auto_repr('"')
+    auto_repr('\n')
+
+    for a in range(256):
+        auto_repr('\\x%02x' % a)
+        auto_repr('\"\'\\x%02x' % a)
+
+        if chr(a).lower() not in '0123456789abcdef':
+            with raises(DSDLSyntaxError, match='.*hex character.*'):
+                _parse_string_literal('"\\x0%s"' % chr(a))
+
+            with raises(DSDLSyntaxError, match='.*hex character.*'):
+                _parse_string_literal("'\\x%s0'" % chr(a))
+        else:
+            with raises(DSDLSyntaxError, match='.*expected.*'):
+                _parse_string_literal("'\\x%s'" % chr(a))
+
+    with raises(DSDLSyntaxError, match='.*expected.*'):
+        _parse_string_literal("'\\x'")
+
+    with raises(DSDLSyntaxError, match='.*expected.*'):
+        _parse_string_literal("'\\'")
+
+    with raises(DSDLSyntaxError, match='.*escape.*'):
+        _parse_string_literal("'\\z'")

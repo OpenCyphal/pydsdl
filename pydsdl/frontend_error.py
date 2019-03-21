@@ -44,15 +44,19 @@ class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is
     def line(self) -> typing.Optional[int]:
         return self._line
 
+    @property
+    def text(self) -> str:
+        return Exception.__str__(self)
+
     def __str__(self) -> str:
         """Returns a nicely formatted error string in a GCC-like format (can be parsed by e.g. Eclipse error parser)"""
         if self.path and self.line:
-            return '%s:%d: %s' % (self.path, self.line, Exception.__str__(self))
+            return '%s:%d: %s' % (self.path, self.line, self.text)
 
         if self.path:
-            return '%s: %s' % (self.path, Exception.__str__(self))
+            return '%s: %s' % (self.path, self.text)
 
-        return Exception.__str__(self)
+        return self.text
 
     def __repr__(self) -> str:
         return self.__class__.__name__ + ': ' + repr(self.__str__())
