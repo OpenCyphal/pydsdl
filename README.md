@@ -54,9 +54,6 @@ but their expressions will be evaluated nevertheless (and a failed evaluation wi
 As demanded by the specification, the front end rejects unregulated fixed port ID by default.
 To allow unregulated fixed port ID, pass the parameter `allow_unregulated_fixed_port_id` as True.
 
-Assertion checks can be computationally taxing, e.g., if the front end is asked to prove correctness of binary layouts.
-To accelerate parsing, assertion checks can be skipped by passing the parameter `skip_assertion_checks` as True.
-
 #### Data type model
 
 Data types are represented as one of the following types defined in `pydsdl.data_type`,

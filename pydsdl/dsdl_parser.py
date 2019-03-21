@@ -24,7 +24,6 @@ class ConfigurationOptions:
     def __init__(self) -> None:
         self.print_handler = None                       # type: typing.Optional[PrintDirectiveOutputHandler]
         self.allow_unregulated_fixed_port_id = False
-        self.skip_assertion_checks = False
 
 
 class UndefinedDataTypeError(frontend_error.InvalidDefinitionError):
