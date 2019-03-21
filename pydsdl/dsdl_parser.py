@@ -64,24 +64,24 @@ def parse_definition(definition:            DSDLDefinition,
     try:
         builder = _TypeBuilder(definition, lookup_definitions, configuration_options)
         with open(definition.file_path) as f:
-            ParseTreeProcessor(builder).parse(f.read())
+            ParseTreeProcessor(builder).parse(f.read())  # type: ignore
 
         out = builder.finalize()
         _logger.info('Definition %r parsed as %r', definition, out)
         return out
     except parsimonious.ParseError as ex:
-        raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())
-    except FrontendError as ex:       # pragma: no cover
+        raise DSDLSyntaxError('Syntax error', path=definition.file_path, line=ex.line())  # type: ignore
+    except FrontendError as ex:                     # pragma: no cover
         ex.set_error_location_if_unknown(path=definition.file_path)
         raise
-    except parsimonious.VisitationError as ex:  # pragma: no cover
+    except parsimonious.VisitationError as ex:      # pragma: no cover
         try:
             line = int(ex.original_class.line())    # type: typing.Optional[int]
         except AttributeError:
             line = None
         # Treat as internal because all intentional errors are not wrapped into VisitationError.
         raise InternalError(str(ex), path=definition.file_path, line=line)
-    except Exception as ex:        # pragma: no cover
+    except Exception as ex:                         # pragma: no cover
         raise InternalError(culprit=ex, path=definition.file_path)
 
 

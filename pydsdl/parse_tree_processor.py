@@ -114,11 +114,11 @@ class ParseTreeProcessor(NodeVisitor):
     done currently.
     """
     # Populating the default grammar (see the NodeVisitor API).
-    grammar = Grammar(open(_GRAMMAR_DEFINITION_FILE_PATH).read())
+    grammar = Grammar(open(_GRAMMAR_DEFINITION_FILE_PATH).read())  # type: ignore
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = FrontendError,
+    unwrapped_exceptions = FrontendError,  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
