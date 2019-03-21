@@ -367,13 +367,13 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return expression.Set(exp_list)
 
     def visit_literal_real(self, node: _Node, _c: _Children) -> expression.Rational:
-        return expression.Rational(fractions.Fraction(node.text))
+        return expression.Rational(fractions.Fraction(node.text.replace('_', '')))
 
     def visit_literal_integer(self, node: _Node, _c: _Children) -> expression.Rational:
-        return expression.Rational(int(node.text, base=0))
+        return expression.Rational(int(node.text.replace('_', ''), base=0))
 
     def visit_literal_integer_decimal(self, node: _Node, _c: _Children) -> expression.Rational:
-        return expression.Rational(int(node.text))
+        return expression.Rational(int(node.text.replace('_', '')))
 
     def visit_literal_boolean_true(self, _n: _Node, _c: _Children) -> expression.Boolean:
         return expression.Boolean(True)
