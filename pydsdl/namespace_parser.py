@@ -12,12 +12,6 @@ from . import data_type
 from . import dsdl_definition
 from . import frontend_error
 
-# Invoked when the frontend encounters a print directive. Arguments:
-#   - the containing definition
-#   - line number, one based
-#   - text to print
-PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
-
 
 class NamespaceNameCollisionError(frontend_error.InvalidDefinitionError):
     """
@@ -53,8 +47,8 @@ class MultipleDefinitionsUnderSameVersionError(frontend_error.InvalidDefinitionE
     """
     For example:
         Type.1.0.uavcan
-        58000.Type.1.0.uavcan
-        58001.Type.1.0.uavcan
+        28000.Type.1.0.uavcan
+        28001.Type.1.0.uavcan
     """
     pass
 
@@ -72,6 +66,13 @@ class MinorVersionFixedPortIDError(frontend_error.InvalidDefinitionError):
     major version.
     """
     pass
+
+
+# Invoked when the frontend encounters a print directive. Arguments:
+#   - the containing definition
+#   - line number, one based
+#   - text to print
+PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
 
 
 def parse_namespace(root_namespace_directory:        str,
@@ -94,7 +95,7 @@ def parse_namespace(root_namespace_directory:        str,
 
     :param print_directive_output_handler:  If provided, this callable will be invoked when a @print directive is
                                             encountered. If not provided, print directives will not produce any output
-                                            except for the log (at the INFO level).
+                                            except for the log.
 
     :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
                                             This is a dangerous feature that must not be used unless you understand the
