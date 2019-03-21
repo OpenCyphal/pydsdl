@@ -43,7 +43,10 @@ class DataStructureBuilder:
 
     @property
     def attributes(self) -> typing.List[data_type.Attribute]:  # noinspection PyTypeChecker
-        return self.fields + self.constants
+        out = []  # type: typing.List[data_type.Attribute]
+        out += self.fields
+        out += self.constants
+        return out
 
     @property
     def empty(self) -> bool:
@@ -66,7 +69,6 @@ class DataStructureBuilder:
         # there is no concept of inter-field offset because a union holds exactly one field at any moment;
         # only the total offset (i.e., total size) is defined.
         self._bit_length_computed_at_least_once = True
-
-        return data_type.compute_cumulative_bit_length_values(  # type: ignore
-            self.fields,
-            assume_tagged_union_aggregation=self.union)
+        out = data_type.compute_cumulative_bit_length_values(self.fields, assume_tagged_union_aggregation=self.union)
+        assert isinstance(out, set)
+        return out

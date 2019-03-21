@@ -409,9 +409,9 @@ def _unittest_error() -> None:
 
 @_in_n_out
 def _unittest_print() -> None:
-    printed_items = None    # type: typing.Optional[typing.Tuple[DSDLDefinition, int, expression.Any]]
+    printed_items = None    # type: typing.Optional[typing.Tuple[DSDLDefinition, int, typing.Optional[expression.Any]]]
 
-    def print_handler(definition: DSDLDefinition, line_number: int, value: expression.Any) -> None:
+    def print_handler(definition: DSDLDefinition, line_number: int, value: typing.Optional[expression.Any]) -> None:
         nonlocal printed_items
         printed_items = definition, line_number, value
 

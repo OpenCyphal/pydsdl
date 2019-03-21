@@ -11,10 +11,10 @@ from fractions import Fraction
 from .frontend_error import InvalidDefinitionError
 
 
-_OperatorReturnType = typing.TypeVar('_OperatorReturnType')
-
-BinaryOperator = typing.Callable[['Any', 'Any'], _OperatorReturnType]
-UnaryOperator = typing.Callable[['Any'], _OperatorReturnType]
+OperatorOutput    = typing.TypeVar('OperatorOutput')
+UnaryOperator     = typing.Callable[['Any'], OperatorOutput]
+BinaryOperator    = typing.Callable[['Any', 'Any'], OperatorOutput]
+AttributeOperator = typing.Callable[['Any', typing.Union['String', str]], OperatorOutput]
 
 
 class ExpressionError(InvalidDefinitionError):
@@ -349,9 +349,9 @@ class Set(Container):
     # noinspection PyProtectedMember
     class _Decorator:
         @staticmethod
-        def homotypic_binary_operator(inferior: typing.Callable[['Set', 'Set'], _OperatorReturnType]) \
-                -> typing.Callable[['Set', 'Set'], _OperatorReturnType]:
-            def wrapper(self: 'Set', other: 'Set') -> _OperatorReturnType:
+        def homotypic_binary_operator(inferior: typing.Callable[['Set', 'Set'], OperatorOutput]) \
+                -> typing.Callable[['Set', 'Set'], OperatorOutput]:
+            def wrapper(self: 'Set', other: 'Set') -> OperatorOutput:
                 assert isinstance(self, Set) and isinstance(other, Set)
                 if self.element_type == other.element_type:
                     return inferior(self, other)
@@ -561,8 +561,8 @@ class Set(Container):
 #   - Automatic left-right operand swapping when necessary (for some polyadic operators).
 #
 def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
-        typing.Callable[[BinaryOperator], BinaryOperator]:
-    def decorator(direct_operator: BinaryOperator) -> BinaryOperator:
+        typing.Callable[[BinaryOperator[OperatorOutput]], BinaryOperator[OperatorOutput]]:
+    def decorator(direct_operator: BinaryOperator[OperatorOutput]) -> BinaryOperator[OperatorOutput]:
         if alternative_operator_name:
             alternative_method_name = '_' + alternative_operator_name
         else:
@@ -725,15 +725,15 @@ def _unittest_expressions() -> None:
             r(Fraction(12, 5))
         ).native_value
 
-    assert add(s('123'), s('abc')).native_value == '123abc'
+    assert add(s('123'), s('abc')).native_value == '123abc'  # type: ignore
 
     new_set = add(Set([s('123'), s('456')]),
                   s('abc'))
-    assert set(new_set) == {s('123abc'), s('456abc')}
+    assert set(new_set) == {s('123abc'), s('456abc')}  # type: ignore
 
     new_set = add(s('abc'),
                   Set([s('123'), s('456')]))
-    assert set(new_set) == {s('abc123'), s('abc456')}
+    assert set(new_set) == {s('abc123'), s('abc456')}  # type: ignore
 
     new_set = add(s('abc'),
                   Set([Set([s('123'), s('456')]),

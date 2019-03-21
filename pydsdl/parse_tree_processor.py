@@ -66,7 +66,9 @@ class StatementStreamProcessor:
 #
 # Decorators and helpers for use with the transformer.
 #
-_VisitorHandler = typing.Callable[['ParseTreeProcessor', Node, tuple], typing.Any]
+_Children = typing.Tuple[typing.Any, ...]
+_VisitorHandler = typing.Callable[['ParseTreeProcessor', Node, _Children], typing.Any]
+_PrimitiveTypeConstructor = typing.Callable[[data_type.PrimitiveType.CastMode], data_type.PrimitiveType]
 
 
 def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
@@ -74,7 +76,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     Simply logs the resulting transformation upon its completion.
     """
     @functools.wraps(fun)
-    def wrapper(self: 'ParseTreeProcessor', node: Node, children: tuple) -> typing.Any:
+    def wrapper(self: 'ParseTreeProcessor', node: Node, children: _Children) -> typing.Any:
         result = '<TRANSFORMATION FAILED>'  # type: typing.Any
         try:
             result = fun(self, node, children)
@@ -86,14 +88,18 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     return wrapper
 
 
-def _make_typesafe_child_lifter(expected_type: type, logged: bool = False) -> _VisitorHandler:
-    def visitor_handler(_self: 'ParseTreeProcessor', _node: Node, children: tuple) -> typing.Any:
+def _make_typesafe_child_lifter(expected_type: typing.Type[object], logged: bool = False) -> _VisitorHandler:
+    def visitor_handler(_self: 'ParseTreeProcessor', _node: Node, children: _Children) -> typing.Any:
         sole_child, = children
         assert isinstance(sole_child, expected_type), \
             'The child should have been of type %r, not %r: %r' % (expected_type, type(sole_child), sole_child)
         return sole_child
 
     return _logged_transformation(visitor_handler) if logged else visitor_handler
+
+
+def _make_binary_operator_handler(operator: expression.BinaryOperator[expression.OperatorOutput]) -> _VisitorHandler:
+    return lambda _self, _node, _children: operator
 
 
 # noinspection PyMethodMayBeStatic
@@ -128,40 +134,40 @@ class ParseTreeProcessor(NodeVisitor):
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
-    def visit_statement_constant(self, node: Node, children: tuple) -> None:
+    def visit_statement_constant(self, _node: Node, children: _Children) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
         assert isinstance(constant_type, data_type.DataType) and isinstance(name, str) and name
         assert isinstance(exp, expression.Any)
         self._statement_stream_processor.on_constant(constant_type, name, exp)
 
-    def visit_statement_field(self, _node: Node, children: tuple) -> None:
+    def visit_statement_field(self, _node: Node, children: _Children) -> None:
         field_type, _space, name = children
         assert isinstance(field_type, data_type.DataType) and isinstance(name, str) and name
         self._statement_stream_processor.on_field(field_type, name)
 
-    def visit_statement_padding_field(self, _node: Node, children: tuple) -> None:
+    def visit_statement_padding_field(self, _node: Node, children: _Children) -> None:
         void_type = children[0]
         assert isinstance(void_type, data_type.VoidType)
         self._statement_stream_processor.on_padding_field(void_type)
 
-    def visit_statement_service_response_marker(self, _node: Node, _children: typing.Tuple) -> None:
+    def visit_statement_service_response_marker(self, _node: Node, _children: _Children) -> None:
         self._statement_stream_processor.on_service_response_marker()
 
-    def visit_statement_directive_with_expression(self, node: Node, children: tuple) -> None:
+    def visit_statement_directive_with_expression(self, node: Node, children: _Children) -> None:
         _at, name, _space, exp = children
         assert isinstance(name, str) and name and isinstance(exp, expression.Any)
         self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
                                                       directive_name=name,
                                                       associated_expression_value=exp)
 
-    def visit_statement_directive_without_expression(self, node: Node, children: tuple) -> None:
+    def visit_statement_directive_without_expression(self, node: Node, children: _Children) -> None:
         _at, name = children
         assert isinstance(name, str) and name
         self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
                                                       directive_name=name,
                                                       associated_expression_value=None)
 
-    def visit_identifier(self, node: Node, _children: typing.Tuple) -> str:
+    def visit_identifier(self, node: Node, _children: _Children) -> str:
         assert isinstance(node.text, str) and node.text
         return node.text
 
@@ -174,21 +180,19 @@ class ParseTreeProcessor(NodeVisitor):
 
     visit_type_primitive_name = NodeVisitor.lift_child
 
-    PrimitiveTypeConstructor = typing.Callable[[data_type.PrimitiveType.CastMode], data_type.PrimitiveType]
-
-    def visit_type_array_variable_inclusive(self, _node: Node, children: tuple) -> data_type.DynamicArrayType:
+    def visit_type_array_variable_inclusive(self, _node: Node, children: _Children) -> data_type.DynamicArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
         return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_array_variable_exclusive(self, _node: Node, children: tuple) -> data_type.DynamicArrayType:
+    def visit_type_array_variable_exclusive(self, _node: Node, children: _Children) -> data_type.DynamicArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
         return data_type.DynamicArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
-    def visit_type_array_fixed(self, _node: Node, children: tuple) -> data_type.StaticArrayType:
+    def visit_type_array_fixed(self, _node: Node, children: _Children) -> data_type.StaticArrayType:
         element_type, _s0, _bl, _s1, length, _s2, _br = children
         return data_type.StaticArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_versioned(self, _node: Node, children: tuple) -> data_type.CompoundType:
+    def visit_type_versioned(self, _node: Node, children: _Children) -> data_type.CompoundType:
         name, name_tail, _, version = children
         assert isinstance(name, str) and name and isinstance(version, data_type.Version)
         for _, component in name_tail:
@@ -197,38 +201,38 @@ class ParseTreeProcessor(NodeVisitor):
 
         return self._statement_stream_processor.resolve_versioned_data_type(name, version)
 
-    def visit_type_version_specifier(self, _node: Node, children: tuple) -> data_type.Version:
+    def visit_type_version_specifier(self, _node: Node, children: _Children) -> data_type.Version:
         major, _, minor = children
         assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
         return data_type.Version(major=major.as_native_integer(),
                                  minor=minor.as_native_integer())
 
-    def visit_type_primitive_truncated(self, _node: Node, children: tuple) -> data_type.PrimitiveType:
-        _kw, _sp, cons = children
+    def visit_type_primitive_truncated(self, _node: Node, children: _Children) -> data_type.PrimitiveType:
+        _kw, _sp, cons = children  # type: Node, Node, _PrimitiveTypeConstructor
         return cons(data_type.PrimitiveType.CastMode.TRUNCATED)
 
-    def visit_type_primitive_saturated(self, _node: Node, children: tuple) -> data_type.PrimitiveType:
-        _, cons = children
+    def visit_type_primitive_saturated(self, _node: Node, children: _Children) -> data_type.PrimitiveType:
+        _, cons = children  # type: Node, _PrimitiveTypeConstructor
         return cons(data_type.PrimitiveType.CastMode.SATURATED)
 
-    def visit_type_primitive_name_boolean(self, _node: Node, _children: tuple) -> PrimitiveTypeConstructor:
+    def visit_type_primitive_name_boolean(self, _node: Node, _children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.BooleanType(cm)     # lambda is only needed to make mypy shut up
 
-    def visit_type_primitive_name_unsigned_integer(self, _node: Node, children: tuple) -> PrimitiveTypeConstructor:
+    def visit_type_primitive_name_unsigned_integer(self, _node: Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.UnsignedIntegerType(children[-1], cm)
 
-    def visit_type_primitive_name_signed_integer(self, _node: Node, children: tuple) -> PrimitiveTypeConstructor:
+    def visit_type_primitive_name_signed_integer(self, _node: Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.SignedIntegerType(children[-1], cm)
 
-    def visit_type_primitive_name_floating_point(self, _node: Node, children: tuple) -> PrimitiveTypeConstructor:
+    def visit_type_primitive_name_floating_point(self, _node: Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: data_type.FloatType(children[-1], cm)
 
-    def visit_type_void(self, _node: Node, children: tuple) -> data_type.VoidType:
+    def visit_type_void(self, _node: Node, children: _Children) -> data_type.VoidType:
         _, width = children
         assert isinstance(width, int)
         return data_type.VoidType(width)
 
-    def visit_type_bit_length_suffix(self, node: Node, _children: tuple) -> int:
+    def visit_type_bit_length_suffix(self, node: Node, _children: _Children) -> int:
         return int(node.text)
 
     # ================================================== Expressions ==================================================
@@ -242,7 +246,7 @@ class ParseTreeProcessor(NodeVisitor):
     visit_op2_mul = NodeVisitor.lift_child
     visit_op2_exp = NodeVisitor.lift_child
 
-    def visit_expression_list(self, _node: Node, children: tuple) -> typing.Tuple[expression.Any, ...]:
+    def visit_expression_list(self, _node: Node, children: _Children) -> typing.Tuple[expression.Any, ...]:
         out = []    # type: typing.List[expression.Any]
         if children:
             children = children[0]
@@ -255,12 +259,12 @@ class ParseTreeProcessor(NodeVisitor):
         return tuple(out)
 
     @_logged_transformation
-    def visit_expression_parenthesized(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_expression_parenthesized(self, _node: Node, children: _Children) -> expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, expression.Any)
         return exp
 
-    def visit_expression_atom(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_expression_atom(self, _node: Node, children: _Children) -> expression.Any:
         atom, = children
         if isinstance(atom, str):   # Identifier resolution
             new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
@@ -274,11 +278,13 @@ class ParseTreeProcessor(NodeVisitor):
         assert isinstance(atom, expression.Any)
         return atom
 
-    def _visit_binary_operator_chain(self, _node: Node, children: tuple) -> expression.Any:
+    def _visit_binary_operator_chain(self, _node: Node, children: _Children) -> expression.Any:
         left = children[0]
+        assert isinstance(left, expression.Any)
         for _, operator, _, right in children[1]:
             assert callable(operator)
             left = operator(left, right)
+            assert isinstance(left, expression.Any)
         return left
 
     # Operators are handled through different grammar rules for precedence management purposes.
@@ -295,39 +301,41 @@ class ParseTreeProcessor(NodeVisitor):
     visit_ex_logical_not = NodeVisitor.lift_child
     visit_ex_inversion   = NodeVisitor.lift_child
 
-    def visit_op1_form_log_not(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_op1_form_log_not(self, _node: Node, children: _Children) -> expression.Any:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, expression.Any)
         return expression.logical_not(exp)
 
-    def visit_op1_form_inv_pos(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_op1_form_inv_pos(self, _node: Node, children: _Children) -> expression.Any:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, expression.Any)
         return expression.positive(exp)
 
-    def visit_op1_form_inv_neg(self, _node: Node, children: tuple) -> expression.Any:
+    def visit_op1_form_inv_neg(self, _node: Node, children: _Children) -> expression.Any:
         _op, _, exp = children
         assert isinstance(_op, Node) and isinstance(exp, expression.Any)
         return expression.negative(exp)
 
-    def visit_op2_log_or(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.logical_or
-    def visit_op2_log_and(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.logical_and
-    def visit_op2_cmp_equ(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.equal
-    def visit_op2_cmp_neq(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.not_equal
-    def visit_op2_cmp_leq(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.less_or_equal
-    def visit_op2_cmp_geq(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.greater_or_equal
-    def visit_op2_cmp_lss(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.less
-    def visit_op2_cmp_grt(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.greater
-    def visit_op2_bit_or(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.bitwise_or
-    def visit_op2_bit_xor(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.bitwise_xor
-    def visit_op2_bit_and(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.bitwise_and
-    def visit_op2_add_add(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.add
-    def visit_op2_add_sub(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.subtract
-    def visit_op2_mul_mul(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.multiply
-    def visit_op2_mul_div(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.divide
-    def visit_op2_mul_mod(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.modulo
-    def visit_op2_exp_pow(self, _n: Node, _c: list) -> expression.BinaryOperator: return expression.power
-    def visit_op2_attrib(self, _n: Node, _c: list)  -> expression.BinaryOperator: return expression.attribute
+    visit_op2_log_or  = _make_binary_operator_handler(expression.logical_or)
+    visit_op2_log_and = _make_binary_operator_handler(expression.logical_and)
+    visit_op2_cmp_equ = _make_binary_operator_handler(expression.equal)
+    visit_op2_cmp_neq = _make_binary_operator_handler(expression.not_equal)
+    visit_op2_cmp_leq = _make_binary_operator_handler(expression.less_or_equal)
+    visit_op2_cmp_geq = _make_binary_operator_handler(expression.greater_or_equal)
+    visit_op2_cmp_lss = _make_binary_operator_handler(expression.less)
+    visit_op2_cmp_grt = _make_binary_operator_handler(expression.greater)
+    visit_op2_bit_or  = _make_binary_operator_handler(expression.bitwise_or)
+    visit_op2_bit_xor = _make_binary_operator_handler(expression.bitwise_xor)
+    visit_op2_bit_and = _make_binary_operator_handler(expression.bitwise_and)
+    visit_op2_add_add = _make_binary_operator_handler(expression.add)
+    visit_op2_add_sub = _make_binary_operator_handler(expression.subtract)
+    visit_op2_mul_mul = _make_binary_operator_handler(expression.multiply)
+    visit_op2_mul_div = _make_binary_operator_handler(expression.divide)
+    visit_op2_mul_mod = _make_binary_operator_handler(expression.modulo)
+    visit_op2_exp_pow = _make_binary_operator_handler(expression.power)
+
+    def visit_op2_attrib(self, _node: Node, _children: _Children) -> expression.AttributeOperator[expression.Any]:
+        return expression.attribute
 
     # ================================================== Literals ==================================================
 
@@ -335,31 +343,31 @@ class ParseTreeProcessor(NodeVisitor):
     visit_literal_boolean = _make_typesafe_child_lifter(expression.Boolean)
     visit_literal_string  = _make_typesafe_child_lifter(expression.String)
 
-    def visit_literal_set(self, _node: Node, children: tuple) -> expression.Set:
+    def visit_literal_set(self, _node: Node, children: _Children) -> expression.Set:
         _, _, exp_list, _, _ = children
         assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
         return expression.Set(exp_list)
 
-    def visit_literal_real(self, node: Node, _children: tuple) -> expression.Rational:
+    def visit_literal_real(self, node: Node, _children: _Children) -> expression.Rational:
         return expression.Rational(Fraction(node.text))
 
-    def visit_literal_integer(self, node: Node, _children: tuple) -> expression.Rational:
+    def visit_literal_integer(self, node: Node, _children: _Children) -> expression.Rational:
         return expression.Rational(int(node.text, base=0))
 
-    def visit_literal_integer_decimal(self, node: Node, _children: tuple) -> expression.Rational:
+    def visit_literal_integer_decimal(self, node: Node, _children: _Children) -> expression.Rational:
         return expression.Rational(int(node.text))
 
-    def visit_literal_boolean_true(self, _node: Node, _children: tuple) -> expression.Boolean:
+    def visit_literal_boolean_true(self, _node: Node, _children: _Children) -> expression.Boolean:
         return expression.Boolean(True)
 
-    def visit_literal_boolean_false(self, _node: Node, _children: tuple) -> expression.Boolean:
+    def visit_literal_boolean_false(self, _node: Node, _children: _Children) -> expression.Boolean:
         return expression.Boolean(False)
 
-    def visit_literal_string_single_quoted(self, node: Node, _children: tuple) -> expression.String:
+    def visit_literal_string_single_quoted(self, node: Node, _children: _Children) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         return expression.String(eval(node.text))
 
-    def visit_literal_string_double_quoted(self, node: Node, _children: tuple) -> expression.String:
+    def visit_literal_string_double_quoted(self, node: Node, _children: _Children) -> expression.String:
         # TODO: manual handling of strings, incl. escape sequences and hex char notation
         return expression.String(eval(node.text))
 
