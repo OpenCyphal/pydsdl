@@ -1,11 +1,10 @@
-# Top-level rule: a definition is a collection of lines.
 definition  = line (end_of_line line)*  # An empty file is a valid definition. Trailing end-of-line is optional.
 line        = statement? _? comment?    # An empty line is a valid line.
 comment     = ~r"#[^\r\n]*"
 end_of_line = ~r"\r?\n"                 # Unix/Windows
 _           = ~r"[ \t]+"                # Whitespace
 
-# =================================================== Core elements ===================================================
+# ==================================================== Statements ====================================================
 
 statement = statement_directive
           / statement_service_response_marker

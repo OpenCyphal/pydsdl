@@ -162,7 +162,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     def visit_end_of_line(self, _n: _Node, _c: _Children) -> None:
         self._current_line_number += 1
 
-    # ================================================= Core elements ================================================
+    # ================================================== Statements ==================================================
 
     visit_statement           = _make_typesafe_child_lifter(type(None))  # Make sure all sub-nodes have been handled,
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
