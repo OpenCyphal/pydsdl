@@ -106,44 +106,6 @@ class DeprecatedDependencyError(TypeParameterError):
     pass
 
 
-def compute_cumulative_bit_length_values(fields: typing.Sequence['Field'],
-                                         assume_tagged_union_aggregation: bool) -> typing.Set[int]:
-    assert all(map(lambda x: isinstance(x, Field), fields))
-    if assume_tagged_union_aggregation:
-        if len(fields) < UnionType.MIN_NUMBER_OF_VARIANTS:  # We don't know how to compute the tag length in this case.
-            raise MalformedUnionError('Unions with less than %d fields are not allowed' %
-                                      UnionType.MIN_NUMBER_OF_VARIANTS)
-
-        tag_bit_length = (len(fields) - 1).bit_length()
-        assert tag_bit_length > 0
-
-        # Unions are easy to handle because when serialized, a union is essentially just a single field,
-        # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
-        # add the tag length to each element. Easy.
-        combinations = set()     # type: typing.Set[int]
-        for f in fields:
-            combinations |= f.data_type.compute_bit_length_values()
-
-        out = set(map(lambda c: tag_bit_length + c, combinations))  # type: typing.Set[int]
-    else:
-        # As far as bit length combinations are concerned, structures are similar to static arrays.
-        # Please refer to the bit length computation method for static arrays for reference.
-        # The difference here is that the length value sets are not homogeneous across fields, as they
-        # can be of different types, which sets structures apart from arrays. So instead of looking for
-        # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
-        # For large structures with dynamic arrays this can be very computationally expensive.
-        blv_sets = [x.data_type.compute_bit_length_values() for x in fields]
-        combinations = itertools.product(*blv_sets)     # type: ignore
-
-        # The interface prohibits empty sets at the output
-        out = set(map(sum, combinations)) or {0}        # type: ignore
-
-    assert isinstance(out, set)
-    assert len(out) > 0
-    assert all(map(lambda x: isinstance(x, int), out))
-    return out
-
-
 class DataType(expression.Any):
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
@@ -457,9 +419,7 @@ class FixedLengthArrayType(ArrayType):
                               max=self.element_type.bit_length_range.max * self.capacity)
 
     def compute_bit_length_values(self) -> typing.Set[int]:
-        # Combinatorics is tricky.
-        # The cornerstone concept here is the standard library function "combinations_with_replacement()",
-        # which implements the standard n-combination function.
+        # combinations_with_replacement() implements the standard n-combination function.
         combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_values(),
                                                                self.capacity)
         # We do not care about permutations because the final bit length is invariant to the order of
@@ -927,7 +887,7 @@ class UnionType(CompoundType):
                               max=self.tag_bit_length + max([b.max for b in blr]))
 
     def compute_bit_length_values(self) -> typing.Set[int]:
-        return compute_cumulative_bit_length_values(self.fields, assume_tagged_union_aggregation=True)
+        return compute_bit_length_values_for_tagged_union(map(lambda f: f.data_type, self.fields))
 
 
 class StructureType(CompoundType):
@@ -938,7 +898,7 @@ class StructureType(CompoundType):
                               max=sum([b.max for b in blr]))
 
     def compute_bit_length_values(self) -> typing.Set[int]:
-        return compute_cumulative_bit_length_values(self.fields, assume_tagged_union_aggregation=False)
+        return compute_bit_length_values_for_struct(map(lambda f: f.data_type, self.fields))
 
 
 class ServiceType(CompoundType):
@@ -1156,3 +1116,45 @@ def _unittest_compound_types() -> None:
     ]).compute_bit_length_values() == {4 + 16, 12 + 16, 20 + 16, 28 + 16, 36 + 16}
 
     assert try_struct_fields([outer]).compute_bit_length_values() == {4, 12, 20, 28, 36}
+
+
+def compute_bit_length_values_for_struct(member_data_types: typing.Iterable['DataType']) -> typing.Set[int]:
+    # As far as bit length combinations are concerned, structures are similar to static arrays.
+    # Please refer to the bit length computation method for static arrays for reference.
+    # The difference here is that the length value sets are not homogeneous across fields, as they
+    # can be of different types, which sets structures apart from arrays. So instead of looking for
+    # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
+    # For large structures with dynamic arrays this can be very computationally expensive.
+    blv_sets = [x.compute_bit_length_values() for x in member_data_types]
+    combinations = itertools.product(*blv_sets)
+
+    # The interface prohibits empty sets at the output
+    out = set(map(sum, combinations)) or {0}
+
+    assert out and all(map(lambda x: isinstance(x, int) and x >= 0, out))
+    return out      # type: ignore
+
+
+def compute_bit_length_values_for_tagged_union(member_data_types: typing.Iterable['DataType']) -> typing.Set[int]:
+    ts = list(member_data_types)
+    del member_data_types
+
+    if len(ts) < UnionType.MIN_NUMBER_OF_VARIANTS:
+        raise MalformedUnionError('Cannot perform bit length analysis on less than {0} members because '
+                                  'tagged unions are not defined for less than {0} variants'
+                                  .format(UnionType.MIN_NUMBER_OF_VARIANTS))
+
+    tag_bit_length = (len(ts) - 1).bit_length()
+    assert tag_bit_length > 0
+
+    # Unions are easy to handle because when serialized, a union is essentially just a single field,
+    # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
+    # add the tag length to each element. Easy.
+    combinations = set()                                        # type: typing.Set[int]
+    for t in ts:
+        combinations |= t.compute_bit_length_values()
+
+    out = set(map(lambda c: tag_bit_length + c, combinations))
+
+    assert out and all(map(lambda x: isinstance(x, int) and x > 0, out))
+    return out

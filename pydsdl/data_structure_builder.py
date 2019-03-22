@@ -8,7 +8,7 @@ from . import data_type
 from . import frontend_error
 
 
-class BitLengthAnalysisInvalidatedError(frontend_error.InvalidDefinitionError):
+class BitLengthAnalysisError(frontend_error.InvalidDefinitionError):
     pass
 
 
@@ -22,8 +22,8 @@ class DataStructureBuilder:
     def add_field(self, field: data_type.Field) -> None:
         if self.union and self._bit_length_computed_at_least_once:
             # Refer to the DSDL specification for the background information.
-            raise BitLengthAnalysisInvalidatedError('Inter-field offset is not defined for unions; '
-                                                    'previously performed bit length analysis is invalid')
+            raise BitLengthAnalysisError('Inter-field offset is not defined for unions; '
+                                         'previously performed bit length analysis is invalid')
         assert isinstance(field, data_type.Field)
         self._fields.append(field)
 
@@ -69,6 +69,12 @@ class DataStructureBuilder:
         # there is no concept of inter-field offset because a union holds exactly one field at any moment;
         # only the total offset (i.e., total size) is defined.
         self._bit_length_computed_at_least_once = True
-        out = data_type.compute_cumulative_bit_length_values(self.fields, assume_tagged_union_aggregation=self.union)
-        assert isinstance(out, set)
+
+        field_type_gen = map(lambda f: f.data_type, self.fields)
+        if self.union:
+            out = data_type.compute_bit_length_values_for_tagged_union(field_type_gen)
+        else:
+            out = data_type.compute_bit_length_values_for_struct(field_type_gen)
+
+        assert isinstance(out, set) and len(out) > 0
         return out
