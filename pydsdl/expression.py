@@ -767,3 +767,36 @@ def _unittest_textual_representations() -> None:
         tmp == '{{90/7}, {1, -9/7}}'
 
     assert repr(Set([String('123')])) == "set({'123'})"
+
+
+# noinspection PyTypeChecker
+def _unittest_basic() -> None:
+    from pytest import raises
+
+    assert hash(Boolean(True)) == hash(True)
+    assert Boolean(True) == Boolean(True)
+    assert Boolean(True) != Boolean(False)
+    assert Boolean(True) != Rational(1)         # sic!
+    assert Boolean(True) != Rational(123)
+    assert Boolean(True) != Set([Boolean(True)])
+
+    with raises(ValueError):
+        Boolean(int)       # type: ignore
+
+    with raises(ValueError):
+        Rational(12.34)    # type: ignore
+
+    with raises(ValueError):
+        Rational('123')    # type: ignore
+
+    with raises(ValueError):
+        String(123)       # type: ignore
+
+    with raises(ValueError):
+        Set([123])        # type: ignore
+
+    assert Rational(123).is_integer()
+    assert not Rational(fractions.Fraction(123, 124)).is_integer()
+    assert Rational(-123).as_native_integer() == -123
+    with raises(InvalidOperandError):
+        Rational(fractions.Fraction(123, 124)).as_native_integer()
