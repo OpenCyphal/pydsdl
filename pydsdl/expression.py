@@ -568,7 +568,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
 
         @functools.wraps(direct_operator)
         def wrapper(left: Any, right: Any) -> Any:
-            if not isinstance(left, Any) or not isinstance(right, Any):
+            if not isinstance(left, Any) or not isinstance(right, Any):  # pragma: no cover
                 raise ValueError('Operators are only defined for implementations of Any; found this: %r, %r' %
                                  (type(left).__name__, type(right).__name__))
             try:

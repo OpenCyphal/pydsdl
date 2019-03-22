@@ -1094,6 +1094,34 @@ def _unittest_dsdl_parser_basics() -> None:
 
 @_in_n_out
 def _unittest_dsdl_parser_expressions() -> None:
+    from pytest import raises
+
+    def throws(definition: str, exc: typing.Type[Exception] = expression.InvalidOperandError) -> None:
+        with raises(exc):
+            _parse_definition(_define('ns/Throws.0.1.uavcan', dedent(definition)), [])
+
+    throws('bool R = true && 0')
+    throws('bool R = true || 0')
+    throws('bool R = 0 || true')
+    throws('bool R = 0 == true')
+    throws('bool R = {0} & true')
+    throws('bool R = true ^ {0}')
+    throws('bool R = 0 ^ true')
+    throws('int8 R = 1 / 0')
+    throws('bool R = "S" == 0')
+    throws('bool R = {0} != {}')
+    throws('bool R = {0, true, "S"}')
+    throws('bool R = {0} == {"s"}')
+    throws('bool R = {0} <= "s"')
+    throws('bool R = {0} >= "s"')
+    throws('bool R = {0} > "s"')
+    throws('bool R = {0} < "s"')
+    throws('bool R = {0} | "s"')
+    throws('bool R = {0} & "s"')
+    throws('bool R = {0} ^ "s"')
+    throws('bool R = {0}.nonexistent_attribute')
+    throws('bool R = {0} / {1}')
+
     _parse_definition(
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
