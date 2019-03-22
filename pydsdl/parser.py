@@ -60,31 +60,31 @@ class StatementStreamProcessor:
                     constant_type: data_type.DataType,
                     name: str,
                     value: expression.Any) -> None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def on_field(self, field_type: data_type.DataType, name: str) -> None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def on_padding_field(self, padding_field_type: data_type.VoidType) -> None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def on_directive(self,
                      line_number: int,
                      directive_name: str,
                      associated_expression_value: typing.Optional[expression.Any]) -> None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def on_service_response_marker(self) -> None:
         """The correctness of the marker placement is not validated by the caller."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def resolve_top_level_identifier(self, name: str) -> expression.Any:
         """Must throw an appropriate exception if the reference cannot be resolved."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def resolve_versioned_data_type(self, name: str, version: data_type.Version) -> data_type.CompoundType:
         """Must throw an appropriate exception if the data type is not found."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 _logger = logging.getLogger(__name__)
@@ -304,7 +304,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
             new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
             if not isinstance(new_atom, expression.Any):
                 raise error.InternalError('Identifier %r resolved as %r, expected expression' %
-                                          (atom, type(new_atom)))
+                                          (atom, type(new_atom)))  # pragma: no cover
             _logger.debug('Identifier resolution: %r --> %s', atom, new_atom.TYPE_NAME)
             atom = new_atom
             del new_atom
@@ -494,11 +494,7 @@ def _unittest_parse_string_literal() -> None:
     from pytest import raises
 
     def once(literal: str, value: str) -> None:
-        try:
-            assert _parse_string_literal(literal).native_value == value
-        except DSDLSyntaxError:
-            print('FAILED ON:', literal, repr(value))
-            raise
+        assert _parse_string_literal(literal).native_value == value
 
     def auto_repr(text: str) -> None:
         r = repr(text)
@@ -509,6 +505,7 @@ def _unittest_parse_string_literal() -> None:
     auto_repr('"')
     auto_repr('"')
     auto_repr('\n')
+    auto_repr('\x00\x01\xff')
 
     for a in range(256):
         auto_repr('\\x%02x' % a)
@@ -536,7 +533,3 @@ def _unittest_parse_string_literal() -> None:
     once('"evening"', 'evening')    # okay we support English, cool
     once('"вечер"', 'вечер')        # and Russian too
     once('"õhtust"', 'õhtust')      # heck, even Estonian
-
-    once('"night"', 'night')
-    once('"ночь"', 'ночь')
-    once('"öö"', 'öö')

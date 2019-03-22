@@ -312,6 +312,12 @@ def _unittest_error() -> None:
     with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
 
+    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[true] array')
+
+    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool["text"] array')
+
     with raises(error.InvalidDefinitionError, match='(?i).*service response marker.*'):
         standalone('vendor/service/A.1.0.uavcan', 'bool request\n---\nbool response\n---\nbool again')
 
@@ -341,6 +347,25 @@ def _unittest_error() -> None:
 
     with raises(data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
+
+    with raises(error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for less.*'):
+        standalone('vendor/types/A.1.0.uavcan',
+                   dedent('''
+                   @union
+                   int8 a
+                   @assert _offset_.count >= 1
+                   int16 b
+                   '''))
+
+    with raises(error.InvalidDefinitionError, match=r'(?i).*field offset is not defined for unions.*'):
+        standalone('vendor/types/A.1.0.uavcan',
+                   dedent('''
+                   @union
+                   int8 a
+                   int16 b
+                   @assert _offset_.count >= 1
+                   int8 c
+                   '''))
 
     with raises(data_type_builder.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
         _parse_definition(
@@ -410,6 +435,8 @@ def _unittest_error() -> None:
     except error.FrontendError as ex:
         assert ex.path and ex.path.endswith('vendor/types/A.1.0.uavcan')
         assert ex.line and ex.line == 4
+    else:
+        assert False
 
 
 @_in_n_out
@@ -564,6 +591,12 @@ def _unittest_parse_namespace() -> None:
     import tempfile
     directory = tempfile.TemporaryDirectory()
 
+    print_output = None  # type: typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, str]]
+
+    def print_handler(d: dsdl_definition.DSDLDefinition, line: int, text: str) -> None:
+        nonlocal print_output
+        print_output = d, line, text
+
     # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
         path = os.path.join(directory.name, rel_path)
@@ -599,6 +632,7 @@ def _unittest_parse_namespace() -> None:
         float32 just_right
         float64 woah
         ---
+        @print _offset_     # Will print zero {0}
         """)
     )
 
@@ -607,7 +641,8 @@ def _unittest_parse_namespace() -> None:
 
     parsed = namespace.read_namespace(
         os.path.join(directory.name, 'zubax'),
-        []
+        [],
+        print_handler
     )
     print(parsed)
     assert len(parsed) == 3
@@ -625,8 +660,14 @@ def _unittest_parse_namespace() -> None:
     with raises(namespace.FixedPortIDCollisionError):
         namespace.read_namespace(
             os.path.join(directory.name, 'zubax'),
-            []
+            [],
+            print_handler
         )
+
+    assert print_output is not None
+    assert print_output[0].full_name == 'zubax.nested.Spartans'
+    assert print_output[1] == 8
+    assert print_output[2] == '{0}'
 
 
 def _unittest_parse_namespace_versioning() -> None:
@@ -1054,7 +1095,8 @@ def _unittest_dsdl_parser_expressions() -> None:
     )
 
 
-def _collect_descendants(cls: typing.Type[object]) -> typing.Iterable[object]:
+def _collect_descendants(cls: typing.Type[object]) -> typing.Iterable[typing.Type[object]]:
+    # noinspection PyArgumentList
     for t in cls.__subclasses__():
         yield t
         yield from _collect_descendants(t)
