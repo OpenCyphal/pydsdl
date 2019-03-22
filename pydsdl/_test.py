@@ -1111,10 +1111,17 @@ def _unittest_dsdl_parser_expressions() -> None:
                 @assert {1} <= {1}
                 @assert {1} != {1, 2}
                 @assert {1} >= {1}
+                @assert {1, 2} > {1, 2} == false
+                @assert {1, 2, 3} > {1, 2}
                 @assert {1, 5/2} == {-5/-2, 2.5, 1}
                 @assert {1, 2, 3} == {1} | {2} | {3} | {1}
                 @assert {1, 2, 3} == {1, 2, 3, 4, 5} & {1, 2, 3, 8, 9}
                 @assert {4, 5, 8, 9} == {1, 2, 3, 4, 5} ^ {1, 2, 3, 8, 9}
+                @assert 1 - {1, 2, 3} == {0, -1, -2}
+                @assert 1 / {1, 2, 3} == {1, 1/2, 1/3}
+                @assert 8 % {1, 2, 3} == {0, 2}
+                @assert 2 ** {1, 2, 3} == {2, 4, 8}
+                @assert {1, 2, 3} ** 2 == {1, 4, 9}
                 @assert "Hello" + ' ' + 'world' == 'Hello world'
                 @assert 'Hello'+' '+'world' != ''
                 @assert true != ('A' == "a")
@@ -1123,6 +1130,12 @@ def _unittest_dsdl_parser_expressions() -> None:
                 @assert true||false
                 @assert !false
                 @assert ! 5 < 3
+                @assert 4 | 2 == 6
+                @assert 4 & 2 == 0
+                @assert 3 & 2 == 2
+                @assert 0xFF_00 & 0x00_FF == 0x0000
+                @assert 0xFF_00 | 0x00_FF == 0xFFFF
+                @assert 0xFF_00 ^ 0x0F_FF == 0xF0FF
                 ''')),
         []
     )
