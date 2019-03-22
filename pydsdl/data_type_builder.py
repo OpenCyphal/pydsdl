@@ -154,7 +154,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         if not found:
             raise UndefinedDataTypeError('Data type %r version %d.%d could not be found' %
                                          (full_name, version.major, version.minor))
-        if len(found) > 1:
+        if len(found) > 1:  # pragma: no cover
             raise error.InternalError('Conflicting definitions: %r' % found)
 
         target_definition = found[0]

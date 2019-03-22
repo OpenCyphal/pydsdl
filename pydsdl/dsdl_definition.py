@@ -178,7 +178,7 @@ class DSDLDefinition:
         """
         if isinstance(other, DSDLDefinition):
             return self.full_name == other.full_name and self.version == other.version
-        else:
+        else:  # pragma: no cover
             return NotImplemented
 
     def __str__(self) -> str:

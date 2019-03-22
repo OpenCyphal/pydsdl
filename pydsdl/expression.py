@@ -41,14 +41,14 @@ class Any:
     TYPE_NAME = None    # type: str
 
     def __hash__(self) -> int:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def __eq__(self, other: object) -> bool:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def __str__(self) -> str:
         """Must return a DSDL spec-compatible textual representation of the contained value suitable for printing."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def __repr__(self) -> str:
         return self.TYPE_NAME + '(' + str(self) + ')'
@@ -115,7 +115,7 @@ class Any:
 class Primitive(Any):
     @property
     def native_value(self) -> typing.Any:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class Boolean(Primitive):
@@ -137,7 +137,7 @@ class Boolean(Primitive):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Boolean):
             return self._value == other._value
-        else:
+        else:  # pragma: no cover
             return NotImplemented
 
     def __str__(self) -> str:
@@ -199,7 +199,7 @@ class Rational(Primitive):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Rational):
             return self._value == other._value
-        else:
+        else:  # pragma: no cover
             return NotImplemented
 
     def __str__(self) -> str:
@@ -309,7 +309,7 @@ class String(Primitive):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, String):
             return self._value == other._value
-        else:
+        else:  # pragma: no cover
             return NotImplemented
 
     def __str__(self) -> str:
@@ -332,10 +332,10 @@ class String(Primitive):
 class Container(Any):
     @property
     def element_type(self) -> typing.Type[Any]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def __iter__(self) -> typing.Iterator[typing.Any]:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class Set(Container):
@@ -563,7 +563,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
         else:
             alternative_method_name = '_%s_right' % direct_operator.__name__
 
-        if not hasattr(Any, alternative_method_name):
+        if not hasattr(Any, alternative_method_name):  # pragma: no cover
             raise TypeError('The following alternative operator method is not defined: %r' % alternative_method_name)
 
         @functools.wraps(direct_operator)
@@ -691,7 +691,7 @@ def attribute(value: Any, name: typing.Union[str, String]) -> Any:
 
     if isinstance(value, Any) and isinstance(name, String):     # noinspection PyProtectedMember
         return value._attribute(name)
-    else:
+    else:  # pragma: no cover
         raise ValueError('The argument types of the attribute operator are (Any, String), got (%r, %r)' %
                          (type(value).__name__, type(name).__name__))
 

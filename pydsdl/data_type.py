@@ -328,6 +328,17 @@ def _unittest_primitive() -> None:
     assert repr(SignedIntegerType(24, PrimitiveType.CastMode.TRUNCATED)) == \
         'SignedIntegerType(bit_length=24, cast_mode=<CastMode.TRUNCATED: 1>)'
 
+    a = SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
+    b = BooleanType(PrimitiveType.CastMode.SATURATED)
+    assert hash(a) != hash(b)
+    assert hash(a) == hash(SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED))
+    assert a == SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
+    assert b != SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
+    assert a != b
+    assert b == BooleanType(PrimitiveType.CastMode.SATURATED)
+    assert b != BooleanType(PrimitiveType.CastMode.TRUNCATED)
+    assert b != 123    # Not implemented
+
 
 class VoidType(DataType):
     MAX_BIT_LENGTH = 64
@@ -659,12 +670,18 @@ class Constant(Attribute):
 
 
 def _unittest_attribute() -> None:
+    from pytest import raises
+
     assert str(Field(BooleanType(PrimitiveType.CastMode.TRUNCATED), 'flag')) == 'truncated bool flag'
     assert repr(Field(BooleanType(PrimitiveType.CastMode.TRUNCATED), 'flag')) == \
         'Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.TRUNCATED: 1>), name=\'flag\')'
 
     assert str(PaddingField(VoidType(32))) == 'void32 '     # Mind the space!
     assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
+
+    with raises(TypeParameterError, match='.*void.*'):
+        # noinspection PyTypeChecker
+        repr(PaddingField(SignedIntegerType(8, PrimitiveType.CastMode.SATURATED)))   # type: ignore
 
     data_type = SignedIntegerType(32, PrimitiveType.CastMode.SATURATED)
     const = Constant(data_type, 'FOO_CONST', expression.Rational(-123))

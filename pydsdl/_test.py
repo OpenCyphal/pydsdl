@@ -330,6 +330,9 @@ def _unittest_error() -> None:
     with raises(error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@union true || false')
 
+    with raises(error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
+        standalone('vendor/directive/A.1.0.uavcan', '@deprecated true || false')
+
     with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.0.uavcan', '')
 
@@ -435,7 +438,7 @@ def _unittest_error() -> None:
     except error.FrontendError as ex:
         assert ex.path and ex.path.endswith('vendor/types/A.1.0.uavcan')
         assert ex.line and ex.line == 4
-    else:
+    else:  # pragma: no cover
         assert False
 
 
@@ -504,6 +507,9 @@ def _unittest_assert() -> None:
             @assert _offset_.max <= 100
             @assert _offset_.max < 101
             @assert _offset_ == _offset_
+            @assert truncated uint64._bit_length_ == {64}
+            @assert uint64._bit_length_ == {64}
+            @assert Array.1.0._bit_length_.max == 2 + 8 + 8
             ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
@@ -518,6 +524,33 @@ def _unittest_assert() -> None:
                 uint64 big
                 @assert _offset_ == 64
                 ''')),
+            []
+        )
+
+    with raises(expression.UndefinedAttributeError):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                '''uint64 LENGTH = uint64.nonexistent_attribute'''),
+            []
+        )
+
+    with raises(error.InvalidDefinitionError, match='(?i).*void.*'):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                'void2 name'),
+            []
+        )
+
+    with raises(data_type.InvalidConstantValueError):
+        _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true'), [])
+
+    with raises(error.InvalidDefinitionError, match='.*value.*'):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                'int8 name = {1, 2, 3}'),
             []
         )
 
