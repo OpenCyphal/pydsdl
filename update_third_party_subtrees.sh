@@ -6,9 +6,8 @@
 
 THIRD_PARTY_DIR="pydsdl/third_party"
 
-git rm -rf $THIRD_PARTY_DIR &> /dev/null
-rm -rf $THIRD_PARTY_DIR &> /dev/null
-mkdir $THIRD_PARTY_DIR
+git rm -rf $THIRD_PARTY_DIR/* &> /dev/null
+rm -rf $THIRD_PARTY_DIR/* &> /dev/null
 
 # Updating Parsimonious.
 parsimonious_tag="$1"
