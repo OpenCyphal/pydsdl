@@ -60,6 +60,7 @@ This option is dangerous and you must not use it unless you really understand th
 ### Data type model
 
 DSDL data types are modeled through the following Python types.
+The user application should not instantiate them directly.
 All of them share the same common ancestor `DataType` and the naming pattern `pydsdl.*Type`:
 
 * `DataType` - the root class; it also inherits from `pydsdl.Any`, since DSDL types are also values.
@@ -79,11 +80,13 @@ All of them share the same common ancestor `DataType` and the naming pattern `py
     * `StructureType` - message types or nested structures.
     * `ServiceType` - service types, not serializable.
 
+The type `CompoundType` is the most interesting one, as it represents actual DSDL definitions upon their interpretation.
+The following are its most important properties, their semantics should be obvious enough from their names:
+`full_name: str`, `version: pydsdl.Version`, `deprecated: bool`, `fields: List[pydsdl.Field]`, `constants: List[pydsdl.Constant]`, `fixed_port_id: Optional[int]`.
+
 The `ServiceType` is a special case: unlike other types, it can't be serialized directly;
 rather, it contains two pseudo-fields: `request` and `response`, which contain the request and the
 response structure of the service type, respectively.
-
-The user application should not instantiate data type classes directly.
 
 Every data type (i.e., the `DataType` root class) has the following public attributes
 (although they raise `TypeError` when used against an instance of `ServiceType`):
