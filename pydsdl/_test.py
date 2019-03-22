@@ -17,9 +17,9 @@ from . import namespace_parser
 
 
 # Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
-#   pydsdl/_non_intrusive_test.py:18: error: Missing type parameters for generic type
-#   pydsdl/_non_intrusive_test.py: note: In function "_in_n_out":
-#   pydsdl/_non_intrusive_test.py:18: error: Missing type parameters for generic type
+#   pydsdl/_test.py:18: error: Missing type parameters for generic type
+#   pydsdl/_test.py: note: In function "_in_n_out":
+#   pydsdl/_test.py:18: error: Missing type parameters for generic type
 _DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 
@@ -35,9 +35,6 @@ def _define(rel_path: str, text: str) -> dsdl_definition.DSDLDefinition:
     path = os.path.join(_DIRECTORY.name, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w') as f:
-        if text.rstrip('\n') == text:   # If there is no trailing new line, add one
-            text += '\n'
-
         f.write(text)
 
     root_namespace_path = os.path.join(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep)[0])
@@ -61,21 +58,21 @@ def _in_n_out(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
 @_in_n_out
 def _unittest_define() -> None:
     # I DON'T ALWAYS WRITE UNIT TESTS
-    d = _define('uavcan/test/65000.Message.1.2.uavcan', '# empty\n')
+    d = _define('uavcan/test/65000.Message.1.2.uavcan', '# empty')
     assert _DIRECTORY is not None
     assert d.full_name == 'uavcan.test.Message'
     assert d.version == (1, 2)
     assert d.fixed_port_id == 65000
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/test/65000.Message.1.2.uavcan')
-    assert open(d.file_path).read() == '# empty\n'
+    assert open(d.file_path).read() == '# empty'
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
-    d = _define('uavcan/Service.255.254.uavcan', '# empty 2\n')
+    d = _define('uavcan/Service.255.254.uavcan', '# empty 2')
     assert d.full_name == 'uavcan.Service'
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/Service.255.254.uavcan')
-    assert open(d.file_path).read() == '# empty 2\n'
+    assert open(d.file_path).read() == '# empty 2'
 
 
 @_in_n_out

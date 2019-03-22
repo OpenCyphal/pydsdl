@@ -25,6 +25,6 @@ from .version import __version__, __license__       # noqa
 from .namespace_parser import parse_namespace       # noqa
 from . import data_type                             # noqa
 from . import frontend_error                        # noqa
-from . import _non_intrusive_test as _              # noqa This is only needed for testing purposes
+from . import _test as _                            # noqa This is only needed for testing purposes
 
 sys.path = _original_sys_path

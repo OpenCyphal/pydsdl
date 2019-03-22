@@ -26,9 +26,6 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
     methods in the statement stream processor.
     """
     try:
-        if text and text[-1] != '\n':
-            raise DSDLSyntaxError('A blank line at the end of the file is required unless the file is empty')
-
         _ParseTreeProcessor(statement_stream_processor).parse(text)  # type: ignore
     except parsimonious.ParseError as ex:
         raise DSDLSyntaxError('Syntax error', line=ex.line())  # type: ignore
