@@ -147,7 +147,7 @@ representation of the contained value.
     * `Rational` - real value approximation; has `native_value: fractions.Fraction`, `is_integer() -> bool`, and
 `as_native_integer() -> int` (which throws if the contained number is not an integer).
     * `String` - a Unicode string; has `native_value: str`.
-  * `Container` - generic container; has `element_type: Any` and is iterable.
+  * `Container` - generic container; has `element_type: Type[Any]` and is iterable.
     * `Set` - a DSDL constant homogeneous set.
 
 ## Usage example
