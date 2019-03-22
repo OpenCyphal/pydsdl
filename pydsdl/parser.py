@@ -22,19 +22,30 @@ class DSDLSyntaxError(frontend_error.InvalidDefinitionError):
 
 def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> None:
     """
-    The entry point of the parser. As the text is being parsed, the processor invokes appropriate
+    The entry point of the parser. As the text is being parsed, the parser invokes appropriate
     methods in the statement stream processor.
     """
+    pr = _ParseTreeProcessor(statement_stream_processor)
     try:
-        _ParseTreeProcessor(statement_stream_processor).parse(text)  # type: ignore
+        pr.parse(text)  # type: ignore
+
+    except frontend_error.FrontendError as ex:
+        # Inject error location. If this exception is being propagated from a recursive instance, it already has
+        # its error location populated, so nothing will happen here.
+        ex.set_error_location_if_unknown(line=pr.current_line_number)
+        raise ex
+
     except parsimonious.ParseError as ex:
-        raise DSDLSyntaxError('Syntax error', line=ex.line())  # type: ignore
+        raise DSDLSyntaxError('Syntax error', line=int(ex.line()))      # type: ignore
+
     except parsimonious.VisitationError as ex:  # pragma: no cover
+        # noinspection PyBroadException
         try:
-            line = int(ex.original_class.line())  # type: typing.Optional[int]
-        except AttributeError:
-            line = None
+            line = int(ex.original_class.line())
+        except Exception:
+            line = pr.current_line_number
         # Treat as internal because all intentional errors are not wrapped into VisitationError.
+        assert line > 0
         raise frontend_error.InternalError(str(ex), line=line)
 
 
@@ -137,10 +148,19 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
         self._statement_stream_processor = statement_stream_processor   # type: StatementStreamProcessor
+        self._current_line_number = 1   # Lines are numbered from one
+
+    @property
+    def current_line_number(self) -> int:
+        assert self._current_line_number > 0
+        return self._current_line_number
 
     def generic_visit(self, node: _Node, children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
         return tuple(children) or node
+
+    def visit_end_of_line(self, _n: _Node, _c: _Children) -> None:
+        self._current_line_number += 1
 
     # ================================================= Core elements ================================================
 
@@ -167,17 +187,17 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:
         self._statement_stream_processor.on_service_response_marker()
 
-    def visit_statement_directive_with_expression(self, node: _Node, children: _Children) -> None:
+    def visit_statement_directive_with_expression(self, _n: _Node, children: _Children) -> None:
         _at, name, _space, exp = children
         assert isinstance(name, str) and name and isinstance(exp, expression.Any)
-        self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
+        self._statement_stream_processor.on_directive(line_number=self.current_line_number,
                                                       directive_name=name,
                                                       associated_expression_value=exp)
 
-    def visit_statement_directive_without_expression(self, node: _Node, children: _Children) -> None:
+    def visit_statement_directive_without_expression(self, _n: _Node, children: _Children) -> None:
         _at, name = children
         assert isinstance(name, str) and name
-        self._statement_stream_processor.on_directive(line_number=_get_line_number(node),
+        self._statement_stream_processor.on_directive(line_number=self.current_line_number,
                                                       directive_name=name,
                                                       associated_expression_value=None)
 
@@ -399,11 +419,6 @@ def _print_node(n: typing.Any) -> str:
         return '[%s]' % ', '.join(map(_print_node, n))
     else:
         return repr(n)
-
-
-def _get_line_number(node: _Node) -> int:
-    """Returns the one-based line number where the specified node is located."""
-    return int(node.full_text.count('\n', 0, node.start) + 1)
 
 
 def _unwrap_array_capacity(ex: expression.Any) -> int:

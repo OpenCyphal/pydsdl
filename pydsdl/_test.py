@@ -399,6 +399,18 @@ def _unittest_error() -> None:
             ]
         )
 
+    try:
+        standalone('vendor/types/A.1.0.uavcan',
+                   dedent('''
+                   int8 a  # Comment
+                   # Empty
+                   @assert false  # Will error here, line number 4
+                   # Blank
+                   '''))
+    except frontend_error.FrontendError as ex:
+        assert ex.path and ex.path.endswith('vendor/types/A.1.0.uavcan')
+        assert ex.line and ex.line == 4
+
 
 @_in_n_out
 def _unittest_print() -> None:
