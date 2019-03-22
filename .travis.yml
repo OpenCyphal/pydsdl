@@ -12,8 +12,10 @@ python:
 
 before_script:
   - pip install -r requirements.txt
+  - pip install coveralls
 
 script:
   - ./test.sh
+  - coveralls
   - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
   - ./test_namespace.py dsdl-test/uavcan
