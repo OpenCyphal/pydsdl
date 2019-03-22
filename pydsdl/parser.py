@@ -36,7 +36,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
         raise ex
 
     except parsimonious.ParseError as ex:
-        raise DSDLSyntaxError('Syntax error', line=int(ex.line()))      # type: ignore
+        raise DSDLSyntaxError('Syntax error', line=int(ex.line())) from None  # type: ignore
 
     except parsimonious.VisitationError as ex:  # pragma: no cover
         # noinspection PyBroadException
