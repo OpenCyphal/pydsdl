@@ -5,13 +5,16 @@
 #
 
 import sys
+import time
 import pydsdl
 
 target_directory = sys.argv[1]
 lookup_directories = sys.argv[2:]
 
 try:
+    started_at = time.monotonic()
     compound_types = pydsdl.read_namespace(target_directory, lookup_directories, print)
+    done_at = time.monotonic()
 except pydsdl.InvalidDefinitionError as ex:
     print(ex, file=sys.stderr)                      # The DSDL definition is invalid
 except pydsdl.InternalError as ex:
@@ -28,3 +31,5 @@ else:
             print('\t', str(f.data_type), f.name)
         for c in t.constants:
             print('\t', str(c.data_type), c.name, '=', str(c.value.native_value))
+
+print('%d types parsed in %.1f seconds' % (len(compound_types), done_at - started_at))

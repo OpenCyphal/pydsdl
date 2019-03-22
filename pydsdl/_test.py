@@ -1052,3 +1052,44 @@ def _unittest_dsdl_parser_expressions() -> None:
                 ''')),
         []
     )
+
+
+def _collect_descendants(cls: typing.Type[object]) -> typing.Iterable[object]:
+    for t in cls.__subclasses__():
+        yield t
+        yield from _collect_descendants(t)
+
+
+def _unittest_collect_descendants() -> None:  # Unit test for my unit test.
+    class A:
+        pass
+
+    class B(A):
+        pass
+
+    class C(B):
+        pass
+
+    class D(A):
+        pass
+
+    assert set(_collect_descendants(A)) == {B, C, D}
+    assert set(_collect_descendants(D)) == set()
+    assert bool in set(_collect_descendants(int))
+
+
+def _unittest_public_api() -> None:
+    import pydsdl
+
+    # Ensure that all descendants of the specified classes are exported from the library.
+    # If this test fails, you probably forgot to update __init__.py.
+    public_roots = [
+        data_type.DataType,
+        data_type.Attribute,
+        expression.Any,
+    ]
+
+    for root in public_roots:
+        expected_types = {root} | set(_collect_descendants(root))
+        for t in expected_types:
+            assert t.__name__ in dir(pydsdl), 'Data type %r is not exported' % t
