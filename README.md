@@ -11,7 +11,15 @@ PyDSDL
 ## Requirements
 
 PyDSDL requires Python 3.5 or newer.
-No third-party dependencies are needed to use the library.
+No third-party dependencies need to be installed to use the library.
+
+### Bundled third-party dependencies
+
+The library is bundled with the following third-party software libraries (by virtue of being bundled,
+they need not be installed by the user):
+
+- [Parsimonious](https://github.com/erikrose/parsimonious) by Erik Rose, MIT license.
+- [Six](https://github.com/benjaminp/six) by Benjamin Peterson, MIT license.
 
 ## Installation
 
@@ -155,20 +163,22 @@ Despite the fact that the library itself is dependency-free,
 some additional packages are needed for development and testing.
 They are listed in `requirements.txt`.
 
+External runtime dependencies are not allowed in this project --
+if you can't bundle it with the library, you can't use it.
+
 ### Coding conventions
 
 Follow [PEP8](https://www.python.org/dev/peps/pep-0008/) with the following exception:
 the line length limit is 120 characters (not 79).
 
-All public functions and methods must be type-annotated.
-This is enforced statically with MyPy.
+All functions and methods must be type-annotated. This is enforced statically with MyPy.
 
 Ensure compatibility with Python 3.5 and all newer versions.
 
 Do not import specific entities; instead, import only the package itself and then use verbose references,
 as shown below.
 If you really need to import a specific entity, consider prefixing it with an underscore to prevent
-scope leakage, unless you want it to be externally visible.
+scope leakage, unless you really want it to be externally visible.
 
 ```python
 from . import data_type                 # Good
