@@ -12,10 +12,10 @@ python:
 
 before_script:
   - pip install -r requirements.txt
-  - pip install coveralls
+  - pip install coveralls  # Intentionally removed from requirements.txt because it's only useful in the CI environment
 
 script:
   - ./test.sh
-  - coveralls
+  - coveralls  # Publish the coverage stats online.
   - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
   - ./test_namespace.py dsdl-test/uavcan
