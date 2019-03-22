@@ -172,7 +172,8 @@ class Rational(Primitive):
     TYPE_NAME = 'rational'
 
     def __init__(self, value: typing.Union[int, fractions.Fraction]):
-        if not isinstance(value, (int, fractions.Fraction)):
+        # We must support float as well, because some operators on Fraction sometimes yield float, e.g. power.
+        if not isinstance(value, (int, float, fractions.Fraction)):
             raise ValueError('Cannot construct a Rational instance from ' + type(value).__name__)
         self._value = fractions.Fraction(value)  # type: fractions.Fraction
 
@@ -784,7 +785,7 @@ def _unittest_basic() -> None:
         Boolean(int)       # type: ignore
 
     with raises(ValueError):
-        Rational(12.34)    # type: ignore
+        Rational({123})    # type: ignore
 
     with raises(ValueError):
         Rational('123')    # type: ignore

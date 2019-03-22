@@ -135,6 +135,11 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         assert len(self._structs) == 2
 
     def resolve_top_level_identifier(self, name: str) -> expression.Any:
+        # Look only in the current data structure. The lookup cannot cross the service request/response boundary.
+        for c in self._structs[-1].constants:
+            if c.name == name:
+                return c.value
+
         if name == '_offset_':
             blv = self._structs[-1].compute_bit_length_values()
             assert isinstance(blv, set) and len(blv) > 0 and all(map(lambda x: isinstance(x, int), blv))

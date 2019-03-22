@@ -1125,6 +1125,9 @@ def _unittest_dsdl_parser_expressions() -> None:
     _parse_definition(
         _define('ns/A.1.0.uavcan',
                 dedent(r'''
+                float64 PI = 3.141592653589793
+                float64 E  = 2.718281828459045
+                @assert (PI ** E > 22.4) && (PI ** E < 22.5)
                 @assert 'moments of eternity'     != "strangers stealing someone else's dreams"  # I've seen it all
                 @assert 'hunting for the mystery' != 'running for your life in times like these' # I've seen it all
                 @assert "I remember the time once it a life" != 'oh baby'  # got you here in my head, here in my head
