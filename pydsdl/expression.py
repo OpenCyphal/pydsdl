@@ -7,7 +7,7 @@ import typing
 import operator
 import functools
 import fractions
-from . import frontend_error
+from . import error
 
 
 OperatorOutput    = typing.TypeVar('OperatorOutput')
@@ -16,7 +16,7 @@ BinaryOperator    = typing.Callable[['Any', 'Any'], OperatorOutput]
 AttributeOperator = typing.Callable[['Any', typing.Union['String', str]], OperatorOutput]
 
 
-class InvalidOperandError(frontend_error.InvalidDefinitionError):
+class InvalidOperandError(error.InvalidDefinitionError):
     pass
 
 

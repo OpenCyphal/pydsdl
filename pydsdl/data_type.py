@@ -10,7 +10,7 @@ import typing
 import itertools
 import fractions
 from . import expression
-from . import frontend_error
+from . import error
 from . import port_id_ranges
 
 
@@ -61,8 +61,7 @@ _DISALLOWED_NAME_PATTERNS = [
 ]
 
 
-class TypeParameterError(frontend_error.InvalidDefinitionError):
-    """This exception is not related to parsing errors, so it does not inherit from the same root."""
+class TypeParameterError(error.InvalidDefinitionError):
     pass
 
 

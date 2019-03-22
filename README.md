@@ -40,15 +40,16 @@ Additionally, checks for bit compatibility for data type definitions under the s
 ### Library API
 
 The library API is very simple and contains only the following entities
-(read their documentation for usage information, e.g., `help(pydsdl.data_type.CompoundType)`):
+(read their documentation for usage information, e.g., `help(pydsdl.DataType)`):
 
-* The main function `pydsdl.parse_namespace()`.
-* Data type model defined in the module `pydsdl.data_type`.
-* Exceptions defined in the module `pydsdl.frontend_error`.
+* The main function `pydsdl.read_namespace()`.
+* Data type model: root class `pydsdl.DataType`, descendants follow the naming pattern `pydsdl.*Type`.
+* Error model: root class `pydsdl.FrontendError`, descendants follow the naming pattern `pydsdl.*Error`.
+* Expression model: root class `pydsdl.Any`.
 
-#### The main function `parse_namespace`
+#### The main function `read_namespace`
 
-The application invokes the function `pydsdl.parse_namespace()`.
+The application invokes the function `pydsdl.read_namespace()`.
 It returns a list of top-level compound type definitions found in the provided namespace.
 If errors are found, a corresponding exception will be raised (see below).
 
@@ -111,14 +112,13 @@ The corresponding data model is shown below:
 
 #### Error model
 
-The root exception types defined in `pydsdl.frontend_error` are used to represent errors occurring during the
-parsing process:
+The root exception types defined in `pydsdl.error` are used to represent errors:
 
 * `FrontendError` - contains properties `path:str` and `line:int`, both of which are optional,
 which (if set) point out to the exact location where the error has occurred: the path of the file and
 the line number within the file (starting from one). If line is set, path is also set.
-  * `InternalError` - an error that occurred within the front end itself, at no fault of the parsed definition.
-  * `InvalidDefinitionError` - represents a problem with the parsed definition.
+  * `InternalError` - an error that occurred within the front end itself, at no fault of the processed definition.
+  * `InvalidDefinitionError` - represents a problem with the processed definition.
 This type is inherited by a dozen of specialized error exception classes; however, the class hierarchy beneath
 this type is unstable and should not be used by the application directly.
 
@@ -126,7 +126,7 @@ Converting a `FrontendError` (or derived) object to `str` yields an error messag
 suitable for error parsers of most IDEs; for example:
 
 ```
-uavcan/internet/udp/500.HandleIncomingPacket.0.1.uavcan:33: Error such and such
+uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
 ```
 
 ### Example
@@ -136,10 +136,10 @@ import sys
 import pydsdl
 
 try:
-    compound_types = pydsdl.parse_namespace('path/to/root_namespace', ['path/to/dependencies'])
-except pydsdl.frontend_error.InvalidDefinitionError as ex:
+    compound_types = pydsdl.read_namespace('path/to/root_namespace', ['path/to/dependencies'])
+except pydsdl.error.InvalidDefinitionError as ex:
     print(ex, file=sys.stderr)                      # The DSDL definition is invalid
-except pydsdl.frontend_error.InternalError as ex:
+except pydsdl.error.InternalError as ex:
     print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
 else:
     for t in compound_types:

@@ -10,6 +10,6 @@ import pydsdl
 target_directory = sys.argv[1]
 lookup_directories = sys.argv[2:]
 
-output = pydsdl.parse_namespace(target_directory, lookup_directories)
+output = pydsdl.read_namespace(target_directory, lookup_directories)
 
 print('\n'.join(map(str, output)))

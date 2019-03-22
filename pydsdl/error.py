@@ -30,6 +30,10 @@ class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is
     def set_error_location_if_unknown(self,
                                       path: typing.Optional[str] = None,
                                       line: typing.Optional[int] = None) -> None:
+        """
+        Entries that are already known will be left unchanged. This is useful when propagating exceptions through
+        recursive instances, e.g., when processing nested definitions.
+        """
         if not self._path and path:
             self._path = path
 

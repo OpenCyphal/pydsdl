@@ -20,11 +20,36 @@ if sys.version_info[:2] < (3, 5):   # pragma: no cover
 _original_sys_path = sys.path
 sys.path = [os.path.join(os.path.dirname(__file__), 'third_party')] + sys.path
 
-# Never import anything that is not exposed here - API stability guarantees are only provided for the exposed items.
-from .version import __version__, __license__       # noqa
-from .namespace_parser import parse_namespace       # noqa
-from . import data_type                             # noqa
-from . import frontend_error                        # noqa
-from . import _test as _                            # noqa This is only needed for testing purposes
+# Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
+# The main entry point of the library.
+from .namespace import read_namespace
+from .namespace import PrintOutputHandler
+
+# Error model.
+from .error import FrontendError, InvalidDefinitionError, InternalError
+
+# Data type model - meta types.
+from .data_type import DataType
+from .data_type import PrimitiveType
+from .data_type import BooleanType
+from .data_type import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType, FloatType
+from .data_type import VoidType
+from .data_type import ArrayType, FixedLengthArrayType, VariableLengthArrayType
+from .data_type import CompoundType, UnionType, StructureType, ServiceType
+
+# Data type model - attributes.
+from .data_type import Attribute, Field, PaddingField, Constant
+
+# Data type model - auxiliary.
+from .data_type import BitLengthRange, ValueRange, Version
+
+# Expression model.
+from .expression import Any
+from .expression import Primitive, Boolean, Rational, String
+from .expression import Container, Set
+
+# Auxiliary items, not related to the business logic and generally not useful.
+from .version import __version__, __license__
+from . import _test as _   # Only for testing, ignore, don't use.
 
 sys.path = _original_sys_path

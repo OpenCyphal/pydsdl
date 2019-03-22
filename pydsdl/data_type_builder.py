@@ -7,26 +7,26 @@ import typing
 import logging
 from . import data_type
 from . import expression
-from . import frontend_error
+from . import error
 from . import dsdl_definition
 from . import parser
 from . import data_structure_builder
 from . import port_id_ranges
 
 
-class AssertionCheckFailureError(frontend_error.InvalidDefinitionError):
+class AssertionCheckFailureError(error.InvalidDefinitionError):
     pass
 
 
-class UndefinedDataTypeError(frontend_error.InvalidDefinitionError):
+class UndefinedDataTypeError(error.InvalidDefinitionError):
     pass
 
 
-class UndefinedIdentifierError(frontend_error.InvalidDefinitionError):
+class UndefinedIdentifierError(error.InvalidDefinitionError):
     pass
 
 
-class InvalidDirectiveError(frontend_error.InvalidDefinitionError):
+class InvalidDirectiveError(error.InvalidDefinitionError):
     pass
 
 
@@ -37,16 +37,16 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
     def __init__(self,
                  definition:                      dsdl_definition.DSDLDefinition,
                  lookup_definitions:              typing.Iterable[dsdl_definition.DSDLDefinition],
-                 print_directive_handler:         typing.Callable[[int, str], None],
+                 print_output_handler:            typing.Callable[[int, str], None],
                  allow_unregulated_fixed_port_id: bool):
         self._definition = definition
         self._lookup_definitions = list(lookup_definitions)
-        self._print_directive_handler = print_directive_handler
+        self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
 
         assert isinstance(self._definition, dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, dsdl_definition.DSDLDefinition), lookup_definitions))
-        assert callable(self._print_directive_handler)
+        assert callable(self._print_output_handler)
         assert isinstance(self._allow_unregulated_fixed_port_id, bool)
 
         self._structs = [data_structure_builder.DataStructureBuilder()]
@@ -129,7 +129,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
 
     def on_service_response_marker(self) -> None:
         if len(self._structs) > 1:
-            raise frontend_error.InvalidDefinitionError('Duplicated service response marker')
+            raise error.InvalidDefinitionError('Duplicated service response marker')
 
         self._structs.append(data_structure_builder.DataStructureBuilder())
         assert len(self._structs) == 2
@@ -155,21 +155,21 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
             raise UndefinedDataTypeError('Data type %r version %d.%d could not be found' %
                                          (full_name, version.major, version.minor))
         if len(found) > 1:
-            raise frontend_error.InternalError('Conflicting definitions: %r' % found)
+            raise error.InternalError('Conflicting definitions: %r' % found)
 
         target_definition = found[0]
         assert isinstance(target_definition, dsdl_definition.DSDLDefinition)
         assert target_definition.full_name == full_name
         assert target_definition.version == version
         # Recursion is cool.
-        return target_definition.parse(lookup_definitions=self._lookup_definitions,
-                                       print_directive_handler=self._print_directive_handler,
-                                       allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id)
+        return target_definition.read(lookup_definitions=self._lookup_definitions,
+                                      print_output_handler=self._print_output_handler,
+                                      allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id)
 
     def _on_print_directive(self, line_number: int, value: typing.Optional[expression.Any]) -> None:
         _logger.info('Print directive at %s:%d%s', self._definition.file_path, line_number,
                      (': %s' % value) if value is not None else ' (no value to print)')
-        self._print_directive_handler(line_number, str(value if value is not None else ''))
+        self._print_output_handler(line_number, str(value if value is not None else ''))
 
     def _on_assert_directive(self, line_number: int, value: typing.Optional[expression.Any]) -> None:
         if isinstance(value, expression.Boolean):

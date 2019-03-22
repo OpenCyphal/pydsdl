@@ -10,10 +10,10 @@ import fnmatch
 import collections
 from . import data_type
 from . import dsdl_definition
-from . import frontend_error
+from . import error
 
 
-class NamespaceNameCollisionError(frontend_error.InvalidDefinitionError):
+class NamespaceNameCollisionError(error.InvalidDefinitionError):
     """
     Raised when there is more than one namespace under the same name.
     This may occur if there are identically named namespaces located in different directories.
@@ -21,14 +21,14 @@ class NamespaceNameCollisionError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class NestedRootNamespaceError(frontend_error.InvalidDefinitionError):
+class NestedRootNamespaceError(error.InvalidDefinitionError):
     """
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
     """
     pass
 
 
-class FixedPortIDCollisionError(frontend_error.InvalidDefinitionError):
+class FixedPortIDCollisionError(error.InvalidDefinitionError):
     """
     Raised when there is more than one data type, or different major versions of the same data type
     using the same fixed port ID.
@@ -36,14 +36,14 @@ class FixedPortIDCollisionError(frontend_error.InvalidDefinitionError):
     pass
 
 
-class MinorVersionsNotBitCompatibleError(frontend_error.InvalidDefinitionError):
+class MinorVersionsNotBitCompatibleError(error.InvalidDefinitionError):
     """
     Raised when definitions under the same major version are not bit-compatible.
     """
     pass
 
 
-class MultipleDefinitionsUnderSameVersionError(frontend_error.InvalidDefinitionError):
+class MultipleDefinitionsUnderSameVersionError(error.InvalidDefinitionError):
     """
     For example:
         Type.1.0.uavcan
@@ -53,14 +53,14 @@ class MultipleDefinitionsUnderSameVersionError(frontend_error.InvalidDefinitionE
     pass
 
 
-class VersionsOfDifferentKindError(frontend_error.InvalidDefinitionError):
+class VersionsOfDifferentKindError(error.InvalidDefinitionError):
     """
     Definitions that share the same name but are of different kinds.
     """
     pass
 
 
-class MinorVersionFixedPortIDError(frontend_error.InvalidDefinitionError):
+class MinorVersionFixedPortIDError(error.InvalidDefinitionError):
     """
     Different fixed port ID under the same major version, or a fixed port ID was removed under the same
     major version.
@@ -68,34 +68,34 @@ class MinorVersionFixedPortIDError(frontend_error.InvalidDefinitionError):
     pass
 
 
-# Invoked when the frontend encounters a print directive. Arguments:
+# Invoked when the frontend encounters a print directive or needs to output a generic diagnostic. Arguments:
 #   - the containing definition
 #   - line number, one based
 #   - text to print
-PrintDirectiveOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
+PrintOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
 
 
-def parse_namespace(root_namespace_directory:        str,
-                    lookup_directories:              typing.Iterable[str],
-                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
-                    allow_unregulated_fixed_port_id: bool = False) -> \
+def read_namespace(root_namespace_directory:        str,
+                   lookup_directories:              typing.Iterable[str],
+                   print_output_handler:            typing.Optional[PrintOutputHandler] = None,
+                   allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[data_type.CompoundType]:
     """
-    Parse all DSDL definitions in the specified root namespace directory.
+    Read all DSDL definitions from the specified root namespace directory.
 
-    :param root_namespace_directory:    The path of the root namespace directory that will be parsed.
-                                        For example, "dsdl/uavcan" to parse the "uavcan" namespace.
+    :param root_namespace_directory:    The path of the root namespace directory that will be read.
+                                        For example, "dsdl/uavcan" to read the "uavcan" namespace.
 
     :param lookup_directories:          List of other namespace directories containing data type definitions that are
-                                        referred to from the parsed root namespace. For example, if you are parsing a
+                                        referred to from the target root namespace. For example, if you are reading a
                                         vendor-specific namespace, the list of lookup directories should always include
                                         a path to the standard root namespace "uavcan", otherwise the types defined in
                                         the vendor-specific namespace won't be able to use data types from the standard
                                         namespace.
 
-    :param print_directive_output_handler:  If provided, this callable will be invoked when a @print directive is
-                                            encountered. If not provided, print directives will not produce any output
-                                            except for the log.
+    :param print_output_handler:            If provided, this callable will be invoked when a @print directive is
+                                            encountered or when the frontend needs to output a diagnostic.
+                                            If not provided, no output will be produced except for the log.
 
     :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
                                             This is a dangerous feature that must not be used unless you understand the
@@ -133,15 +133,15 @@ def parse_namespace(root_namespace_directory:        str,
     for x in lookup_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-    # Parse the constructed definitions
-    types = _parse_namespace_definitions(target_dsdl_definitions,
-                                         lookup_dsdl_definitions,
-                                         print_directive_output_handler,
-                                         allow_unregulated_fixed_port_id)
+    # Read the constructed definitions
+    types = _read_namespace_definitions(target_dsdl_definitions,
+                                        lookup_dsdl_definitions,
+                                        print_output_handler,
+                                        allow_unregulated_fixed_port_id)
 
-    # Note that we check for collisions in the parsed namespace only.
+    # Note that we check for collisions in the read namespace only.
     # We intentionally ignore (do not check for) possible collisions in the lookup directories,
-    # because that would exceed the expected scope of responsibility of the parser, and the lookup
+    # because that would exceed the expected scope of responsibility of the frontend, and the lookup
     # directories may contain issues and mistakes that are outside of the control of the user (e.g.,
     # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
     # by the third party.
@@ -157,39 +157,39 @@ _LOG_LIST_ITEM_PREFIX = ' ' * 4
 _logger = logging.getLogger(__name__)
 
 
-def _parse_namespace_definitions(target_definitions:              typing.List[dsdl_definition.DSDLDefinition],
-                                 lookup_definitions:              typing.List[dsdl_definition.DSDLDefinition],
-                                 print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
-                                 allow_unregulated_fixed_port_id: bool = False) -> \
+def _read_namespace_definitions(target_definitions:              typing.List[dsdl_definition.DSDLDefinition],
+                                lookup_definitions:              typing.List[dsdl_definition.DSDLDefinition],
+                                print_output_handler:            typing.Optional[PrintOutputHandler] = None,
+                                allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[data_type.CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
     Allow the target definitions to use the lookup definitions within themselves.
-    :param target_definitions:  Which definitions to parse.
-    :param lookup_definitions:  Which definitions can be used by the parsed definitions.
+    :param target_definitions:  Which definitions to read.
+    :param lookup_definitions:  Which definitions can be used by the processed definitions.
     :return: A list of types.
     """
     def make_print_handler(definition: dsdl_definition.DSDLDefinition) -> typing.Callable[[int, str], None]:
         def handler(line_number: int, text: str) -> None:
-            if print_directive_output_handler:
+            if print_output_handler:
                 assert isinstance(line_number, int) and isinstance(text, str)
                 assert line_number > 0, 'Line numbers must be one-based'
-                print_directive_output_handler(definition, line_number, text)
+                print_output_handler(definition, line_number, text)
         return handler
 
     types = []  # type: typing.List[data_type.CompoundType]
     for tdd in target_definitions:
         try:
-            parsed = tdd.parse(lookup_definitions,
-                               make_print_handler(tdd),
-                               allow_unregulated_fixed_port_id)
-        except frontend_error.FrontendError as ex:    # pragma: no cover
+            dt = tdd.read(lookup_definitions,
+                          make_print_handler(tdd),
+                          allow_unregulated_fixed_port_id)
+        except error.FrontendError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
         except Exception as ex:     # pragma: no cover
-            raise frontend_error.InternalError(culprit=ex, path=tdd.file_path) from ex
+            raise error.InternalError(culprit=ex, path=tdd.file_path) from ex
         else:
-            types.append(parsed)
+            types.append(dt)
 
     return types
 
@@ -304,8 +304,7 @@ def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> N
 
 def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[dsdl_definition.DSDLDefinition]:
     """
-    Accepts a directory path, returns a list of abstract DSDL file representations.
-    Those can be fed to the actual DSDL parser later.
+    Accepts a directory path, returns a list of abstract DSDL file representations. Those can be read later.
     """
     def on_walk_error(os_ex: OSError) -> None:
         raise os_ex     # pragma: no cover

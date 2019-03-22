@@ -5,10 +5,10 @@
 
 import typing
 from . import data_type
-from . import frontend_error
+from . import error
 
 
-class BitLengthAnalysisError(frontend_error.InvalidDefinitionError):
+class BitLengthAnalysisError(error.InvalidDefinitionError):
     pass
 
 

@@ -5,12 +5,12 @@
 
 import os
 import typing
-from . import frontend_error
+from . import error
 from . import data_type
 from . import parser
 
 
-class FileNameFormatError(frontend_error.InvalidDefinitionError):
+class FileNameFormatError(error.InvalidDefinitionError):
     """
     Raised when a DSDL definition file is named incorrectly.
     """
@@ -81,22 +81,22 @@ class DSDLDefinition:
 
         self._cached_type = None    # type: typing.Optional[data_type.CompoundType]
 
-    def parse(self,
-              lookup_definitions: typing.Iterable['DSDLDefinition'],
-              print_directive_handler: typing.Callable[[int, str], None],
-              allow_unregulated_fixed_port_id: bool) -> data_type.CompoundType:
+    def read(self,
+             lookup_definitions:              typing.Iterable['DSDLDefinition'],
+             print_output_handler:            typing.Callable[[int, str], None],
+             allow_unregulated_fixed_port_id: bool) -> data_type.CompoundType:
         """
-        Parses the data type definition and returns its high-level data type representation.
+        Reads the data type definition and returns its high-level data type representation.
         The output is cached; all following invocations will read from the cache.
         Caching is very important, because it is expected that the same definition may be referred to multiple
-        times (e.g., for composition or when accessing external constants). Re-parsing a definition every time
+        times (e.g., for composition or when accessing external constants). Re-processing a definition every time
         it is accessed would be a huge waste of time.
-        Note, however, that this may lead to unexpected complications if one is attempting to re-parse a definition
+        Note, however, that this may lead to unexpected complications if one is attempting to re-read a definition
         with different inputs (e.g., different lookup paths) expecting to get a different result: caching would
         get in the way. That issue is easy to avoid by creating a new instance of the object.
-        :param lookup_definitions:                  List of definitions available for referring to.
-        :param print_directive_handler:             Invoked when a @print directive is encountered: line_number, text.
-        :param allow_unregulated_fixed_port_id:     Do not complain about fixed unregulated port IDs.
+        :param lookup_definitions:              List of definitions available for referring to.
+        :param print_output_handler:            Used for @print and for diagnostics: (line_number, text) -> None.
+        :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
         :return: The data type representation.
         """
         if self._cached_type is not None:
@@ -111,18 +111,18 @@ class DSDLDefinition:
             from .data_type_builder import DataTypeBuilder
             builder = DataTypeBuilder(definition=self,
                                       lookup_definitions=lookup_definitions,
-                                      print_directive_handler=print_directive_handler,
+                                      print_output_handler=print_output_handler,
                                       allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id)
             with open(self.file_path) as f:
                 parser.parse(f.read(), builder)
 
             self._cached_type = builder.finalize()
             return self._cached_type
-        except frontend_error.FrontendError as ex:                      # pragma: no cover
+        except error.FrontendError as ex:                      # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
         except Exception as ex:                                         # pragma: no cover
-            raise frontend_error.InternalError(culprit=ex, path=self.file_path)
+            raise error.InternalError(culprit=ex, path=self.file_path)
 
     @property
     def full_name(self) -> str:

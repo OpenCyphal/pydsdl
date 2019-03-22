@@ -11,12 +11,12 @@ import functools
 import fractions
 import parsimonious
 from parsimonious.nodes import Node as _Node
-from . import frontend_error
+from . import error
 from . import data_type
 from . import expression
 
 
-class DSDLSyntaxError(frontend_error.InvalidDefinitionError):
+class DSDLSyntaxError(error.InvalidDefinitionError):
     pass
 
 
@@ -29,7 +29,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
     try:
         pr.parse(text)  # type: ignore
 
-    except frontend_error.FrontendError as ex:
+    except error.FrontendError as ex:
         # Inject error location. If this exception is being propagated from a recursive instance, it already has
         # its error location populated, so nothing will happen here.
         ex.set_error_location_if_unknown(line=pr.current_line_number)
@@ -46,7 +46,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
             line = pr.current_line_number
         # Treat as internal because all intentional errors are not wrapped into VisitationError.
         assert line > 0
-        raise frontend_error.InternalError(str(ex), line=line)
+        raise error.InternalError(str(ex), line=line)
 
 
 class StatementStreamProcessor:
@@ -143,7 +143,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = frontend_error.FrontendError,  # type: ignore
+    unwrapped_exceptions = error.FrontendError,  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
@@ -303,8 +303,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         if isinstance(atom, str):   # Identifier resolution
             new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
             if not isinstance(new_atom, expression.Any):
-                raise frontend_error.InternalError('Identifier %r resolved as %r, expected expression' %
-                                                   (atom, type(new_atom)))
+                raise error.InternalError('Identifier %r resolved as %r, expected expression' %
+                                          (atom, type(new_atom)))
             _logger.debug('Identifier resolution: %r --> %s', atom, new_atom.TYPE_NAME)
             atom = new_atom
             del new_atom
@@ -428,8 +428,8 @@ def _unwrap_array_capacity(ex: expression.Any) -> int:
         assert isinstance(out, int)     # Oh mypy, why are you so weird
         return out
     else:
-        raise frontend_error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
-                                                    ex.TYPE_NAME)
+        raise error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
+                                           ex.TYPE_NAME)
 
 
 def _parse_string_literal(literal: str) -> expression.String:
