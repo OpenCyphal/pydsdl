@@ -208,7 +208,7 @@ from .data_type import CompoundType     # Pls no
 
 ### Writing tests
 
-100% coverage is required.
+Aim to cover 100% of the code in the branch coverage mode.
 
 Write unit tests as functions without arguments prefixed with `_unittest_`.
 Test functions should be located as close as possible to the tested code,

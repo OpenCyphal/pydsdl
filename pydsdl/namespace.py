@@ -171,7 +171,7 @@ def _read_namespace_definitions(target_definitions:              typing.List[dsd
     """
     def make_print_handler(definition: dsdl_definition.DSDLDefinition) -> typing.Callable[[int, str], None]:
         def handler(line_number: int, text: str) -> None:
-            if print_output_handler:
+            if print_output_handler:  # pragma: no branch
                 assert isinstance(line_number, int) and isinstance(text, str)
                 assert line_number > 0, 'Line numbers must be one-based'
                 print_output_handler(definition, line_number, text)

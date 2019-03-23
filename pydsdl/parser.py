@@ -473,7 +473,7 @@ def _parse_string_literal(literal: str) -> expression.String:
             raise DSDLSyntaxError('Invalid escape sequence') from None
 
     out = ''
-    for index in itertools.count():
+    for index in itertools.count():  # pragma: no branch
         try:
             symbol = _next_symbol()
         except DSDLSyntaxError as ex:

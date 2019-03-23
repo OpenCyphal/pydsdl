@@ -70,7 +70,7 @@ class Any:
     def _logical_or(self, right: 'Any')  -> 'Boolean': raise UndefinedOperatorError
     def _logical_and(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
 
-    def _equal(self, right: 'Any')            -> 'Boolean': raise UndefinedOperatorError
+    def _equal(self, right: 'Any')            -> 'Boolean': raise UndefinedOperatorError  # pragma: no branch
     def _less_or_equal(self, right: 'Any')    -> 'Boolean': raise UndefinedOperatorError
     def _greater_or_equal(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
     def _less(self, right: 'Any')             -> 'Boolean': raise UndefinedOperatorError

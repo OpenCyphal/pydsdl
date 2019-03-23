@@ -251,7 +251,7 @@ def _unittest_error() -> None:
     from pytest import raises
 
     def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> data_type.CompoundType:
-        return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)
+        return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
     with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
@@ -440,6 +440,14 @@ def _unittest_error() -> None:
         assert ex.line and ex.line == 4
     else:  # pragma: no cover
         assert False
+
+    standalone('vendor/types/1.A.1.0.uavcan', '', allow_unregulated=True)
+    with raises(data_type.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+        standalone('vendor/types/1.A.1.0.uavcan', '')
+
+    standalone('vendor/types/1.A.1.0.uavcan', '---', allow_unregulated=True)
+    with raises(data_type.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+        standalone('vendor/types/1.A.1.0.uavcan', '---')
 
 
 @_in_n_out
@@ -934,8 +942,15 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
+    # These are needed to ensure full branch coverage, see the checking code.
+    _define('ns/Empty.1.0.uavcan', '')
+    _define('ns/Empty.1.1.uavcan', '')
+    _define('ns/Empty.2.0.uavcan', '')
+    _define('ns/28800.Empty.3.0.uavcan', '')
+    _define('ns/28801.Empty.4.0.uavcan', '')
+
     parsed = namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
-    assert len(parsed) == 3
+    assert len(parsed) == 8
 
 
 def _unittest_parse_namespace_faults() -> None:
@@ -1084,10 +1099,11 @@ def _unittest_dsdl_parser_basics() -> None:
                 @print
                 @assert true
                 @assert ns.Foo.1.0.THE_CONSTANT == 42
+                @assert ns.Bar.1.23.B == ns.Bar.1.23.A + 1
                 ''')),
         [
             _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42\n'),
-            _define('ns/Bar.1.23.uavcan', 'int8 the_field\n'),
+            _define('ns/Bar.1.23.uavcan', 'int8 the_field\nint8 A = 0xA\nint8 B = 0xB'),
         ]
     )
 
@@ -1121,6 +1137,17 @@ def _unittest_dsdl_parser_expressions() -> None:
     throws('bool R = {0} ^ "s"')
     throws('bool R = {0}.nonexistent_attribute')
     throws('bool R = {0} / {1}')
+    throws('bool R = !1')
+    throws('bool R = +true')
+    throws('bool R = -"1"')
+    throws('bool R = true | false')
+    throws('bool R = true & false')
+    throws('bool R = true + "0"')
+    throws('bool R = true - "0"')
+    throws('bool R = true * "0"')
+    throws('bool R = true / "0"')
+    throws('bool R = true % "0"')
+    throws('bool R = true ** "0"')
 
     _parse_definition(
         _define('ns/A.1.0.uavcan',
