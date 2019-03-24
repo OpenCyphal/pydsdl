@@ -7,30 +7,30 @@ import os
 import typing
 import tempfile
 from textwrap import dedent
-from .dsdl_parser import parse_definition, SemanticError, DSDLSyntaxError, ConfigurationOptions
-from .dsdl_parser import UndefinedDataTypeError, AssertionCheckFailureError
-from .dsdl_definition import DSDLDefinition, FileNameFormatError
-from .data_type import CompoundType, StructureType, UnionType, ServiceType, ArrayType
-from .namespace_parser import parse_namespace, FixedPortIDCollisionError, VersionsOfDifferentKindError
-from .namespace_parser import MinorVersionsNotBitCompatibleError, MultipleDefinitionsUnderSameVersionError
-from .namespace_parser import MinorVersionFixedPortIDError, NestedRootNamespaceError, NamespaceNameCollisionError
+from . import expression
+from . import error
+from . import parser
+from . import data_type_builder
+from . import dsdl_definition
+from . import data_type
+from . import namespace
 
 
 # Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
-#   pydsdl/_non_intrusive_test.py:18: error: Missing type parameters for generic type
-#   pydsdl/_non_intrusive_test.py: note: In function "_in_n_out":
-#   pydsdl/_non_intrusive_test.py:18: error: Missing type parameters for generic type
+#   pydsdl/_test.py:18: error: Missing type parameters for generic type
+#   pydsdl/_test.py: note: In function "_in_n_out":
+#   pydsdl/_test.py:18: error: Missing type parameters for generic type
 _DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 
-def _parse_definition(definition:         DSDLDefinition,
-                      lookup_definitions: typing.Sequence[DSDLDefinition]) -> CompoundType:
-    return parse_definition(definition,
-                            lookup_definitions,
-                            ConfigurationOptions())
+def _parse_definition(definition:         dsdl_definition.DSDLDefinition,
+                      lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) -> data_type.CompoundType:
+    return definition.read(lookup_definitions,
+                           print_output_handler=lambda *_: None,
+                           allow_unregulated_fixed_port_id=False)
 
 
-def _define(rel_path: str, text: str) -> DSDLDefinition:
+def _define(rel_path: str, text: str) -> dsdl_definition.DSDLDefinition:
     assert _DIRECTORY
     path = os.path.join(_DIRECTORY.name, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -38,7 +38,7 @@ def _define(rel_path: str, text: str) -> DSDLDefinition:
         f.write(text)
 
     root_namespace_path = os.path.join(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep)[0])
-    out = DSDLDefinition(path, root_namespace_path)
+    out = dsdl_definition.DSDLDefinition(path, root_namespace_path)
     print('New definition:', out, 'Root NS:', root_namespace_path)
     return out
 
@@ -46,7 +46,7 @@ def _define(rel_path: str, text: str) -> DSDLDefinition:
 def _in_n_out(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
     def decorator() -> None:
         global _DIRECTORY
-        _DIRECTORY = tempfile.TemporaryDirectory()
+        _DIRECTORY = tempfile.TemporaryDirectory(prefix='pydsdl-test-')
         try:
             test()
         finally:
@@ -92,7 +92,7 @@ def _unittest_simple() -> None:
 
     p = _parse_definition(abc, [])
     print('Parsed:', p)
-    assert isinstance(p, StructureType)
+    assert isinstance(p, data_type.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith('vendor/nested/29000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
@@ -109,12 +109,11 @@ def _unittest_simple() -> None:
     assert len(p.constants) == 1
     assert str(p.constants[0].data_type) == 'saturated uint8'
     assert p.constants[0].name == 'CHARACTER'
-    assert p.constants[0].initialization_expression == "'#'"
-    assert isinstance(p.constants[0].value, int)
-    assert p.constants[0].value == ord('#')
+    assert isinstance(p.constants[0].value, expression.Rational)
+    assert p.constants[0].value == expression.Rational(ord('#'))
 
     t = p.fields[1].data_type
-    assert isinstance(t, ArrayType)
+    assert isinstance(t, data_type.ArrayType)
     assert str(t.element_type) == 'truncated int64'
 
     empty_new = _define(
@@ -155,7 +154,7 @@ def _unittest_simple() -> None:
         constants,
     ])
     print('Parsed:', p)
-    assert isinstance(p, ServiceType)
+    assert isinstance(p, data_type.ServiceType)
     assert p.full_name == 'another.Service'
     assert p.fixed_port_id == 300
     assert p.deprecated
@@ -166,8 +165,8 @@ def _unittest_simple() -> None:
     assert p.fields[0].name == 'request'
     assert p.fields[1].name == 'response'
     req, res = [x.data_type for x in p.fields]
-    assert isinstance(req, UnionType)
-    assert isinstance(res, StructureType)
+    assert isinstance(req, data_type.UnionType)
+    assert isinstance(res, data_type.StructureType)
     assert req.full_name == 'another.Service.Request'
     assert res.full_name == 'another.Service.Response'
     assert req is p.request_type
@@ -183,17 +182,17 @@ def _unittest_simple() -> None:
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
-    assert isinstance(t, StructureType)
+    assert isinstance(t, data_type.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected implicitly
 
     t = req.fields[1].data_type
-    assert isinstance(t, StructureType)
+    assert isinstance(t, data_type.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected explicitly
 
     t = req.fields[2].data_type
-    assert isinstance(t, StructureType)
+    assert isinstance(t, data_type.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 254)          # Selected explicitly
 
@@ -205,12 +204,12 @@ def _unittest_simple() -> None:
     assert res.bit_length_range == (14, 14 + 64 * 32)
 
     t = res.fields[0].data_type
-    assert isinstance(t, StructureType)
+    assert isinstance(t, data_type.StructureType)
     assert t.full_name == 'another.Constants'
     assert t.version == (5, 0)
 
     t = res.fields[1].data_type
-    assert isinstance(t, StructureType)
+    assert isinstance(t, data_type.StructureType)
     assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
@@ -235,7 +234,7 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id is None
     assert not p.has_fixed_port_id
     assert not p.deprecated
-    assert isinstance(p, UnionType)
+    assert isinstance(p, data_type.UnionType)
     assert p.number_of_variants == 3
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
@@ -251,101 +250,127 @@ def _unittest_simple() -> None:
 def _unittest_error() -> None:
     from pytest import raises
 
-    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> CompoundType:
-        cfg = ConfigurationOptions()
-        cfg.allow_unregulated_fixed_port_id = allow_unregulated
-        return parse_definition(_define(rel_path, definition), [], cfg)
+    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> data_type.CompoundType:
+        return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
-    with raises(SemanticError, match='(?i).*port ID.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
-    with raises(SemanticError, match='(?i).*port ID.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
-    with raises(SemanticError, match='(?i).*subject ID.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*subject ID.*'):
         standalone('vendor/100000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
-    with raises(SemanticError, match='(?i).*service ID.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*service ID.*'):
         standalone('vendor/1000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
-    with raises(SemanticError, match='(?i).*multiple attributes under the same name.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
 
-    with raises(SemanticError, match='(?i).*tagged union cannot contain less than.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*tagged union cannot contain less than.*'):
         standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
                       'bool BOOLEAN = false').constants[0].name == 'BOOLEAN'
-    with raises(SemanticError, match='.*Invalid value for boolean constant.*'):
+    with raises(error.InvalidDefinitionError, match='.*Invalid value for boolean constant.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = 0')   # Should be false
 
-    with raises(SemanticError, match='(?i).*could not evaluate.*'):
+    with raises(error.InvalidDefinitionError, match='.*undefined_identifier.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = undefined_identifier')
 
-    with raises(DSDLSyntaxError):
+    with raises(parser.DSDLSyntaxError):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = -')
 
-    with raises(SemanticError, match='(?i).*exceeds the range.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*exceeds the range.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'uint10 INTEGRAL = 2000')
 
-    with raises(SemanticError, match='(?i).*character.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*character.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint8 CH = '\u0451'")
 
-    with raises(SemanticError, match='.*uint8.*'):
+    with raises(error.InvalidDefinitionError, match='.*uint8.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint9 CH = 'q'")
 
-    with raises(SemanticError, match='.*uint8.*'):
+    with raises(error.InvalidDefinitionError, match='.*uint8.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 'q'")
 
-    with raises(SemanticError, match='(?i).*type.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.0")
+    with raises(error.InvalidDefinitionError, match='.*integer constant.*'):
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.1")
 
-    with raises(SemanticError, match='(?i).*type.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = true")
 
-    with raises(SemanticError, match='(?i).*type.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = 't'")
 
-    with raises(DSDLSyntaxError):
+    with raises(parser.DSDLSyntaxError):
         standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]')
 
-    with raises(SemanticError, match='(?i).*array size.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array')
 
-    with raises(SemanticError, match='(?i).*array size.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
 
-    with raises(SemanticError, match='(?i).*service response marker.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[true] array')
+
+    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool["text"] array')
+
+    with raises(error.InvalidDefinitionError, match='(?i).*service response marker.*'):
         standalone('vendor/service/A.1.0.uavcan', 'bool request\n---\nbool response\n---\nbool again')
 
-    with raises(SemanticError, match='(?i).*unknown directive.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*unknown directive.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@sho_tse_take')
 
-    with raises(SemanticError, match='(?i).*requires an expression.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*requires an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@assert')
 
-    with raises(SemanticError, match='(?i).*does not expect an expression.*'):
-        standalone('vendor/directive/A.1.0.uavcan', '@union worker')
+    with raises(error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
+        standalone('vendor/directive/A.1.0.uavcan', '@union true || false')
 
-    with raises(SemanticError, match='(?i).*version number.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
+        standalone('vendor/directive/A.1.0.uavcan', '@deprecated true || false')
+
+    with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.0.uavcan', '')
 
-    with raises(SemanticError, match='(?i).*version number.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.256.uavcan', '')
 
-    with raises(FileNameFormatError):
+    with raises(dsdl_definition.FileNameFormatError):
         standalone('vendor/version/A.0..256.uavcan', '')
 
-    with raises(SemanticError, match='(?i).*version number.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.256.0.uavcan', '')
 
-    with raises(SemanticError, match='(?i).*cannot be specified for compound.*'):
+    with raises(parser.DSDLSyntaxError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
 
-    with raises(UndefinedDataTypeError, match='(?i).*no type named.*'):
+    with raises(data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(UndefinedDataTypeError, match='(?i).*no suitable major version'):
+    with raises(error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for less.*'):
+        standalone('vendor/types/A.1.0.uavcan',
+                   dedent('''
+                   @union
+                   int8 a
+                   @assert _offset_.count >= 1
+                   int16 b
+                   '''))
+
+    with raises(error.InvalidDefinitionError, match=r'(?i).*field offset is not defined for unions.*'):
+        standalone('vendor/types/A.1.0.uavcan',
+                   dedent('''
+                   @union
+                   int8 a
+                   int16 b
+                   @assert _offset_.count >= 1
+                   int8 c
+                   '''))
+
+    with raises(data_type_builder.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
         _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
             [
@@ -353,16 +378,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(UndefinedDataTypeError, match='(?i).*no suitable minor version'):
-        _parse_definition(
-            _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
-            [
-                _define('ns/Type_.2.0.uavcan', ''),
-                _define('ns/Type_.1.1.uavcan', ''),
-            ]
-        )
-
-    with raises(DSDLSyntaxError, match='(?i).*Invalid type declaration.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*Bit length cannot exceed.*'):
         _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'int128 field'),
             [
@@ -371,7 +387,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(SemanticError, match='(?i).*type.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*type.*'):
         _parse_definition(
             _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type_.1.1 VALUE = 123'),
             [
@@ -380,14 +396,14 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(UndefinedDataTypeError):
+    with raises(data_type_builder.UndefinedDataTypeError):
         defs = [
             _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b'),
             _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b'),
         ]
         _parse_definition(defs[0], defs)
 
-    with raises(SemanticError, match='(?i).*union directive.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*union directive.*'):
         _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@union'),
             [
@@ -395,7 +411,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(SemanticError, match='(?i).*deprecated directive.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
         _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@deprecated'),
             [
@@ -403,7 +419,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(SemanticError, match='(?i).*deprecated directive.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
         _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n---\n@deprecated'),
             [
@@ -411,85 +427,63 @@ def _unittest_error() -> None:
             ]
         )
 
+    try:
+        standalone('vendor/types/A.1.0.uavcan',
+                   dedent('''
+                   int8 a  # Comment
+                   # Empty
+                   @assert false  # Will error here, line number 4
+                   # Blank
+                   '''))
+    except error.FrontendError as ex:
+        assert ex.path and ex.path.endswith('vendor/types/A.1.0.uavcan')
+        assert ex.line and ex.line == 4
+    else:  # pragma: no cover
+        assert False
+
+    standalone('vendor/types/1.A.1.0.uavcan', '', allow_unregulated=True)
+    with raises(data_type.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+        standalone('vendor/types/1.A.1.0.uavcan', '')
+
+    standalone('vendor/types/1.A.1.0.uavcan', '---', allow_unregulated=True)
+    with raises(data_type.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+        standalone('vendor/types/1.A.1.0.uavcan', '---')
+
 
 @_in_n_out
 def _unittest_print() -> None:
-    printed_items = None    # type: typing.Optional[typing.Tuple[DSDLDefinition, int, typing.Any]]
+    printed_items = None  # type: typing.Optional[typing.Tuple[int, str]]
 
-    def print_handler(definition: DSDLDefinition, line_number: int, value: typing.Any) -> None:
+    def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
-        printed_items = definition, line_number, value
+        printed_items = line_number, text
 
-    config = ConfigurationOptions()
-    config.print_handler = print_handler
+    _define(
+        'ns/A.1.0.uavcan',
+        '# line number 1\n'
+        '# line number 2\n'
+        '@print 2 + 2 == 4   # line number 3\n'
+        '# line number 4\n'
+    ).read([], print_handler, False)
 
-    parse_definition(
-        _define(
-            'ns/A.1.0.uavcan',
-            '# line number 1\n'
-            '# line number 2\n'
-            '@print 2 + 2 == 4   # line number 3\n'
-            '# line number 4\n'
-        ),
-        [],
-        config
-    )
     assert printed_items
-    assert printed_items[0].full_name == 'ns.A'
-    assert printed_items[1] == 3
-    assert printed_items[2]
+    assert printed_items[0] == 3
+    assert printed_items[1] == 'true'
 
-    parse_definition(_define('ns/B.1.0.uavcan', '@print false'), [], config)
+    _define('ns/B.1.0.uavcan', '@print false').read([], print_handler, False)
     assert printed_items
-    assert printed_items[0].full_name == 'ns.B'
-    assert printed_items[1] == 1
-    assert not printed_items[2]
+    assert printed_items[0] == 1
+    assert printed_items[1] == 'false'
 
-    parse_definition(
-        _define(
-            'ns/Offset.1.0.uavcan',
-            '@print _offset_    # Not recorded\n'
-            'uint8 a\n'
-            '@print _offset_\n'
-        ),
-        [],
-        config
-    )
+    _define(
+        'ns/Offset.1.0.uavcan',
+        '@print _offset_    # Not recorded\n'
+        'uint8 a\n'
+        '@print _offset_\n'
+    ).read([], print_handler, False)
     assert printed_items
-    assert printed_items[0].full_name == 'ns.Offset'
-    assert printed_items[1] == 3
-    assert printed_items[2] == {8}
-
-    # The nested type has the following set: {2, 10, 18}.
-    # We can have up to two elements of that type, so what we get can be expressed graphically as follows:
-    #    A   B | +
-    # ---------+------
-    #    2   2 |  4
-    #   10   2 | 12
-    #   18   2 | 20
-    #    2  10 | 12
-    #   10  10 | 20
-    #   18  10 | 28
-    #    2  18 | 20
-    #   10  18 | 28
-    #   18  18 | 36
-    # If we were to remove duplicates, we end up with: {4, 12, 20, 28, 36}
-    parse_definition(
-        _define(
-            'ns/ComplexOffset.1.0.uavcan',
-            dedent('''
-            Array.1.0[2] bar
-            @print _offset_
-            ''')),
-        [
-            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
-        ],
-        config
-    )
-    assert printed_items
-    assert printed_items[0].full_name == 'ns.ComplexOffset'
-    assert printed_items[1] == 3
-    assert printed_items[2] == {4, 12, 20, 28, 36}
+    assert printed_items[0] == 3
+    assert printed_items[1] == "{8}"
 
 
 @_in_n_out
@@ -520,30 +514,17 @@ def _unittest_assert() -> None:
             @assert _offset_.max == 100  # 36 + 64
             @assert _offset_.max <= 100
             @assert _offset_.max < 101
-            @assert _offset_ <= 100
-            @assert _offset_ < 101
-            @assert _offset_ >= 68
-            @assert _offset_ > 67
             @assert _offset_ == _offset_
+            @assert truncated uint64._bit_length_ == {64}
+            @assert uint64._bit_length_ == {64}
+            @assert Array.1.0._bit_length_.max == 2 + 8 + 8
             ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
         ]
     )
 
-    with raises(SemanticError, match='(?i).*invalid operand.*'):
-        _parse_definition(
-            _define(
-                'ns/B.1.0.uavcan',
-                dedent('''
-                uint64 big
-                @assert _offset_ == {64}
-                @assert _offset_ + 1.0 == {64}
-                ''')),
-            []
-        )
-
-    with raises(SemanticError, match='(?i).*cannot be compared.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*operator is not defined.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -551,6 +532,33 @@ def _unittest_assert() -> None:
                 uint64 big
                 @assert _offset_ == 64
                 ''')),
+            []
+        )
+
+    with raises(expression.UndefinedAttributeError):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                '''uint64 LENGTH = uint64.nonexistent_attribute'''),
+            []
+        )
+
+    with raises(error.InvalidDefinitionError, match='(?i).*void.*'):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                'void2 name'),
+            []
+        )
+
+    with raises(data_type.InvalidConstantValueError):
+        _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true'), [])
+
+    with raises(error.InvalidDefinitionError, match='.*value.*'):
+        _parse_definition(
+            _define(
+                'ns/C.1.0.uavcan',
+                'int8 name = {1, 2, 3}'),
             []
         )
 
@@ -582,7 +590,7 @@ def _unittest_assert() -> None:
         []
     )
 
-    with raises(SemanticError, match='(?i).*unions.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*unions.*'):
         _parse_definition(
             _define(
                 'ns/F.1.0.uavcan',
@@ -596,7 +604,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(AssertionCheckFailureError):
+    with raises(data_type_builder.AssertionCheckFailureError):
         _parse_definition(
             _define(
                 'ns/G.1.0.uavcan',
@@ -607,7 +615,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(SemanticError, match='(?i).*yield a boolean.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*yield a boolean.*'):
         _parse_definition(
             _define(
                 'ns/H.1.0.uavcan',
@@ -624,6 +632,13 @@ def _unittest_parse_namespace() -> None:
     import tempfile
     directory = tempfile.TemporaryDirectory()
 
+    print_output = None  # type: typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, str]]
+
+    def print_handler(d: dsdl_definition.DSDLDefinition, line: int, text: str) -> None:
+        nonlocal print_output
+        print_output = d, line, text
+
+    # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
         path = os.path.join(directory.name, rel_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -658,15 +673,17 @@ def _unittest_parse_namespace() -> None:
         float32 just_right
         float64 woah
         ---
+        @print _offset_     # Will print zero {0}
         """)
     )
 
     _define('zubax/nested/300.Spartans.30.0.txt', 'completely unrelated stuff')
     _define('zubax/300.Spartans.30.0', 'completely unrelated stuff')
 
-    parsed = parse_namespace(
+    parsed = namespace.read_namespace(
         os.path.join(directory.name, 'zubax'),
-        []
+        [],
+        print_handler
     )
     print(parsed)
     assert len(parsed) == 3
@@ -681,11 +698,17 @@ def _unittest_parse_namespace() -> None:
         """)
     )
 
-    with raises(FixedPortIDCollisionError):
-        parse_namespace(
+    with raises(namespace.FixedPortIDCollisionError):
+        namespace.read_namespace(
             os.path.join(directory.name, 'zubax'),
-            []
+            [],
+            print_handler
         )
+
+    assert print_output is not None
+    assert print_output[0].full_name == 'zubax.nested.Spartans'
+    assert print_output[1] == 8
+    assert print_output[2] == '{0}'
 
 
 def _unittest_parse_namespace_versioning() -> None:
@@ -694,6 +717,7 @@ def _unittest_parse_namespace_versioning() -> None:
     import glob
     directory = tempfile.TemporaryDirectory()
 
+    # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
         path = os.path.join(directory.name, rel_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -729,7 +753,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = parse_namespace(
+    parsed = namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -748,8 +772,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(MinorVersionsNotBitCompatibleError):
-        parse_namespace(
+    with raises(namespace.MinorVersionsNotBitCompatibleError):
+        namespace.read_namespace(
             os.path.join(directory.name, 'ns'),
             []
         )
@@ -765,8 +789,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(VersionsOfDifferentKindError):
-        parse_namespace(
+    with raises(namespace.VersionsOfDifferentKindError):
+        namespace.read_namespace(
             os.path.join(directory.name, 'ns'),
             []
         )
@@ -784,7 +808,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = parse_namespace(
+    parsed = namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -802,8 +826,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(MinorVersionsNotBitCompatibleError):
-        parse_namespace(
+    with raises(namespace.MinorVersionsNotBitCompatibleError):
+        namespace.read_namespace(
             os.path.join(directory.name, 'ns'),
             []
         )
@@ -830,12 +854,12 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(MultipleDefinitionsUnderSameVersionError):
-        parse_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(namespace.MultipleDefinitionsUnderSameVersionError):
+        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     _undefine_glob('ns/Spartans.30.2.uavcan')
 
-    parsed = parse_namespace(
+    parsed = namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -853,8 +877,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(MinorVersionFixedPortIDError):
-        parse_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(namespace.MinorVersionFixedPortIDError):
+        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     _undefine_glob('ns/Spartans.30.1.uavcan')
     _define(
@@ -868,7 +892,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = parse_namespace(
+    parsed = namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -886,8 +910,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(MinorVersionFixedPortIDError):
-        parse_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(namespace.MinorVersionFixedPortIDError):
+        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Adding new major version under the same FPID
     _undefine_glob('ns/28701.Spartans.30.1.uavcan')
@@ -902,8 +926,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(FixedPortIDCollisionError):
-        parse_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(namespace.FixedPortIDCollisionError):
+        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Major version zero allows us to re-use the same FPID under a different (non-zero) major version
     _undefine_glob('ns/28700.Spartans.31.0.uavcan')
@@ -918,27 +942,34 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = parse_namespace(os.path.join(directory.name, 'ns'), [])     # no error
-    assert len(parsed) == 3
+    # These are needed to ensure full branch coverage, see the checking code.
+    _define('ns/Empty.1.0.uavcan', '')
+    _define('ns/Empty.1.1.uavcan', '')
+    _define('ns/Empty.2.0.uavcan', '')
+    _define('ns/28800.Empty.3.0.uavcan', '')
+    _define('ns/28801.Empty.4.0.uavcan', '')
+
+    parsed = namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 8
 
 
 def _unittest_parse_namespace_faults() -> None:
     try:
-        parse_namespace('/foo/bar/baz', ['/bat/wot', '/foo/bar/baz/bad'])
-    except NestedRootNamespaceError as ex:
+        namespace.read_namespace('/foo/bar/baz', ['/bat/wot', '/foo/bar/baz/bad'])
+    except namespace.NestedRootNamespaceError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
 
     try:
-        parse_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/baz'])
-    except NamespaceNameCollisionError as ex:
+        namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/baz'])
+    except namespace.NamespaceNameCollisionError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
     try:
-        parse_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/zoo', '/foo/bar/doo/roo/baz'])
-    except NamespaceNameCollisionError as ex:
+        namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/zoo', '/foo/bar/doo/roo/baz'])
+    except namespace.NamespaceNameCollisionError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
@@ -959,7 +990,7 @@ def _unittest_inconsistent_deprecation() -> None:
         ]
     )
 
-    with raises(SemanticError, match='(?i).*depend.*deprecated.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*depend.*deprecated.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -999,7 +1030,7 @@ def _unittest_repeated_directives() -> None:
         []
     )
 
-    with raises(SemanticError, match='(?i).*deprecated.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*deprecated.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
@@ -1009,7 +1040,7 @@ def _unittest_repeated_directives() -> None:
             []
         )
 
-    with raises(SemanticError, match='(?i).*deprecated.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*deprecated.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
@@ -1034,7 +1065,7 @@ def _unittest_repeated_directives() -> None:
         []
     )
 
-    with raises(SemanticError, match='(?i).*union.*'):
+    with raises(error.InvalidDefinitionError, match='(?i).*union.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
@@ -1045,3 +1076,166 @@ def _unittest_repeated_directives() -> None:
                     ''')),
             []
         )
+
+
+@_in_n_out
+def _unittest_dsdl_parser_basics() -> None:
+    # This is how you can run one test only for development needs:
+    #   pytest pydsdl -k _unittest_dsdl_parser_basics --capture=no
+    # noinspection SpellCheckingInspection
+    _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                dedent(r'''
+                @deprecated
+                void16
+                int8          [<=123+456] array_inclusive
+                truncated int8[< 123+456] array_exclusive
+                saturated int8[  123+456] array_fixed
+                #ns.Bar.1.23 field
+                float64 a = +10 * (-2 / -3) / 4 % 5
+                bool    b = !true
+                float32 c = (123456 + 0x_ab_cd_ef) / 0b1111_1111 ** 2 - 0o123_456 * 2.7
+                @print "Hello\r\nworld!"
+                @print
+                @assert true
+                @assert ns.Foo.1.0.THE_CONSTANT == 42
+                @assert ns.Bar.1.23.B == ns.Bar.1.23.A + 1
+                ''')),
+        [
+            _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42\n'),
+            _define('ns/Bar.1.23.uavcan', 'int8 the_field\nint8 A = 0xA\nint8 B = 0xB'),
+        ]
+    )
+
+
+@_in_n_out
+def _unittest_dsdl_parser_expressions() -> None:
+    from pytest import raises
+
+    def throws(definition: str, exc: typing.Type[Exception] = expression.InvalidOperandError) -> None:
+        with raises(exc):
+            _parse_definition(_define('ns/Throws.0.1.uavcan', dedent(definition)), [])
+
+    throws('bool R = true && 0')
+    throws('bool R = true || 0')
+    throws('bool R = 0 || true')
+    throws('bool R = 0 == true')
+    throws('bool R = {0} & true')
+    throws('bool R = true ^ {0}')
+    throws('bool R = 0 ^ true')
+    throws('int8 R = 1 / 0')
+    throws('bool R = "S" == 0')
+    throws('bool R = {0} != {}')
+    throws('bool R = {0, true, "S"}')
+    throws('bool R = {0} == {"s"}')
+    throws('bool R = {0} <= "s"')
+    throws('bool R = {0} >= "s"')
+    throws('bool R = {0} > "s"')
+    throws('bool R = {0} < "s"')
+    throws('bool R = {0} | "s"')
+    throws('bool R = {0} & "s"')
+    throws('bool R = {0} ^ "s"')
+    throws('bool R = {0}.nonexistent_attribute')
+    throws('bool R = {0} / {1}')
+    throws('bool R = !1')
+    throws('bool R = +true')
+    throws('bool R = -"1"')
+    throws('bool R = true | false')
+    throws('bool R = true & false')
+    throws('bool R = true + "0"')
+    throws('bool R = true - "0"')
+    throws('bool R = true * "0"')
+    throws('bool R = true / "0"')
+    throws('bool R = true % "0"')
+    throws('bool R = true ** "0"')
+
+    _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                dedent(r'''
+                float64 PI = 3.141592653589793
+                float64 E  = 2.718281828459045
+                @assert (PI ** E > 22.4) && (PI ** E < 22.5)
+                @assert 'moments of eternity'     != "strangers stealing someone else's dreams"  # I've seen it all
+                @assert 'hunting for the mystery' != 'running for your life in times like these' # I've seen it all
+                @assert "I remember the time once it a life" != 'oh baby'  # got you here in my head, here in my head
+                @assert false == ('oh' == 'maybe')
+                @assert true
+                @assert 1 == 2 - 1
+                @assert -10 == +20 / -2
+                @assert {10, 15, 20} % 5 == {0}
+                @assert {10, 15, 20} % 5 == {1, 2, 3} * 0
+                @assert {10, 15, 20} / 5 == {2, 3, 4} * 10 / 5 / 2
+                @assert {1} < {1, 2}
+                @assert {1} <= {1}
+                @assert {1} != {1, 2}
+                @assert {1} >= {1}
+                @assert {1, 2} > {1, 2} == false
+                @assert {1, 2, 3} > {1, 2}
+                @assert {1, 5/2} == {-5/-2, 2.5, 1}
+                @assert {1, 2, 3} == {1} | {2} | {3} | {1}
+                @assert {1, 2, 3} == {1, 2, 3, 4, 5} & {1, 2, 3, 8, 9}
+                @assert {4, 5, 8, 9} == {1, 2, 3, 4, 5} ^ {1, 2, 3, 8, 9}
+                @assert 1 - {1, 2, 3} == {0, -1, -2}
+                @assert 1 / {1, 2, 3} == {1, 1/2, 1/3}
+                @assert 8 % {1, 2, 3} == {0, 2}
+                @assert 2 ** {1, 2, 3} == {2, 4, 8}
+                @assert {1, 2, 3} ** 2 == {1, 4, 9}
+                @assert "Hello" + ' ' + 'world' == 'Hello world'
+                @assert 'Hello'+' '+'world' != ''
+                @assert true != ('A' == "a")
+                @assert true && true
+                @assert ! (true && false)
+                @assert true||false
+                @assert !false
+                @assert ! 5 < 3
+                @assert 4 | 2 == 6
+                @assert 4 & 2 == 0
+                @assert 3 & 2 == 2
+                @assert 0xFF_00 & 0x00_FF == 0x0000
+                @assert 0xFF_00 | 0x00_FF == 0xFFFF
+                @assert 0xFF_00 ^ 0x0F_FF == 0xF0FF
+                ''')),
+        []
+    )
+
+
+def _collect_descendants(cls: typing.Type[object]) -> typing.Iterable[typing.Type[object]]:
+    # noinspection PyArgumentList
+    for t in cls.__subclasses__():
+        yield t
+        yield from _collect_descendants(t)
+
+
+def _unittest_collect_descendants() -> None:  # Unit test for my unit test.
+    class A:
+        pass
+
+    class B(A):
+        pass
+
+    class C(B):
+        pass
+
+    class D(A):
+        pass
+
+    assert set(_collect_descendants(A)) == {B, C, D}
+    assert set(_collect_descendants(D)) == set()
+    assert bool in set(_collect_descendants(int))
+
+
+def _unittest_public_api() -> None:
+    import pydsdl
+
+    # Ensure that all descendants of the specified classes are exported from the library.
+    # If this test fails, you probably forgot to update __init__.py.
+    public_roots = [
+        data_type.DataType,
+        data_type.Attribute,
+        expression.Any,
+    ]
+
+    for root in public_roots:
+        expected_types = {root} | set(_collect_descendants(root))
+        for t in expected_types:
+            assert t.__name__ in dir(pydsdl), 'Data type %r is not exported' % t

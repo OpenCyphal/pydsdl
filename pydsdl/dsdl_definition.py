@@ -5,11 +5,12 @@
 
 import os
 import typing
-from .parse_error import InvalidDefinitionError
-from .data_type import Version, CompoundType
+from . import error
+from . import data_type
+from . import parser
 
 
-class FileNameFormatError(InvalidDefinitionError):
+class FileNameFormatError(error.InvalidDefinitionError):
     """
     Raised when a DSDL definition file is named incorrectly.
     """
@@ -34,7 +35,7 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if CompoundType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
+        if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
             raise FileNameFormatError('Invalid namespace name', path=root_namespace_path)
 
         # Determining the relative path within the root namespace directory
@@ -64,18 +65,64 @@ class DSDLDefinition:
 
         # Parsing the version numbers
         try:
-            self._version = Version(major=int(str_major_version),
-                                    minor=int(str_minor_version))
+            self._version = data_type.Version(major=int(str_major_version),
+                                              minor=int(str_minor_version))
         except ValueError:
             raise FileNameFormatError('Could not parse the version numbers', path=self._file_path) from None
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
         for nc in namespace_components:
-            if CompoundType.NAME_COMPONENT_SEPARATOR in nc:
+            if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in nc:
                 raise FileNameFormatError('Invalid name for namespace component', path=self._file_path)
 
-        self._name = CompoundType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])  # type: str
+        self._name = data_type.CompoundType.NAME_COMPONENT_SEPARATOR\
+            .join(namespace_components + [str(short_name)])  # type: str
+
+        self._cached_type = None    # type: typing.Optional[data_type.CompoundType]
+
+    def read(self,
+             lookup_definitions:              typing.Iterable['DSDLDefinition'],
+             print_output_handler:            typing.Callable[[int, str], None],
+             allow_unregulated_fixed_port_id: bool) -> data_type.CompoundType:
+        """
+        Reads the data type definition and returns its high-level data type representation.
+        The output is cached; all following invocations will read from the cache.
+        Caching is very important, because it is expected that the same definition may be referred to multiple
+        times (e.g., for composition or when accessing external constants). Re-processing a definition every time
+        it is accessed would be a huge waste of time.
+        Note, however, that this may lead to unexpected complications if one is attempting to re-read a definition
+        with different inputs (e.g., different lookup paths) expecting to get a different result: caching would
+        get in the way. That issue is easy to avoid by creating a new instance of the object.
+        :param lookup_definitions:              List of definitions available for referring to.
+        :param print_output_handler:            Used for @print and for diagnostics: (line_number, text) -> None.
+        :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
+        :return: The data type representation.
+        """
+        if self._cached_type is not None:
+            return self._cached_type
+
+        # Remove the target definition from the lookup list in order to prevent
+        # infinite recursion on self-referential definitions.
+        lookup_definitions = list(filter(lambda d: d != self, lookup_definitions))
+        try:
+            # We have to import this class at function level to break recursive dependency.
+            # Maybe I have messed up the architecture? Should think about it later.
+            from .data_type_builder import DataTypeBuilder
+            builder = DataTypeBuilder(definition=self,
+                                      lookup_definitions=lookup_definitions,
+                                      print_output_handler=print_output_handler,
+                                      allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id)
+            with open(self.file_path) as f:
+                parser.parse(f.read(), builder)
+
+            self._cached_type = builder.finalize()
+            return self._cached_type
+        except error.FrontendError as ex:                      # pragma: no cover
+            ex.set_error_location_if_unknown(path=self.file_path)
+            raise ex
+        except Exception as ex:                                         # pragma: no cover
+            raise error.InternalError(culprit=ex, path=self.file_path)
 
     @property
     def full_name(self) -> str:
@@ -85,7 +132,7 @@ class DSDLDefinition:
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(CompoundType.NAME_COMPONENT_SEPARATOR)
+        return self._name.split(data_type.CompoundType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -95,7 +142,7 @@ class DSDLDefinition:
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return str(CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(data_type.CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
@@ -108,7 +155,7 @@ class DSDLDefinition:
         return self._text
 
     @property
-    def version(self) -> Version:
+    def version(self) -> data_type.Version:
         return self._version
 
     @property
@@ -124,8 +171,18 @@ class DSDLDefinition:
     def file_path(self) -> str:
         return self._file_path
 
+    def __eq__(self, other: object) -> bool:
+        """
+        Two definitions will compare equal if they share the same name AND version number.
+        Definitions of the same name but different versions are not considered equal.
+        """
+        if isinstance(other, DSDLDefinition):
+            return self.full_name == other.full_name and self.version == other.version
+        else:  # pragma: no cover
+            return NotImplemented
+
     def __str__(self) -> str:
-        return 'DSDLDefinition(name=%r, version=%r, fixed_port_id=%r, file_path=%r)' % \
+        return 'DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%r)' % \
             (self.full_name, self.version, self.fixed_port_id, self.file_path)
 
     __repr__ = __str__

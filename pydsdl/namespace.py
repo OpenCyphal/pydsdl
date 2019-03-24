@@ -7,21 +7,13 @@ import os
 import typing
 import logging
 import fnmatch
-from collections import defaultdict
-from .data_type import CompoundType, ServiceType
-from .dsdl_definition import DSDLDefinition
-from .dsdl_parser import parse_definition, ConfigurationOptions, PrintDirectiveOutputHandler
-from .parse_error import ParseError, InternalError, InvalidDefinitionError
+import collections
+from . import data_type
+from . import dsdl_definition
+from . import error
 
 
-DSDL_FILE_GLOB = '*.uavcan'
-
-
-_logger = logging.getLogger(__name__)
-_LOG_LIST_ITEM_PREFIX = ' ' * 4
-
-
-class NamespaceNameCollisionError(InvalidDefinitionError):
+class NamespaceNameCollisionError(error.InvalidDefinitionError):
     """
     Raised when there is more than one namespace under the same name.
     This may occur if there are identically named namespaces located in different directories.
@@ -29,14 +21,14 @@ class NamespaceNameCollisionError(InvalidDefinitionError):
     pass
 
 
-class NestedRootNamespaceError(InvalidDefinitionError):
+class NestedRootNamespaceError(error.InvalidDefinitionError):
     """
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
     """
     pass
 
 
-class FixedPortIDCollisionError(InvalidDefinitionError):
+class FixedPortIDCollisionError(error.InvalidDefinitionError):
     """
     Raised when there is more than one data type, or different major versions of the same data type
     using the same fixed port ID.
@@ -44,31 +36,31 @@ class FixedPortIDCollisionError(InvalidDefinitionError):
     pass
 
 
-class MinorVersionsNotBitCompatibleError(InvalidDefinitionError):
+class MinorVersionsNotBitCompatibleError(error.InvalidDefinitionError):
     """
     Raised when definitions under the same major version are not bit-compatible.
     """
     pass
 
 
-class MultipleDefinitionsUnderSameVersionError(InvalidDefinitionError):
+class MultipleDefinitionsUnderSameVersionError(error.InvalidDefinitionError):
     """
     For example:
         Type.1.0.uavcan
-        58000.Type.1.0.uavcan
-        58001.Type.1.0.uavcan
+        28000.Type.1.0.uavcan
+        28001.Type.1.0.uavcan
     """
     pass
 
 
-class VersionsOfDifferentKindError(InvalidDefinitionError):
+class VersionsOfDifferentKindError(error.InvalidDefinitionError):
     """
     Definitions that share the same name but are of different kinds.
     """
     pass
 
 
-class MinorVersionFixedPortIDError(InvalidDefinitionError):
+class MinorVersionFixedPortIDError(error.InvalidDefinitionError):
     """
     Different fixed port ID under the same major version, or a fixed port ID was removed under the same
     major version.
@@ -76,39 +68,42 @@ class MinorVersionFixedPortIDError(InvalidDefinitionError):
     pass
 
 
-def parse_namespace(root_namespace_directory:        str,
-                    lookup_directories:              typing.Iterable[str],
-                    print_directive_output_handler:  typing.Optional[PrintDirectiveOutputHandler] = None,
-                    allow_unregulated_fixed_port_id: bool = False,
-                    skip_assertion_checks:           bool = False) -> \
-        typing.List[CompoundType]:
-    """
-    Parse all DSDL definitions in the specified root namespace directory.
+# Invoked when the frontend encounters a print directive or needs to output a generic diagnostic. Arguments:
+#   - the containing definition
+#   - line number, one based
+#   - text to print
+PrintOutputHandler = typing.Callable[[dsdl_definition.DSDLDefinition, int, str], None]
 
-    :param root_namespace_directory:    The path of the root namespace directory that will be parsed.
-                                        For example, "dsdl/uavcan" to parse the "uavcan" namespace.
+
+def read_namespace(root_namespace_directory:        str,
+                   lookup_directories:              typing.Iterable[str],
+                   print_output_handler:            typing.Optional[PrintOutputHandler] = None,
+                   allow_unregulated_fixed_port_id: bool = False) -> \
+        typing.List[data_type.CompoundType]:
+    """
+    Read all DSDL definitions from the specified root namespace directory.
+
+    :param root_namespace_directory:    The path of the root namespace directory that will be read.
+                                        For example, "dsdl/uavcan" to read the "uavcan" namespace.
 
     :param lookup_directories:          List of other namespace directories containing data type definitions that are
-                                        referred to from the parsed root namespace. For example, if you are parsing a
+                                        referred to from the target root namespace. For example, if you are reading a
                                         vendor-specific namespace, the list of lookup directories should always include
                                         a path to the standard root namespace "uavcan", otherwise the types defined in
                                         the vendor-specific namespace won't be able to use data types from the standard
                                         namespace.
 
-    :param print_directive_output_handler:  If provided, this callable will be invoked when a @print directive is
-                                            encountered. If not provided, print directives will not produce any output
-                                            except for the log (at the INFO level).
+    :param print_output_handler:            If provided, this callable will be invoked when a @print directive is
+                                            encountered or when the frontend needs to output a diagnostic.
+                                            If not provided, no output will be produced except for the log.
 
     :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
                                             This is a dangerous feature that must not be used unless you understand the
                                             risks. The background information is provided in the UAVCAN specification.
 
-    :param skip_assertion_checks:         Do not evaluate assertion check expressions. This option can be used to
-                                          accelerate parsing significantly. Use sparingly.
-
     :return: A list of CompoundType.
 
-    :raises: ParseError, OSError (if directories do not exist or inaccessible)
+    :raises: FrontendError, OSError (if directories do not exist or inaccessible)
     """
     # Add the own root namespace to the set of lookup directories, remove duplicates
     lookup_directories = list(set(list(lookup_directories) + [root_namespace_directory]))
@@ -130,7 +125,7 @@ def parse_namespace(root_namespace_directory:        str,
     for x in target_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-    lookup_dsdl_definitions = []    # type: typing.List[DSDLDefinition]
+    lookup_dsdl_definitions = []    # type: typing.List[dsdl_definition.DSDLDefinition]
     for ld in lookup_directories:
         lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
@@ -138,19 +133,15 @@ def parse_namespace(root_namespace_directory:        str,
     for x in lookup_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-    # Parse the constructed definitions
-    configuration_options = ConfigurationOptions()
-    configuration_options.print_handler = print_directive_output_handler
-    configuration_options.allow_unregulated_fixed_port_id = bool(allow_unregulated_fixed_port_id)
-    configuration_options.skip_assertion_checks = bool(skip_assertion_checks)
+    # Read the constructed definitions
+    types = _read_namespace_definitions(target_dsdl_definitions,
+                                        lookup_dsdl_definitions,
+                                        print_output_handler,
+                                        allow_unregulated_fixed_port_id)
 
-    types = _parse_namespace_definitions(target_dsdl_definitions,
-                                         lookup_dsdl_definitions,
-                                         configuration_options)
-
-    # Note that we check for collisions in the parsed namespace only.
+    # Note that we check for collisions in the read namespace only.
     # We intentionally ignore (do not check for) possible collisions in the lookup directories,
-    # because that would exceed the expected scope of responsibility of the parser, and the lookup
+    # because that would exceed the expected scope of responsibility of the frontend, and the lookup
     # directories may contain issues and mistakes that are outside of the control of the user (e.g.,
     # they could be managed by a third party) -- the user shouldn't be affected by mistakes committed
     # by the third party.
@@ -160,41 +151,56 @@ def parse_namespace(root_namespace_directory:        str,
     return types
 
 
-def _parse_namespace_definitions(target_definitions:    typing.List[DSDLDefinition],
-                                 lookup_definitions:    typing.List[DSDLDefinition],
-                                 configuration_options: ConfigurationOptions) -> \
-        typing.List[CompoundType]:
+_DSDL_FILE_GLOB = '*.uavcan'
+_LOG_LIST_ITEM_PREFIX = ' ' * 4
+
+_logger = logging.getLogger(__name__)
+
+
+def _read_namespace_definitions(target_definitions:              typing.List[dsdl_definition.DSDLDefinition],
+                                lookup_definitions:              typing.List[dsdl_definition.DSDLDefinition],
+                                print_output_handler:            typing.Optional[PrintOutputHandler] = None,
+                                allow_unregulated_fixed_port_id: bool = False) -> \
+        typing.List[data_type.CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
     Allow the target definitions to use the lookup definitions within themselves.
-    :param target_definitions:  Which definitions to parse.
-    :param lookup_definitions:  Which definitions can be used by the parsed definitions.
+    :param target_definitions:  Which definitions to read.
+    :param lookup_definitions:  Which definitions can be used by the processed definitions.
     :return: A list of types.
     """
-    types = []  # type: typing.List[CompoundType]
+    def make_print_handler(definition: dsdl_definition.DSDLDefinition) -> typing.Callable[[int, str], None]:
+        def handler(line_number: int, text: str) -> None:
+            if print_output_handler:  # pragma: no branch
+                assert isinstance(line_number, int) and isinstance(text, str)
+                assert line_number > 0, 'Line numbers must be one-based'
+                print_output_handler(definition, line_number, text)
+        return handler
+
+    types = []  # type: typing.List[data_type.CompoundType]
     for tdd in target_definitions:
         try:
-            parsed = parse_definition(tdd,
-                                      lookup_definitions,
-                                      configuration_options=configuration_options)
-        except ParseError as ex:    # pragma: no cover
+            dt = tdd.read(lookup_definitions,
+                          make_print_handler(tdd),
+                          allow_unregulated_fixed_port_id)
+        except error.FrontendError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
         except Exception as ex:     # pragma: no cover
-            raise InternalError(culprit=ex, path=tdd.file_path) from ex
+            raise error.InternalError(culprit=ex, path=tdd.file_path) from ex
         else:
-            types.append(parsed)
+            types.append(dt)
 
     return types
 
 
-def _ensure_no_fixed_port_id_collisions(types: typing.List[CompoundType]) -> None:
+def _ensure_no_fixed_port_id_collisions(types: typing.List[data_type.CompoundType]) -> None:
     for a in types:
         for b in types:
             different_names = a.full_name != b.full_name
             different_major_versions = a.version.major != b.version.major
             # Must be the same kind because port ID sets of subjects and services are orthogonal
-            same_kind = isinstance(a, ServiceType) == isinstance(b, ServiceType)
+            same_kind = isinstance(a, data_type.ServiceType) == isinstance(b, data_type.ServiceType)
             # Data types where the major version is zero are allowed to collide
             both_released = (a.version.major > 0) and (b.version.major > 0)
 
@@ -209,13 +215,13 @@ def _ensure_no_fixed_port_id_collisions(types: typing.List[CompoundType]) -> Non
                         )
 
 
-def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> None:
-    by_name = defaultdict(list)  # type: typing.DefaultDict[str, typing.List[CompoundType]]
+def _ensure_minor_version_compatibility(types: typing.List[data_type.CompoundType]) -> None:
+    by_name = collections.defaultdict(list)  # type: typing.DefaultDict[str, typing.List[data_type.CompoundType]]
     for t in types:
         by_name[t.full_name].append(t)
 
     for name, definitions in by_name.items():
-        by_major = defaultdict(list)    # type: typing.DefaultDict[int, typing.List[CompoundType]]
+        by_major = collections.defaultdict(list)    # type: typing.DefaultDict[int, typing.List[data_type.CompoundType]]
         for t in definitions:
             by_major[t.version.major].append(t)
 
@@ -237,15 +243,15 @@ def _ensure_minor_version_compatibility(types: typing.List[CompoundType]) -> Non
                         )
 
                     # Must be of the same kind: both messages or both services
-                    if isinstance(a, ServiceType) != isinstance(b, ServiceType):
+                    if isinstance(a, data_type.ServiceType) != isinstance(b, data_type.ServiceType):
                         raise VersionsOfDifferentKindError(
                             'This definition is not of the same kind as %r' % b.source_file_path,
                             path=a.source_file_path
                         )
 
                     # Must be bit-compatible
-                    if isinstance(a, ServiceType):
-                        assert isinstance(b, ServiceType)
+                    if isinstance(a, data_type.ServiceType):
+                        assert isinstance(b, data_type.ServiceType)
                         ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
                             a.response_type.is_mutually_bit_compatible_with(b.response_type)
                     else:
@@ -296,10 +302,9 @@ def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> N
                                                   path=a)
 
 
-def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[DSDLDefinition]:
+def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[dsdl_definition.DSDLDefinition]:
     """
-    Accepts a directory path, returns a list of abstract DSDL file representations.
-    Those can be fed to the actual DSDL parser later.
+    Accepts a directory path, returns a list of abstract DSDL file representations. Those can be read later.
     """
     def on_walk_error(os_ex: OSError) -> None:
         raise os_ex     # pragma: no cover
@@ -310,16 +315,16 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
 
     source_file_paths = []  # type: typing.List[str]
     for root, _dirnames, filenames in walker:
-        for filename in fnmatch.filter(filenames, DSDL_FILE_GLOB):
+        for filename in fnmatch.filter(filenames, _DSDL_FILE_GLOB):
             source_file_paths.append(os.path.join(root, filename))
 
     _logger.debug('DSDL files in the namespace dir %r are listed below:', root_namespace_path)
     for a in source_file_paths:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
-    output = []  # type: typing.List[DSDLDefinition]
+    output = []  # type: typing.List[dsdl_definition.DSDLDefinition]
     for fp in source_file_paths:
-        dsdl_def = DSDLDefinition(fp, root_namespace_path)
+        dsdl_def = dsdl_definition.DSDLDefinition(fp, root_namespace_path)
         output.append(dsdl_def)
 
     return output
@@ -350,16 +355,16 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
     print(dsdl_defs)
-    lut = {x.full_name: x for x in dsdl_defs}    # type: typing.Dict[str, DSDLDefinition]
+    lut = {x.full_name: x for x in dsdl_defs}    # type: typing.Dict[str, dsdl_definition.DSDLDefinition]
     assert len(lut) == 3
 
     assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])
     assert str(lut['foo.Qwerty']) == \
-        "DSDLDefinition(name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, " \
+        "DSDLDefinition(full_name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, " \
         "file_path='%s')" % lut['foo.Qwerty'].file_path
 
     assert str(lut['foo.nested.Foo']) == \
-        "DSDLDefinition(name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, " \
+        "DSDLDefinition(full_name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, " \
         "file_path='%s')" % lut['foo.nested.Foo'].file_path
 
     t = lut['foo.Qwerty']
