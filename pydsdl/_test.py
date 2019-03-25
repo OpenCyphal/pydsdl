@@ -952,6 +952,18 @@ def _unittest_parse_namespace_versioning() -> None:
     parsed = namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
     assert len(parsed) == 8
 
+    # Check ordering - the definitions must be sorted properly by name (lexicographically) and version (newest first).
+    assert list(map(str, parsed)) == [
+        'ns.Empty.4.0',         # Newest first
+        'ns.Empty.3.0',
+        'ns.Empty.2.0',
+        'ns.Empty.1.1',
+        'ns.Empty.1.0',
+        'ns.Spartans.30.2',     # Newest first
+        'ns.Spartans.30.0',
+        'ns.Spartans.0.1',
+    ]
+
 
 def _unittest_parse_namespace_faults() -> None:
     try:

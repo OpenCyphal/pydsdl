@@ -81,7 +81,10 @@ def read_namespace(root_namespace_directory:        str,
                    allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[data_type.CompoundType]:
     """
-    Read all DSDL definitions from the specified root namespace directory.
+    Read all DSDL definitions from the specified root namespace directory. Returns a list of CompoundTypes sorted
+    lexicographically by full data type name, then by major version (newest version first), then by minor version
+    (newest version first). The guaranteed ordering allows the user to always find the newest version simply by
+    picking the first matching occurrence.
 
     :param root_namespace_directory:    The path of the root namespace directory that will be read.
                                         For example, "dsdl/uavcan" to read the "uavcan" namespace.
@@ -101,12 +104,12 @@ def read_namespace(root_namespace_directory:        str,
                                             This is a dangerous feature that must not be used unless you understand the
                                             risks. The background information is provided in the UAVCAN specification.
 
-    :return: A list of CompoundType.
+    :return: A sorted list of CompoundType.
 
     :raises: FrontendError, OSError (if directories do not exist or inaccessible)
     """
-    # Add the own root namespace to the set of lookup directories, remove duplicates
-    lookup_directories = list(set(list(lookup_directories) + [root_namespace_directory]))
+    # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates
+    lookup_directories = list(sorted(set(list(lookup_directories) + [root_namespace_directory])))
 
     # Normalize paths
     root_namespace_directory = os.path.abspath(root_namespace_directory)
@@ -304,7 +307,9 @@ def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> N
 
 def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[dsdl_definition.DSDLDefinition]:
     """
-    Accepts a directory path, returns a list of abstract DSDL file representations. Those can be read later.
+    Accepts a directory path, returns a sorted list of abstract DSDL file representations. Those can be read later.
+    The definitions are sorted by name lexicographically, then by major version (greatest version first),
+    then by minor version (same ordering as the major version).
     """
     def on_walk_error(os_ex: OSError) -> None:
         raise os_ex     # pragma: no cover
@@ -327,7 +332,8 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typi
         dsdl_def = dsdl_definition.DSDLDefinition(fp, root_namespace_path)
         output.append(dsdl_def)
 
-    return output
+    # Lexicographically by name, newest version first.
+    return list(sorted(output, key=lambda d: (d.full_name, -d.version.major, -d.version.minor)))
 
 
 def _unittest_dsdl_definition_constructor() -> None:
