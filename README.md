@@ -2,7 +2,7 @@ PyDSDL
 ======
 
 [![Travis CI](https://travis-ci.org/UAVCAN/pydsdl.svg?branch=master)](https://travis-ci.org/UAVCAN/pydsdl)
-[![Coverage Status](https://coveralls.io/repos/github/UAVCAN/pydsdl/badge.svg?branch=coveralls)](https://coveralls.io/github/UAVCAN/pydsdl?branch=coveralls)
+[![Coverage Status](https://coveralls.io/repos/github/UAVCAN/pydsdl/badge.svg)](https://coveralls.io/github/UAVCAN/pydsdl)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pydsdl.svg)](https://test.pypi.org/project/pydsdl/)
 [![Forum](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
 
