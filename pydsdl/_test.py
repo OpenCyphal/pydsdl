@@ -629,7 +629,6 @@ def _unittest_assert() -> None:
 
 def _unittest_parse_namespace() -> None:
     from pytest import raises
-    import tempfile
     directory = tempfile.TemporaryDirectory()
 
     print_output = None  # type: typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, str]]

@@ -6,7 +6,7 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/a0fdcbe8332a46399a2da90f97900e78)](https://www.codacy.com/app/UAVCAN/pydsdl)
 [![Forum](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
 
-**PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler frontend implemented in Python.**
+PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler frontend implemented in Python.
 
 PyDSDL supports all DSDL features defined in the UAVCAN specification,
 and performs all mandatory static definition validity checks.
@@ -128,7 +128,7 @@ this type is unstable and should not be used by the application directly.
 Converting a `FrontendError` (or derived) object to `str` yields an error message in a conventional error format
 suitable for error parsers of most IDEs; for example:
 
-```
+```text
 uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
 ```
 
