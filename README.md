@@ -29,8 +29,8 @@ Make sure that it works by importing it: `import pydsdl`.
 The library is bundled with the following third-party software libraries (by virtue of being bundled,
 they need not be installed by the user):
 
-  - [Parsimonious](https://github.com/erikrose/parsimonious) by Erik Rose, MIT license.
-  - [Six](https://github.com/benjaminp/six) by Benjamin Peterson, MIT license; needed for Parsimonious.
+- [Parsimonious](https://github.com/erikrose/parsimonious) by Erik Rose, MIT license.
+- [Six](https://github.com/benjaminp/six) by Benjamin Peterson, MIT license; needed for Parsimonious.
 
 
 ## Library API
@@ -64,22 +64,22 @@ DSDL data types are modeled through the following Python types.
 The user application should not instantiate them directly.
 All of them share the same common ancestor `DataType` and the naming pattern `pydsdl.*Type`:
 
-  - `DataType` - the root class; it also inherits from `pydsdl.Any`, since DSDL types are also values.
-    - `VoidType` - e.g., `void16`
-    - `PrimitiveType`
-      - `BooleanType` - e.g., `bool`
-      - `ArithmeticType`
-        - `FloatType` - e.g., `truncated float16`
-        - `IntegerType`
-          - `SignedIntegerType` - e.g., `int16`
-          - `UnsignedIntegerType` - e.g., `saturated uint32`
-    - `ArrayType`
-      - `FixedLengthArrayType` - e.g., `uint8[256]`
-      - `VariableLengthArrayType` - e.g., `uint8[<256]`
-    - `CompoundType` - see below.
-      - `UnionType` - message types or nested structures.
-      - `StructureType` - message types or nested structures.
-      - `ServiceType` - service types, not serializable.
+- `DataType` - the root class; it also inherits from `pydsdl.Any`, since DSDL types are also values.
+  - `VoidType` - e.g., `void16`
+  - `PrimitiveType`
+    - `BooleanType` - e.g., `bool`
+    - `ArithmeticType`
+      - `FloatType` - e.g., `truncated float16`
+      - `IntegerType`
+        - `SignedIntegerType` - e.g., `int16`
+        - `UnsignedIntegerType` - e.g., `saturated uint32`
+  - `ArrayType`
+    - `FixedLengthArrayType` - e.g., `uint8[256]`
+    - `VariableLengthArrayType` - e.g., `uint8[<256]`
+  - `CompoundType` - see below.
+    - `UnionType` - message types or nested structures.
+    - `StructureType` - message types or nested structures.
+    - `ServiceType` - service types, not serializable.
 
 The type `CompoundType` is the most interesting one, as it represents actual DSDL definitions upon their interpretation.
 The following are its most important properties, their semantics should be obvious enough from their names:
@@ -102,15 +102,15 @@ Instances of `CompoundType` (and its derivatives) contain *attributes*.
 Per the specification, an attribute can be a field or a constant.
 The corresponding data model is shown below:
 
-  - `Attribute` - the root class.
-    - `Field` - e.g., `uavcan.node.Heartbeat.1.0 status`
-      - `PaddingField` - e.g., `void5` (the name is always empty)
-    - `Constant` - e.g., `uint16 VALUE = 0x1234`.
+- `Attribute` - the root class.
+  - `Field` - e.g., `uavcan.node.Heartbeat.1.0 status`
+    - `PaddingField` - e.g., `void5` (the name is always empty)
+  - `Constant` - e.g., `uint16 VALUE = 0x1234`.
 
 The root class `Attribute` exposes the following public properties:
 
-  - `data_type: pydsdl.DataType` - the data type of the attribute.
-  - `name: str` - the name of the attribute; always empty for padding fields.
+- `data_type: pydsdl.DataType` - the data type of the attribute.
+- `name: str` - the name of the attribute; always empty for padding fields.
 
 The type `Constant` also has a property `value: pydsdl.Any`, which returns the value of the constant
 as a DSDL expression value. Read below for details.
@@ -119,11 +119,11 @@ as a DSDL expression value. Read below for details.
 
 The root exception types follow the naming pattern `pydsdl.*Error`, they are used to represent errors:
 
-  - `FrontendError` - contains properties `path:str` and `line:int`, both of which are optional,
+- `FrontendError` - contains properties `path:str` and `line:int`, both of which are optional,
 which (if set) point out to the exact location where the error has occurred: the path of the DSDL file and
 the line number within the file (starting from one). If line is set, path is also set.
-    - `InternalError` - an error that occurred within the front end itself, at no fault of the processed definition.
-    - `InvalidDefinitionError` - represents a problem with the processed definition.
+  - `InternalError` - an error that occurred within the front end itself, at no fault of the processed definition.
+  - `InvalidDefinitionError` - represents a problem with the processed definition.
 This type is inherited by a dozen of specialized error exception classes; however, the class hierarchy beneath
 this type is unstable and should not be used by the application directly.
 
@@ -140,15 +140,15 @@ Constant expression values are represented through Python types rooted under `py
 DSDL types are also constant values, so `pydsdl.DataType` (the root of the type model) inherits from `pydsdl.Any`.
 The class hierarchy is as follows:
 
-  - `Any` - has a class property (i.e., "static" property) `TYPE_NAME: str`, which contains the DSDL name of the type.
-    - `Primitive` - primitive values; has virtual property `native_value` which yields an appropriate Python-native
+- `Any` - has a class property (i.e., "static" property) `TYPE_NAME: str`, which contains the DSDL name of the type.
+  - `Primitive` - primitive values; has virtual property `native_value` which yields an appropriate Python-native
 representation of the contained value.
-      - `Boolean` - a Boolean constant; has `native_value: bool`.
-      - `Rational` - real value approximation; has `native_value: fractions.Fraction`, `is_integer() -> bool`, and
+    - `Boolean` - a Boolean constant; has `native_value: bool`.
+    - `Rational` - real value approximation; has `native_value: fractions.Fraction`, `is_integer() -> bool`, and
 `as_native_integer() -> int` (which throws if the contained number is not an integer).
-      - `String` - a Unicode string; has `native_value: str`.
-    - `Container` - generic container; has `element_type: Type[Any]` and is iterable.
-      - `Set` - a DSDL constant homogeneous set.
+    - `String` - a Unicode string; has `native_value: str`.
+  - `Container` - generic container; has `element_type: Type[Any]` and is iterable.
+    - `Set` - a DSDL constant homogeneous set.
 
 ## Usage example
 
