@@ -1,5 +1,4 @@
-PyDSDL
-======
+# PyDSDL
 
 [![Travis CI](https://travis-ci.org/UAVCAN/pydsdl.svg?branch=master)](https://travis-ci.org/UAVCAN/pydsdl)
 [![Coverage Status](https://coveralls.io/repos/github/UAVCAN/pydsdl/badge.svg)](https://coveralls.io/github/UAVCAN/pydsdl)
@@ -31,7 +30,6 @@ they need not be installed by the user):
 
 - [Parsimonious](https://github.com/erikrose/parsimonious) by Erik Rose, MIT license.
 - [Six](https://github.com/benjaminp/six) by Benjamin Peterson, MIT license; needed for Parsimonious.
-
 
 ## Library API
 
@@ -92,9 +90,9 @@ response structure of the service type, respectively.
 Every data type (i.e., the `DataType` root class) has the following public attributes
 (although they raise `TypeError` when used against an instance of `ServiceType`):
 
-  - `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
+- `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
 which represent the minimum and the maximum possible bit length of an encoded representation.
-  - `compute_bit_length_values() -> Set[int]` - this function performs a bit length combination analysis on
+- `compute_bit_length_values() -> Set[int]` - this function performs a bit length combination analysis on
 the data type and returns a full set of bit lengths of all possible valid encoded representations of the data type.
 Due to the involved computations, the function can be expensive to invoke, so use with care.
 

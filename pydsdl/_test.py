@@ -713,7 +713,6 @@ def _unittest_parse_namespace() -> None:
 
 def _unittest_parse_namespace_versioning() -> None:
     from pytest import raises
-    import tempfile
     import glob
     directory = tempfile.TemporaryDirectory()
 

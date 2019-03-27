@@ -223,7 +223,7 @@ def _ensure_minor_version_compatibility(types: typing.List[data_type.CompoundTyp
     for t in types:
         by_name[t.full_name].append(t)
 
-    for name, definitions in by_name.items():
+    for definitions in by_name.values():
         by_major = collections.defaultdict(list)    # type: typing.DefaultDict[int, typing.List[data_type.CompoundType]]
         for t in definitions:
             by_major[t.version.major].append(t)
