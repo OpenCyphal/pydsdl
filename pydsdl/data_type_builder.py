@@ -10,7 +10,7 @@ from . import expression
 from . import error
 from . import dsdl_definition
 from . import parser
-from . import aggregate_builder
+from . import data_schema_builder
 from . import port_id_ranges
 
 
@@ -49,12 +49,12 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         assert callable(self._print_output_handler)
         assert isinstance(self._allow_unregulated_fixed_port_id, bool)
 
-        self._structs = [aggregate_builder.AggregateBuilder()]
+        self._structs = [data_schema_builder.DataSchemaBuilder()]
         self._is_deprecated = False
 
     def finalize(self) -> data_type.CompoundType:
         if len(self._structs) == 1:     # Message type
-            struct, = self._structs     # type: aggregate_builder.AggregateBuilder,
+            struct, = self._structs     # type: data_schema_builder.AggregateBuilder,
             if struct.union:
                 out = data_type.UnionType(name=self._definition.full_name,
                                           version=self._definition.version,
@@ -131,7 +131,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         if len(self._structs) > 1:
             raise error.InvalidDefinitionError('Duplicated service response marker')
 
-        self._structs.append(aggregate_builder.AggregateBuilder())
+        self._structs.append(data_schema_builder.DataSchemaBuilder())
         assert len(self._structs) == 2
 
     def resolve_top_level_identifier(self, name: str) -> expression.Any:

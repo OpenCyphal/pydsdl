@@ -12,7 +12,7 @@ class BitLengthAnalysisError(error.InvalidDefinitionError):
     pass
 
 
-class AggregateBuilder:
+class DataSchemaBuilder:
     def __init__(self) -> None:
         self._fields = []       # type: typing.List[data_type.Field]
         self._constants = []    # type: typing.List[data_type.Constant]
