@@ -83,7 +83,7 @@ def _unittest_simple() -> None:
         @deprecated
         uint8 CHARACTER = '#'
         int8 a
-        truncated int64[<33] b
+        saturated int64[<33] b
         ''')
     )
     assert abc.fixed_port_id == 29000
@@ -104,7 +104,7 @@ def _unittest_simple() -> None:
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
     assert p.fields[0].name == 'a'
-    assert str(p.fields[1].data_type) == 'truncated int64[<=32]'      # Note: normalized representation
+    assert str(p.fields[1].data_type) == 'saturated int64[<=32]'      # Note: normalized representation
     assert p.fields[1].name == 'b'
     assert len(p.constants) == 1
     assert str(p.constants[0].data_type) == 'saturated uint8'
@@ -114,7 +114,7 @@ def _unittest_simple() -> None:
 
     t = p.fields[1].data_type
     assert isinstance(t, data_type.ArrayType)
-    assert str(t.element_type) == 'truncated int64'
+    assert str(t.element_type) == 'saturated int64'
 
     empty_new = _define(
         'vendor/nested/Empty.255.255.uavcan',
@@ -220,7 +220,7 @@ def _unittest_simple() -> None:
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
-        truncated bool [ <= 255 ] c
+        saturated bool [ <= 255 ] c
         ''')
     )
 
@@ -243,7 +243,7 @@ def _unittest_simple() -> None:
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
-    assert str(p.fields[2]) == 'truncated bool[<=255] c'
+    assert str(p.fields[2]) == 'saturated bool[<=255] c'
 
 
 @_in_n_out
@@ -347,6 +347,12 @@ def _unittest_error() -> None:
 
     with raises(parser.DSDLSyntaxError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
+
+    with raises(data_type.InvalidCastModeError):
+        standalone('vendor/types/A.1.0.uavcan', 'truncated bool foo')
+
+    with raises(data_type.InvalidCastModeError):
+        standalone('vendor/types/A.1.0.uavcan', 'truncated int8 foo')
 
     with raises(data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
@@ -1098,9 +1104,9 @@ def _unittest_dsdl_parser_basics() -> None:
                 dedent(r'''
                 @deprecated
                 void16
-                int8          [<=123+456] array_inclusive
-                truncated int8[< 123+456] array_exclusive
-                saturated int8[  123+456] array_fixed
+                int8           [<=123+456] array_inclusive
+                truncated uint8[< 123+456] array_exclusive
+                saturated int8 [  123+456] array_fixed
                 #ns.Bar.1.23 field
                 float64 a = +10 * (-2 / -3) / 4 % 5
                 bool    b = !true

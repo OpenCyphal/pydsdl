@@ -69,6 +69,10 @@ class InvalidBitLengthError(TypeParameterError):
     pass
 
 
+class InvalidCastModeError(TypeParameterError):
+    pass
+
+
 class InvalidNumberOfElementsError(TypeParameterError):
     pass
 
@@ -203,6 +207,9 @@ class BooleanType(PrimitiveType):
     def __init__(self, cast_mode: PrimitiveType.CastMode):
         super(BooleanType, self).__init__(bit_length=1, cast_mode=cast_mode)
 
+        if cast_mode != PrimitiveType.CastMode.SATURATED:
+            raise InvalidCastModeError('Invalid cast mode for boolean: %r' % cast_mode)
+
     def __str__(self) -> str:
         return self._cast_mode_name + ' bool'
 
@@ -243,6 +250,9 @@ class SignedIntegerType(IntegerType):
                  bit_length: int,
                  cast_mode: PrimitiveType.CastMode):
         super(SignedIntegerType, self).__init__(bit_length, cast_mode)
+
+        if cast_mode != PrimitiveType.CastMode.SATURATED:
+            raise InvalidCastModeError('Invalid cast mode for signed integer: %r' % cast_mode)
 
     @property
     def inclusive_value_range(self) -> ValueRange:
@@ -325,18 +335,17 @@ def _unittest_primitive() -> None:
     with raises(InvalidBitLengthError):
         UnsignedIntegerType(65, PrimitiveType.CastMode.TRUNCATED)
 
-    assert repr(SignedIntegerType(24, PrimitiveType.CastMode.TRUNCATED)) == \
-        'SignedIntegerType(bit_length=24, cast_mode=<CastMode.TRUNCATED: 1>)'
+    assert repr(SignedIntegerType(24, PrimitiveType.CastMode.SATURATED)) == \
+        'SignedIntegerType(bit_length=24, cast_mode=<CastMode.SATURATED: 0>)'
 
-    a = SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
+    a = UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
     b = BooleanType(PrimitiveType.CastMode.SATURATED)
     assert hash(a) != hash(b)
-    assert hash(a) == hash(SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED))
-    assert a == SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
-    assert b != SignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
+    assert hash(a) == hash(UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED))
+    assert a == UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
+    assert b != UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
     assert a != b
     assert b == BooleanType(PrimitiveType.CastMode.SATURATED)
-    assert b != BooleanType(PrimitiveType.CastMode.TRUNCATED)
     assert b != 123    # Not implemented
 
 
@@ -446,11 +455,11 @@ class FixedLengthArrayType(ArrayType):
 def _unittest_fixed_array() -> None:
     from pytest import raises
 
-    su8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.SATURATED)
-    ti64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.TRUNCATED)
+    su8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
+    ti64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.SATURATED)
 
-    assert str(FixedLengthArrayType(su8, 4)) == 'saturated uint8[4]'
-    assert str(FixedLengthArrayType(ti64, 1)) == 'truncated int64[1]'
+    assert str(FixedLengthArrayType(su8, 4)) == 'truncated uint8[4]'
+    assert str(FixedLengthArrayType(ti64, 1)) == 'saturated int64[1]'
 
     assert not FixedLengthArrayType(su8, 4).string_like
     assert not FixedLengthArrayType(ti64, 1).string_like
@@ -463,7 +472,7 @@ def _unittest_fixed_array() -> None:
         FixedLengthArrayType(ti64, 0)
 
     assert repr(FixedLengthArrayType(ti64, 128)) == \
-        'FixedLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.TRUNCATED: 1>), ' \
+        'FixedLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
         'capacity=128)'
 
     small = FixedLengthArrayType(su8, 2)
@@ -672,9 +681,9 @@ class Constant(Attribute):
 def _unittest_attribute() -> None:
     from pytest import raises
 
-    assert str(Field(BooleanType(PrimitiveType.CastMode.TRUNCATED), 'flag')) == 'truncated bool flag'
-    assert repr(Field(BooleanType(PrimitiveType.CastMode.TRUNCATED), 'flag')) == \
-        'Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.TRUNCATED: 1>), name=\'flag\')'
+    assert str(Field(BooleanType(PrimitiveType.CastMode.SATURATED), 'flag')) == 'saturated bool flag'
+    assert repr(Field(BooleanType(PrimitiveType.CastMode.SATURATED), 'flag')) == \
+        'Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.SATURATED: 0>), name=\'flag\')'
 
     assert str(PaddingField(VoidType(32))) == 'void32 '     # Mind the space!
     assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
@@ -1037,7 +1046,7 @@ def _unittest_compound_types() -> None:
                   version=Version(0, 1),
                   attributes=[
                       Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
-                      Field(SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'b'),
+                      Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
                       PaddingField(VoidType(16)),
                   ],
                   deprecated=False,
@@ -1093,7 +1102,7 @@ def _unittest_compound_types() -> None:
 
     assert try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-        SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+        SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ]).compute_bit_length_values() == {17}
 
     # The reference values for the following test are explained in the array tests above
@@ -1104,7 +1113,7 @@ def _unittest_compound_types() -> None:
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
     assert try_union_fields([
         outer,
-        SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+        SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ]).compute_bit_length_values() == {5, 13, 17, 21, 29, 37}
 
     def try_struct_fields(field_types: typing.List[DataType]) -> StructureType:
@@ -1121,14 +1130,14 @@ def _unittest_compound_types() -> None:
 
     assert try_struct_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-        SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+        SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ]).compute_bit_length_values() == {32}
 
     assert try_struct_fields([]).compute_bit_length_values() == {0}   # Empty sets forbidden
 
     assert try_struct_fields([
         outer,
-        SignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+        SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ]).compute_bit_length_values() == {4 + 16, 12 + 16, 20 + 16, 28 + 16, 36 + 16}
 
     assert try_struct_fields([outer]).compute_bit_length_values() == {4, 12, 20, 28, 36}
