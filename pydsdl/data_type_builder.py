@@ -54,7 +54,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
 
     def finalize(self) -> data_type.CompoundType:
         if len(self._structs) == 1:     # Message type
-            struct, = self._structs     # type: data_schema_builder.AggregateBuilder,
+            struct, = self._structs     # type: data_schema_builder.DataSchemaBuilder,
             if struct.union:
                 out = data_type.UnionType(name=self._definition.full_name,
                                           version=self._definition.version,
