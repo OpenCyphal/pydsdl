@@ -442,7 +442,7 @@ def _parse_string_literal(literal: str) -> expression.String:
 
     def _next_symbol() -> str:
         try:
-            s = next(iterator)
+            s = next(iterator)  # type: str
         except StopIteration:
             return ''
 
@@ -450,10 +450,10 @@ def _parse_string_literal(literal: str) -> expression.String:
             assert s != quote_symbol, 'Unescaped quotes cannot appear inside string literals. Bad grammar?'
             return s
 
-        s = next(iterator).lower()
-        if s == 'x':
+        s = next(iterator)
+        if s in 'uU':
             h = ''
-            for _ in range(2):
+            for _ in range(4 if s.islower() else 8):
                 s = next(iterator).lower()
                 if s not in '0123456789abcdef':
                     raise DSDLSyntaxError('Invalid hex character: %r' % s)
@@ -468,7 +468,7 @@ def _parse_string_literal(literal: str) -> expression.String:
                 '"':  '"',
                 "'":  "'",
                 '\\': '\\',
-            }[s]
+            }[s.lower()]
         except KeyError:
             raise DSDLSyntaxError('Invalid escape sequence') from None
 
@@ -498,6 +498,8 @@ def _unittest_parse_string_literal() -> None:
 
     def auto_repr(text: str) -> None:
         r = repr(text)
+        for x in range(256):
+            r = r.replace(r'\x%02x' % x, r'\u00%02x' % x)
         once(r, text)
 
     auto_repr('')
@@ -505,24 +507,26 @@ def _unittest_parse_string_literal() -> None:
     auto_repr('"')
     auto_repr('"')
     auto_repr('\n')
-    auto_repr('\x00\x01\xff')
+    auto_repr('\u0000\u0001\U000000ff')
 
     for a in range(256):
-        auto_repr('\\x%02x' % a)
-        auto_repr('\"\'\\x%02x' % a)
+        as_hex = '%02x' % a
+        auto_repr('\\u' + as_hex * 2)
+        auto_repr('\"\'\\u' + as_hex * 2)
+        auto_repr('\\U' + as_hex * 4)
 
         if chr(a).lower() not in '0123456789abcdef':
             with raises(DSDLSyntaxError, match='.*hex character.*'):
-                _parse_string_literal('"\\x0%s"' % chr(a))
+                _parse_string_literal('"\\U0000000%s"' % chr(a))
 
             with raises(DSDLSyntaxError, match='.*hex character.*'):
-                _parse_string_literal("'\\x%s0'" % chr(a))
+                _parse_string_literal("'\\u00%s0'" % chr(a))
         else:
             with raises(DSDLSyntaxError, match='.*expected.*'):
-                _parse_string_literal("'\\x%s'" % chr(a))
+                _parse_string_literal("'\\u%s'" % chr(a))
 
     with raises(DSDLSyntaxError, match='.*expected.*'):
-        _parse_string_literal("'\\x'")
+        _parse_string_literal("'\\u'")
 
     with raises(DSDLSyntaxError, match='.*expected.*'):
         _parse_string_literal("'\\'")
