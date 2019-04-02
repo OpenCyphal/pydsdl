@@ -12,7 +12,7 @@ import fractions
 import parsimonious
 from parsimonious.nodes import Node as _Node
 from . import error
-from . import data_type
+from . import serializable
 from . import expression
 
 
@@ -57,15 +57,15 @@ class StatementStreamProcessor:
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
     def on_constant(self,
-                    constant_type: data_type.DataType,
+                    constant_type: serializable.SerializableType,
                     name: str,
                     value: expression.Any) -> None:
         raise NotImplementedError  # pragma: no cover
 
-    def on_field(self, field_type: data_type.DataType, name: str) -> None:
+    def on_field(self, field_type: serializable.SerializableType, name: str) -> None:
         raise NotImplementedError  # pragma: no cover
 
-    def on_padding_field(self, padding_field_type: data_type.VoidType) -> None:
+    def on_padding_field(self, padding_field_type: serializable.VoidType) -> None:
         raise NotImplementedError  # pragma: no cover
 
     def on_directive(self,
@@ -82,7 +82,7 @@ class StatementStreamProcessor:
         """Must throw an appropriate exception if the reference cannot be resolved."""
         raise NotImplementedError  # pragma: no cover
 
-    def resolve_versioned_data_type(self, name: str, version: data_type.Version) -> data_type.CompoundType:
+    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompoundType:
         """Must throw an appropriate exception if the data type is not found."""
         raise NotImplementedError  # pragma: no cover
 
@@ -92,7 +92,7 @@ _logger = logging.getLogger(__name__)
 
 _Children = typing.Tuple[typing.Any, ...]
 _VisitorHandler = typing.Callable[['_ParseTreeProcessor', _Node, _Children], typing.Any]
-_PrimitiveTypeConstructor = typing.Callable[[data_type.PrimitiveType.CastMode], data_type.PrimitiveType]
+_PrimitiveTypeConstructor = typing.Callable[[serializable.PrimitiveType.CastMode], serializable.PrimitiveType]
 
 
 def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
@@ -170,18 +170,18 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     def visit_statement_constant(self, _n: _Node, children: _Children) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
-        assert isinstance(constant_type, data_type.DataType) and isinstance(name, str) and name
+        assert isinstance(constant_type, serializable.SerializableType) and isinstance(name, str) and name
         assert isinstance(exp, expression.Any)
         self._statement_stream_processor.on_constant(constant_type, name, exp)
 
     def visit_statement_field(self, _n: _Node, children: _Children) -> None:
         field_type, _space, name = children
-        assert isinstance(field_type, data_type.DataType) and isinstance(name, str) and name
+        assert isinstance(field_type, serializable.SerializableType) and isinstance(name, str) and name
         self._statement_stream_processor.on_field(field_type, name)
 
     def visit_statement_padding_field(self, _n: _Node, children: _Children) -> None:
         void_type = children[0]
-        assert isinstance(void_type, data_type.VoidType)
+        assert isinstance(void_type, serializable.VoidType)
         self._statement_stream_processor.on_padding_field(void_type)
 
     def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:
@@ -207,64 +207,66 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # ================================================== Data types ==================================================
 
-    visit_type           = _make_typesafe_child_lifter(data_type.DataType)
-    visit_type_array     = _make_typesafe_child_lifter(data_type.ArrayType, logged=True)
-    visit_type_scalar    = _make_typesafe_child_lifter(data_type.DataType, logged=True)
-    visit_type_primitive = _make_typesafe_child_lifter(data_type.PrimitiveType)
+    visit_type           = _make_typesafe_child_lifter(serializable.SerializableType)
+    visit_type_array     = _make_typesafe_child_lifter(serializable.ArrayType, logged=True)
+    visit_type_scalar    = _make_typesafe_child_lifter(serializable.SerializableType, logged=True)
+    visit_type_primitive = _make_typesafe_child_lifter(serializable.PrimitiveType)
 
     visit_type_primitive_name = parsimonious.NodeVisitor.lift_child
 
-    def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) -> data_type.VariableLengthArrayType:
+    def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) \
+            -> serializable.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return data_type.VariableLengthArrayType(element_type, _unwrap_array_capacity(length))
+        return serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) -> data_type.VariableLengthArrayType:
+    def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) \
+            -> serializable.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return data_type.VariableLengthArrayType(element_type, _unwrap_array_capacity(length) - 1)
+        return serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
-    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> data_type.FixedLengthArrayType:
+    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> serializable.FixedLengthArrayType:
         element_type, _s0, _bl, _s1, length, _s2, _br = children
-        return data_type.FixedLengthArrayType(element_type, _unwrap_array_capacity(length))
+        return serializable.FixedLengthArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_versioned(self, _n: _Node, children: _Children) -> data_type.CompoundType:
+    def visit_type_versioned(self, _n: _Node, children: _Children) -> serializable.CompoundType:
         name, name_tail, _, version = children
-        assert isinstance(name, str) and name and isinstance(version, data_type.Version)
+        assert isinstance(name, str) and name and isinstance(version, serializable.Version)
         for _, component in name_tail:
             assert isinstance(component, str)
-            name += data_type.CompoundType.NAME_COMPONENT_SEPARATOR + component
+            name += serializable.CompoundType.NAME_COMPONENT_SEPARATOR + component
 
         return self._statement_stream_processor.resolve_versioned_data_type(name, version)
 
-    def visit_type_version_specifier(self, _n: _Node, children: _Children) -> data_type.Version:
+    def visit_type_version_specifier(self, _n: _Node, children: _Children) -> serializable.Version:
         major, _, minor = children
         assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
-        return data_type.Version(major=major.as_native_integer(),
-                                 minor=minor.as_native_integer())
+        return serializable.Version(major=major.as_native_integer(),
+                                    minor=minor.as_native_integer())
 
-    def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> data_type.PrimitiveType:
+    def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> serializable.PrimitiveType:
         _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
-        return cons(data_type.PrimitiveType.CastMode.TRUNCATED)
+        return cons(serializable.PrimitiveType.CastMode.TRUNCATED)
 
-    def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> data_type.PrimitiveType:
+    def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> serializable.PrimitiveType:
         _, cons = children  # type: _Node, _PrimitiveTypeConstructor
-        return cons(data_type.PrimitiveType.CastMode.SATURATED)
+        return cons(serializable.PrimitiveType.CastMode.SATURATED)
 
     def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: data_type.BooleanType(cm)     # lambda is only needed to make mypy shut up
+        return lambda cm: serializable.BooleanType(cm)     # lambda is only needed to make mypy shut up
 
     def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: data_type.UnsignedIntegerType(children[-1], cm)
+        return lambda cm: serializable.UnsignedIntegerType(children[-1], cm)
 
     def visit_type_primitive_name_signed_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: data_type.SignedIntegerType(children[-1], cm)
+        return lambda cm: serializable.SignedIntegerType(children[-1], cm)
 
     def visit_type_primitive_name_floating_point(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: data_type.FloatType(children[-1], cm)
+        return lambda cm: serializable.FloatType(children[-1], cm)
 
-    def visit_type_void(self, _n: _Node, children: _Children) -> data_type.VoidType:
+    def visit_type_void(self, _n: _Node, children: _Children) -> serializable.VoidType:
         _, width = children
         assert isinstance(width, int)
-        return data_type.VoidType(width)
+        return serializable.VoidType(width)
 
     def visit_type_bit_length_suffix(self, node: _Node, _c: _Children) -> int:
         return int(node.text)

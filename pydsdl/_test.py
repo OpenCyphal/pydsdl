@@ -12,7 +12,7 @@ from . import error
 from . import parser
 from . import data_type_builder
 from . import dsdl_definition
-from . import data_type
+from . import serializable
 from . import namespace
 
 
@@ -24,7 +24,7 @@ _DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 
 def _parse_definition(definition:         dsdl_definition.DSDLDefinition,
-                      lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) -> data_type.CompoundType:
+                      lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) -> serializable.CompoundType:
     return definition.read(lookup_definitions,
                            print_output_handler=lambda *_: None,
                            allow_unregulated_fixed_port_id=False)
@@ -92,7 +92,7 @@ def _unittest_simple() -> None:
 
     p = _parse_definition(abc, [])
     print('Parsed:', p)
-    assert isinstance(p, data_type.StructureType)
+    assert isinstance(p, serializable.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith('vendor/nested/29000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
@@ -113,7 +113,7 @@ def _unittest_simple() -> None:
     assert p.constants[0].value == expression.Rational(ord('#'))
 
     t = p.fields[1].data_type
-    assert isinstance(t, data_type.ArrayType)
+    assert isinstance(t, serializable.ArrayType)
     assert str(t.element_type) == 'saturated int64'
 
     empty_new = _define(
@@ -154,7 +154,7 @@ def _unittest_simple() -> None:
         constants,
     ])
     print('Parsed:', p)
-    assert isinstance(p, data_type.ServiceType)
+    assert isinstance(p, serializable.ServiceType)
     assert p.full_name == 'another.Service'
     assert p.fixed_port_id == 300
     assert p.deprecated
@@ -165,8 +165,8 @@ def _unittest_simple() -> None:
     assert p.fields[0].name == 'request'
     assert p.fields[1].name == 'response'
     req, res = [x.data_type for x in p.fields]
-    assert isinstance(req, data_type.UnionType)
-    assert isinstance(res, data_type.StructureType)
+    assert isinstance(req, serializable.UnionType)
+    assert isinstance(res, serializable.StructureType)
     assert req.full_name == 'another.Service.Request'
     assert res.full_name == 'another.Service.Response'
     assert req is p.request_type
@@ -182,17 +182,17 @@ def _unittest_simple() -> None:
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
-    assert isinstance(t, data_type.StructureType)
+    assert isinstance(t, serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected implicitly
 
     t = req.fields[1].data_type
-    assert isinstance(t, data_type.StructureType)
+    assert isinstance(t, serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected explicitly
 
     t = req.fields[2].data_type
-    assert isinstance(t, data_type.StructureType)
+    assert isinstance(t, serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 254)          # Selected explicitly
 
@@ -204,12 +204,12 @@ def _unittest_simple() -> None:
     assert res.bit_length_range == (14, 14 + 64 * 32)
 
     t = res.fields[0].data_type
-    assert isinstance(t, data_type.StructureType)
+    assert isinstance(t, serializable.StructureType)
     assert t.full_name == 'another.Constants'
     assert t.version == (5, 0)
 
     t = res.fields[1].data_type
-    assert isinstance(t, data_type.StructureType)
+    assert isinstance(t, serializable.StructureType)
     assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
@@ -234,7 +234,7 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id is None
     assert not p.has_fixed_port_id
     assert not p.deprecated
-    assert isinstance(p, data_type.UnionType)
+    assert isinstance(p, serializable.UnionType)
     assert p.number_of_variants == 3
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
@@ -250,7 +250,7 @@ def _unittest_simple() -> None:
 def _unittest_error() -> None:
     from pytest import raises
 
-    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> data_type.CompoundType:
+    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> serializable.CompoundType:
         return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
     with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):
@@ -348,10 +348,10 @@ def _unittest_error() -> None:
     with raises(parser.DSDLSyntaxError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
 
-    with raises(data_type.InvalidCastModeError):
+    with raises(serializable.InvalidCastModeError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated bool foo')
 
-    with raises(data_type.InvalidCastModeError):
+    with raises(serializable.InvalidCastModeError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated int8 foo')
 
     with raises(data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
@@ -448,11 +448,11 @@ def _unittest_error() -> None:
         assert False
 
     standalone('vendor/types/1.A.1.0.uavcan', '', allow_unregulated=True)
-    with raises(data_type.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+    with raises(serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '')
 
     standalone('vendor/types/1.A.1.0.uavcan', '---', allow_unregulated=True)
-    with raises(data_type.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+    with raises(serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '---')
 
 
@@ -557,7 +557,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(data_type.InvalidConstantValueError):
+    with raises(serializable.InvalidConstantValueError):
         _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true'), [])
 
     with raises(error.InvalidDefinitionError, match='.*value.*'):
@@ -1246,8 +1246,8 @@ def _unittest_public_api() -> None:
     # Ensure that all descendants of the specified classes are exported from the library.
     # If this test fails, you probably forgot to update __init__.py.
     public_roots = [
-        data_type.DataType,
-        data_type.Attribute,
+        serializable.SerializableType,
+        serializable.Attribute,
         expression.Any,
     ]
 

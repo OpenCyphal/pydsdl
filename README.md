@@ -60,9 +60,9 @@ This option is dangerous and you must not use it unless you really understand th
 
 DSDL data types are modeled through the following Python types.
 The user application should not instantiate them directly.
-All of them share the same common ancestor `DataType` and the naming pattern `pydsdl.*Type`:
+All of them share the same common ancestor `SerializableType` and the naming pattern `pydsdl.*Type`:
 
-- `DataType` - the root class; it also inherits from `pydsdl.Any`, since DSDL types are also values.
+- `SerializableType` - the root class; it also inherits from `pydsdl.Any`, since DSDL types are also values.
   - `VoidType` - e.g., `void16`
   - `PrimitiveType`
     - `BooleanType` - e.g., `bool`
@@ -87,7 +87,7 @@ The `ServiceType` is a special case: unlike other types, it can't be serialized 
 rather, it contains two pseudo-fields: `request` and `response`, which contain the request and the
 response structure of the service type, respectively.
 
-Every data type (i.e., the `DataType` root class) has the following public attributes
+Every data type (i.e., the `SerializableType` root class) has the following public attributes
 (although they raise `TypeError` when used against an instance of `ServiceType`):
 
 - `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
@@ -107,7 +107,7 @@ The corresponding data model is shown below:
 
 The root class `Attribute` exposes the following public properties:
 
-- `data_type: pydsdl.DataType` - the data type of the attribute.
+- `data_type: pydsdl.SerializableType` - the data type of the attribute.
 - `name: str` - the name of the attribute; always empty for padding fields.
 
 The type `Constant` also has a property `value: pydsdl.Any`, which returns the value of the constant
@@ -135,7 +135,7 @@ uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
 ### Expression model
 
 Constant expression values are represented through Python types rooted under `pydsdl.Any`.
-DSDL types are also constant values, so `pydsdl.DataType` (the root of the type model) inherits from `pydsdl.Any`.
+DSDL types are also constant values, so `pydsdl.SerializableType` (the root of the type model) inherits from `pydsdl.Any`.
 The class hierarchy is as follows:
 
 - `Any` - has a class property (i.e., "static" property) `TYPE_NAME: str`, which contains the DSDL name of the type.

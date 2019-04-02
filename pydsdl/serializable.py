@@ -109,14 +109,14 @@ class DeprecatedDependencyError(TypeParameterError):
     pass
 
 
-class DataType(expression.Any):
+class SerializableType(expression.Any):
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
         - uavcan.node.Heartbeat.1.0[<=36]
         - truncated float16[<=36]
     """
 
-    TYPE_NAME = 'metatype'
+    TYPE_NAME = 'metaserializable'
 
     @property
     def bit_length_range(self) -> BitLengthRange:
@@ -140,7 +140,7 @@ class DataType(expression.Any):
         if name.native_value == '_bit_length_':
             return expression.Set(map(expression.Rational, self.compute_bit_length_values()))
         else:
-            return super(DataType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+            return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
 
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
@@ -149,14 +149,14 @@ class DataType(expression.Any):
         return hash(str(self))
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, DataType):
+        if isinstance(other, SerializableType):
             same_type = isinstance(other, type(self)) and isinstance(self, type(other))
             return same_type and str(self) == str(other)
         else:
             return NotImplemented
 
 
-class PrimitiveType(DataType):
+class PrimitiveType(SerializableType):
     MAX_BIT_LENGTH = 64
 
     class CastMode(enum.Enum):
@@ -349,7 +349,7 @@ def _unittest_primitive() -> None:
     assert b != 123    # Not implemented
 
 
-class VoidType(DataType):
+class VoidType(SerializableType):
     MAX_BIT_LENGTH = 64
 
     def __init__(self, bit_length: int):
@@ -393,9 +393,9 @@ def _unittest_void() -> None:
         VoidType(65)
 
 
-class ArrayType(DataType):
+class ArrayType(SerializableType):
     def __init__(self,
-                 element_type: DataType,
+                 element_type: SerializableType,
                  capacity: int):
         super(ArrayType, self).__init__()
         self._element_type = element_type
@@ -404,7 +404,7 @@ class ArrayType(DataType):
             raise InvalidNumberOfElementsError('Array capacity cannot be less than 1')
 
     @property
-    def element_type(self) -> DataType:
+    def element_type(self) -> SerializableType:
         return self._element_type
 
     @property
@@ -428,7 +428,7 @@ class ArrayType(DataType):
 
 class FixedLengthArrayType(ArrayType):
     def __init__(self,
-                 element_type: DataType,
+                 element_type: SerializableType,
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
 
@@ -481,7 +481,7 @@ def _unittest_fixed_array() -> None:
 
 class VariableLengthArrayType(ArrayType):
     def __init__(self,
-                 element_type: DataType,
+                 element_type: SerializableType,
                  capacity: int):
         super(VariableLengthArrayType, self).__init__(element_type, capacity)
 
@@ -575,7 +575,7 @@ def _unittest_variable_array() -> None:
 
 
 class Attribute:    # TODO: should extend expression.Any to support advanced introspection/reflection.
-    def __init__(self, data_type: DataType, name: str):
+    def __init__(self, data_type: SerializableType, name: str):
         self._data_type = data_type
         self._name = str(name)
 
@@ -586,7 +586,7 @@ class Attribute:    # TODO: should extend expression.Any to support advanced int
             _check_name(self._name)
 
     @property
-    def data_type(self) -> DataType:
+    def data_type(self) -> SerializableType:
         return self._data_type
 
     @property
@@ -614,7 +614,7 @@ class PaddingField(Field):
 
 class Constant(Attribute):
     def __init__(self,
-                 data_type: DataType,
+                 data_type: SerializableType,
                  name: str,
                  value: expression.Any):
         super(Constant, self).__init__(data_type, name)
@@ -702,7 +702,7 @@ def _unittest_attribute() -> None:
     assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=rational(-123))' % data_type
 
 
-class CompoundType(DataType):
+class CompoundType(SerializableType):
     MAX_NAME_LENGTH = 63
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
@@ -1088,7 +1088,7 @@ def _unittest_compound_types() -> None:
     with raises(InvalidNameError):
         _check_name('uq1_32')
 
-    def try_union_fields(field_types: typing.List[DataType]) -> UnionType:
+    def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
         for i, t in enumerate(field_types):
             atr.append(Field(t, '_%d' % i))
@@ -1116,7 +1116,7 @@ def _unittest_compound_types() -> None:
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ]).compute_bit_length_values() == {5, 13, 17, 21, 29, 37}
 
-    def try_struct_fields(field_types: typing.List[DataType]) -> StructureType:
+    def try_struct_fields(field_types: typing.List[SerializableType]) -> StructureType:
         atr = []
         for i, t in enumerate(field_types):
             atr.append(Field(t, '_%d' % i))
@@ -1143,7 +1143,7 @@ def _unittest_compound_types() -> None:
     assert try_struct_fields([outer]).compute_bit_length_values() == {4, 12, 20, 28, 36}
 
 
-def compute_bit_length_values_for_struct(member_data_types: typing.Iterable['DataType']) -> typing.Set[int]:
+def compute_bit_length_values_for_struct(member_data_types: typing.Iterable['SerializableType']) -> typing.Set[int]:
     # As far as bit length combinations are concerned, structures are similar to static arrays.
     # Please refer to the bit length computation method for static arrays for reference.
     # The difference here is that the length value sets are not homogeneous across fields, as they
@@ -1160,7 +1160,7 @@ def compute_bit_length_values_for_struct(member_data_types: typing.Iterable['Dat
     return out      # type: ignore
 
 
-def compute_bit_length_values_for_tagged_union(member_data_types: typing.Iterable['DataType']) -> typing.Set[int]:
+def compute_bit_length_values_for_tagged_union(member_data_types: typing.Iterable[SerializableType]) -> typing.Set[int]:
     ts = list(member_data_types)
     del member_data_types
 

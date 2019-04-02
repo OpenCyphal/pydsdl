@@ -6,7 +6,7 @@
 import os
 import typing
 from . import error
-from . import data_type
+from . import serializable
 from . import parser
 
 
@@ -35,7 +35,7 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
+        if serializable.CompoundType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
             raise FileNameFormatError('Invalid namespace name', path=root_namespace_path)
 
         # Determining the relative path within the root namespace directory
@@ -65,26 +65,26 @@ class DSDLDefinition:
 
         # Parsing the version numbers
         try:
-            self._version = data_type.Version(major=int(str_major_version),
-                                              minor=int(str_minor_version))
+            self._version = serializable.Version(major=int(str_major_version),
+                                                 minor=int(str_minor_version))
         except ValueError:
             raise FileNameFormatError('Could not parse the version numbers', path=self._file_path) from None
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
         for nc in namespace_components:
-            if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in nc:
+            if serializable.CompoundType.NAME_COMPONENT_SEPARATOR in nc:
                 raise FileNameFormatError('Invalid name for namespace component', path=self._file_path)
 
-        self._name = data_type.CompoundType.NAME_COMPONENT_SEPARATOR\
+        self._name = serializable.CompoundType.NAME_COMPONENT_SEPARATOR\
             .join(namespace_components + [str(short_name)])  # type: str
 
-        self._cached_type = None    # type: typing.Optional[data_type.CompoundType]
+        self._cached_type = None    # type: typing.Optional[serializable.CompoundType]
 
     def read(self,
              lookup_definitions:              typing.Iterable['DSDLDefinition'],
              print_output_handler:            typing.Callable[[int, str], None],
-             allow_unregulated_fixed_port_id: bool) -> data_type.CompoundType:
+             allow_unregulated_fixed_port_id: bool) -> serializable.CompoundType:
         """
         Reads the data type definition and returns its high-level data type representation.
         The output is cached; all following invocations will read from the cache.
@@ -132,7 +132,7 @@ class DSDLDefinition:
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(data_type.CompoundType.NAME_COMPONENT_SEPARATOR)
+        return self._name.split(serializable.CompoundType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -142,7 +142,7 @@ class DSDLDefinition:
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return str(data_type.CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(serializable.CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
@@ -155,7 +155,7 @@ class DSDLDefinition:
         return self._text
 
     @property
-    def version(self) -> data_type.Version:
+    def version(self) -> serializable.Version:
         return self._version
 
     @property

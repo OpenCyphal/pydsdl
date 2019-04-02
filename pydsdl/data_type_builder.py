@@ -5,7 +5,7 @@
 
 import typing
 import logging
-from . import data_type
+from . import serializable
 from . import expression
 from . import error
 from . import dsdl_definition
@@ -52,63 +52,65 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         self._structs = [data_schema_builder.DataSchemaBuilder()]
         self._is_deprecated = False
 
-    def finalize(self) -> data_type.CompoundType:
+    def finalize(self) -> serializable.CompoundType:
         if len(self._structs) == 1:     # Message type
             struct, = self._structs     # type: data_schema_builder.DataSchemaBuilder,
             if struct.union:
-                out = data_type.UnionType(name=self._definition.full_name,
-                                          version=self._definition.version,
-                                          attributes=struct.attributes,
-                                          deprecated=self._is_deprecated,
-                                          fixed_port_id=self._definition.fixed_port_id,
-                                          source_file_path=self._definition.file_path)  # type: data_type.CompoundType
+                out = serializable.UnionType(
+                    name=self._definition.full_name,
+                    version=self._definition.version,
+                    attributes=struct.attributes,
+                    deprecated=self._is_deprecated,
+                    fixed_port_id=self._definition.fixed_port_id,
+                    source_file_path=self._definition.file_path)  # type: serializable.CompoundType
             else:
-                out = data_type.StructureType(name=self._definition.full_name,
-                                              version=self._definition.version,
-                                              attributes=struct.attributes,
-                                              deprecated=self._is_deprecated,
-                                              fixed_port_id=self._definition.fixed_port_id,
-                                              source_file_path=self._definition.file_path)
+                out = serializable.StructureType(
+                    name=self._definition.full_name,
+                    version=self._definition.version,
+                    attributes=struct.attributes,
+                    deprecated=self._is_deprecated,
+                    fixed_port_id=self._definition.fixed_port_id,
+                    source_file_path=self._definition.file_path)
         else:  # Service type
             request, response = self._structs
             # noinspection SpellCheckingInspection
-            out = data_type.ServiceType(name=self._definition.full_name,            # pozabito vse na svete
-                                        version=self._definition.version,           # serdce zamerlo v grudi
-                                        request_attributes=request.attributes,      # tolko nebo tolko veter
-                                        response_attributes=response.attributes,    # tolko radost vperedi
-                                        request_is_union=request.union,             # tolko nebo tolko veter
-                                        response_is_union=response.union,           # tolko radost vperedi
-                                        deprecated=self._is_deprecated,
-                                        fixed_port_id=self._definition.fixed_port_id,
-                                        source_file_path=self._definition.file_path)
+            out = serializable.ServiceType(
+                name=self._definition.full_name,            # pozabito vse na svete
+                version=self._definition.version,           # serdce zamerlo v grudi
+                request_attributes=request.attributes,      # tolko nebo tolko veter
+                response_attributes=response.attributes,    # tolko radost vperedi
+                request_is_union=request.union,             # tolko nebo tolko veter
+                response_is_union=response.union,           # tolko radost vperedi
+                deprecated=self._is_deprecated,
+                fixed_port_id=self._definition.fixed_port_id,
+                source_file_path=self._definition.file_path)
 
         if not self._allow_unregulated_fixed_port_id:
             port_id = out.fixed_port_id
             if port_id is not None:
-                is_service_type = isinstance(out, data_type.ServiceType)
+                is_service_type = isinstance(out, serializable.ServiceType)
                 f = port_id_ranges.is_valid_regulated_service_id if is_service_type else \
                     port_id_ranges.is_valid_regulated_subject_id
                 if not f(port_id, out.root_namespace):
-                    raise data_type.InvalidFixedPortIDError('Regulated port ID %r for %s type %r is not valid. '
-                                                            'Consider using allow_unregulated_fixed_port_id.' %
-                                                            (port_id,
-                                                             'service' if is_service_type else 'message',
-                                                             out.full_name))
+                    raise serializable.InvalidFixedPortIDError(
+                        'Regulated port ID %r for %s type %r is not valid. '
+                        'Consider using allow_unregulated_fixed_port_id.' %
+                        (port_id, 'service' if is_service_type else 'message', out.full_name))
 
-        assert isinstance(out, data_type.CompoundType)
+        assert isinstance(out, serializable.CompoundType)
         return out
 
     def on_constant(self,
-                    constant_type: data_type.DataType,
+                    constant_type: serializable.SerializableType,
                     name: str,
                     value: expression.Any) -> None:
-        self._structs[-1].add_constant(data_type.Constant(constant_type, name, value))
+        self._structs[-1].add_constant(serializable.Constant(constant_type, name, value))
 
-    def on_field(self, field_type: data_type.DataType, name: str) -> None:
-        self._structs[-1].add_field(data_type.Field(field_type, name))
+    def on_field(self, field_type: serializable.SerializableType, name: str) -> None:
+        self._structs[-1].add_field(serializable.Field(field_type, name))
 
-    def on_padding_field(self, padding_field_type: data_type.VoidType) -> None:
-        self._structs[-1].add_field(data_type.PaddingField(padding_field_type))
+    def on_padding_field(self, padding_field_type: serializable.VoidType) -> None:
+        self._structs[-1].add_field(serializable.PaddingField(padding_field_type))
 
     def on_directive(self,
                      line_number: int,
@@ -147,11 +149,11 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         else:
             raise UndefinedIdentifierError('Undefined identifier: %r' % name)
 
-    def resolve_versioned_data_type(self, name: str, version: data_type.Version) -> data_type.CompoundType:
-        if data_type.CompoundType.NAME_COMPONENT_SEPARATOR in name:
+    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompoundType:
+        if serializable.CompoundType.NAME_COMPONENT_SEPARATOR in name:
             full_name = name
         else:
-            full_name = data_type.CompoundType.NAME_COMPONENT_SEPARATOR.join([self._definition.full_namespace, name])
+            full_name = serializable.CompoundType.NAME_COMPONENT_SEPARATOR.join([self._definition.full_namespace, name])
             _logger.info('The full name of a relatively referred type %r reconstructed as %r', name, full_name)
 
         del name

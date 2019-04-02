@@ -8,7 +8,7 @@ import typing
 import logging
 import fnmatch
 import collections
-from . import data_type
+from . import serializable
 from . import dsdl_definition
 from . import error
 
@@ -79,7 +79,7 @@ def read_namespace(root_namespace_directory:        str,
                    lookup_directories:              typing.Iterable[str],
                    print_output_handler:            typing.Optional[PrintOutputHandler] = None,
                    allow_unregulated_fixed_port_id: bool = False) -> \
-        typing.List[data_type.CompoundType]:
+        typing.List[serializable.CompoundType]:
     """
     Read all DSDL definitions from the specified root namespace directory. Returns a list of CompoundTypes sorted
     lexicographically by full data type name, then by major version (newest version first), then by minor version
@@ -164,7 +164,7 @@ def _read_namespace_definitions(target_definitions:              typing.List[dsd
                                 lookup_definitions:              typing.List[dsdl_definition.DSDLDefinition],
                                 print_output_handler:            typing.Optional[PrintOutputHandler] = None,
                                 allow_unregulated_fixed_port_id: bool = False) -> \
-        typing.List[data_type.CompoundType]:
+        typing.List[serializable.CompoundType]:
     """
     Construct type descriptors from the specified target definitions.
     Allow the target definitions to use the lookup definitions within themselves.
@@ -180,7 +180,7 @@ def _read_namespace_definitions(target_definitions:              typing.List[dsd
                 print_output_handler(definition, line_number, text)
         return handler
 
-    types = []  # type: typing.List[data_type.CompoundType]
+    types = []  # type: typing.List[serializable.CompoundType]
     for tdd in target_definitions:
         try:
             dt = tdd.read(lookup_definitions,
@@ -197,13 +197,13 @@ def _read_namespace_definitions(target_definitions:              typing.List[dsd
     return types
 
 
-def _ensure_no_fixed_port_id_collisions(types: typing.List[data_type.CompoundType]) -> None:
+def _ensure_no_fixed_port_id_collisions(types: typing.List[serializable.CompoundType]) -> None:
     for a in types:
         for b in types:
             different_names = a.full_name != b.full_name
             different_major_versions = a.version.major != b.version.major
             # Must be the same kind because port ID sets of subjects and services are orthogonal
-            same_kind = isinstance(a, data_type.ServiceType) == isinstance(b, data_type.ServiceType)
+            same_kind = isinstance(a, serializable.ServiceType) == isinstance(b, serializable.ServiceType)
             # Data types where the major version is zero are allowed to collide
             both_released = (a.version.major > 0) and (b.version.major > 0)
 
@@ -218,13 +218,14 @@ def _ensure_no_fixed_port_id_collisions(types: typing.List[data_type.CompoundTyp
                         )
 
 
-def _ensure_minor_version_compatibility(types: typing.List[data_type.CompoundType]) -> None:
-    by_name = collections.defaultdict(list)  # type: typing.DefaultDict[str, typing.List[data_type.CompoundType]]
+def _ensure_minor_version_compatibility(types: typing.List[serializable.CompoundType]) -> None:
+    by_name = collections.defaultdict(list)  # type: typing.DefaultDict[str, typing.List[serializable.CompoundType]]
     for t in types:
         by_name[t.full_name].append(t)
 
     for definitions in by_name.values():
-        by_major = collections.defaultdict(list)    # type: typing.DefaultDict[int, typing.List[data_type.CompoundType]]
+        by_major = \
+            collections.defaultdict(list)  # type: typing.DefaultDict[int, typing.List[serializable.CompoundType]]
         for t in definitions:
             by_major[t.version.major].append(t)
 
@@ -246,15 +247,15 @@ def _ensure_minor_version_compatibility(types: typing.List[data_type.CompoundTyp
                         )
 
                     # Must be of the same kind: both messages or both services
-                    if isinstance(a, data_type.ServiceType) != isinstance(b, data_type.ServiceType):
+                    if isinstance(a, serializable.ServiceType) != isinstance(b, serializable.ServiceType):
                         raise VersionsOfDifferentKindError(
                             'This definition is not of the same kind as %r' % b.source_file_path,
                             path=a.source_file_path
                         )
 
                     # Must be bit-compatible
-                    if isinstance(a, data_type.ServiceType):
-                        assert isinstance(b, data_type.ServiceType)
+                    if isinstance(a, serializable.ServiceType):
+                        assert isinstance(b, serializable.ServiceType)
                         ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
                             a.response_type.is_mutually_bit_compatible_with(b.response_type)
                     else:

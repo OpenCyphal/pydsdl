@@ -31,19 +31,19 @@ from .namespace import PrintOutputHandler
 from .error import FrontendError, InvalidDefinitionError, InternalError
 
 # Data type model - meta types.
-from .data_type import DataType
-from .data_type import PrimitiveType
-from .data_type import BooleanType
-from .data_type import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType, FloatType
-from .data_type import VoidType
-from .data_type import ArrayType, FixedLengthArrayType, VariableLengthArrayType
-from .data_type import CompoundType, UnionType, StructureType, ServiceType
+from .serializable import SerializableType
+from .serializable import PrimitiveType
+from .serializable import BooleanType
+from .serializable import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType, FloatType
+from .serializable import VoidType
+from .serializable import ArrayType, FixedLengthArrayType, VariableLengthArrayType
+from .serializable import CompoundType, UnionType, StructureType, ServiceType
 
 # Data type model - attributes.
-from .data_type import Attribute, Field, PaddingField, Constant
+from .serializable import Attribute, Field, PaddingField, Constant
 
 # Data type model - auxiliary.
-from .data_type import BitLengthRange, ValueRange, Version
+from .serializable import BitLengthRange, ValueRange, Version
 
 # Expression model.
 from .expression import Any
