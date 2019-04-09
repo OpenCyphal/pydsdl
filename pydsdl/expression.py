@@ -495,7 +495,7 @@ class Set(Container):
                      impl: typing.Callable[['Any', 'Any'], 'Any'],
                      other: 'Any',
                      swap: bool = False) -> 'Set':
-        if isinstance(other, Primitive):
+        if not isinstance(other, Set):
             return Set((impl(other, x) if swap else impl(x, other)) for x in self)
         else:
             raise UndefinedOperatorError
