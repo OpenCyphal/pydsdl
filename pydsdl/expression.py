@@ -7,6 +7,7 @@ import typing
 import operator
 import functools
 import fractions
+import unicodedata
 from . import error
 
 
@@ -324,7 +325,10 @@ class String(Primitive):
 
     def _equal(self, right: 'Any') -> Boolean:
         if isinstance(right, String):
-            return Boolean(self._value == right._value)
+            def normalized(s: str) -> str:
+                return unicodedata.normalize('NFC', s)
+
+            return Boolean(normalized(self._value) == normalized(right._value))
         else:
             raise UndefinedOperatorError
 

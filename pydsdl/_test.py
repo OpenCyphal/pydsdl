@@ -1207,6 +1207,8 @@ def _unittest_dsdl_parser_expressions() -> None:
                 @assert {1, 2, 3} ** 2 == {1, 4, 9}
                 @assert "Hello" + ' ' + 'world' == 'Hello world'
                 @assert 'Hello'+' '+'world' != ''
+                @assert '\u00e9' == '\u0065\u0301'  # e with accent
+                @assert '\ufb03' != 'ffi'           # ffi ligature is not decomposed by NFC
                 @assert true != ('A' == "a")
                 @assert true && true
                 @assert ! (true && false)
