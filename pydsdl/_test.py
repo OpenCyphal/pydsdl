@@ -544,6 +544,14 @@ def _unittest_assert() -> None:
 
     with raises(expression.UndefinedAttributeError):
         _parse_definition(
+            _define('ns/C.1.0.uavcan', '@print Service.1.0._bit_length_'),
+            [
+                _define('ns/Service.1.0.uavcan', 'uint8 a\n---\nuint16 b')
+            ]
+        )
+
+    with raises(expression.UndefinedAttributeError):
+        _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
                 '''uint64 LENGTH = uint64.nonexistent_attribute'''),

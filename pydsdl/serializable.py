@@ -138,9 +138,12 @@ class SerializableType(expression.Any):
 
     def _attribute(self, name: expression.String) -> expression.Any:
         if name.native_value == '_bit_length_':
-            return expression.Set(map(expression.Rational, self.compute_bit_length_values()))
-        else:
-            return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
+            try:
+                return expression.Set(map(expression.Rational, self.compute_bit_length_values()))
+            except TypeError:
+                pass
+
+        return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
 
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
