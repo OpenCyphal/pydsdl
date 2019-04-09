@@ -201,8 +201,8 @@ If you really need to import a specific entity, consider prefixing it with an un
 scope leakage, unless you really want it to be externally visible.
 
 ```python
-from . import data_type                 # Good
-from .data_type import CompositeType     # Pls no
+from . import data_type               # Good
+from .data_type import CompositeType  # Pls no
 ```
 
 ### Writing tests
