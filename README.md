@@ -41,7 +41,7 @@ Below you will find a brief overview of the main API elements.
 
 The application invokes the function `pydsdl.read_namespace()` with the path of the target root namespace
 which is to be read and an optional list of look-up root namespace directories.
-It returns a list of top-level compound type definitions found in the target root namespace.
+It returns a list of top-level composite type definitions found in the target root namespace.
 If errors are found, a corresponding exception will be raised (described below).
 
 The function has an optional callable argument that will be invoked when the frontend encounters a
@@ -74,14 +74,15 @@ All of them share the same common ancestor `SerializableType` and the naming pat
   - `ArrayType`
     - `FixedLengthArrayType` - e.g., `uint8[256]`
     - `VariableLengthArrayType` - e.g., `uint8[<256]`
-  - `CompoundType` - see below.
+  - `CompositeType` - see below.
     - `UnionType` - message types or nested structures.
     - `StructureType` - message types or nested structures.
     - `ServiceType` - service types, not serializable.
 
-The type `CompoundType` is the most interesting one, as it represents actual DSDL definitions upon their interpretation.
+The type `CompositeType` is the most interesting one, as it represents actual DSDL definitions upon their interpretation.
 The following are its most important properties, their semantics should be obvious enough from their names:
-`full_name: str`, `version: pydsdl.Version`, `deprecated: bool`, `fields: List[pydsdl.Field]`, `constants: List[pydsdl.Constant]`, `fixed_port_id: Optional[int]`.
+`full_name: str`, `version: pydsdl.Version`, `deprecated: bool`, `fields: List[pydsdl.Field]`,
+`constants: List[pydsdl.Constant]`, `fixed_port_id: Optional[int]`.
 
 The `ServiceType` is a special case: unlike other types, it can't be serialized directly;
 rather, it contains two pseudo-fields: `request` and `response`, which contain the request and the
@@ -96,7 +97,7 @@ which represent the minimum and the maximum possible bit length of an encoded re
 the data type and returns a full set of bit lengths of all possible valid encoded representations of the data type.
 Due to the involved computations, the function can be expensive to invoke, so use with care.
 
-Instances of `CompoundType` (and its derivatives) contain *attributes*.
+Instances of `CompositeType` (and its derivatives) contain *attributes*.
 Per the specification, an attribute can be a field or a constant.
 The corresponding data model is shown below:
 
@@ -135,8 +136,8 @@ uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
 ### Expression model
 
 Constant expression values are represented through Python types rooted under `pydsdl.Any`.
-DSDL types are also constant values, so `pydsdl.SerializableType` (the root of the type model) inherits from `pydsdl.Any`.
-The class hierarchy is as follows:
+DSDL types are also constant values, so `pydsdl.SerializableType` (the root of the type model) inherits from
+`pydsdl.Any`. The class hierarchy is as follows:
 
 - `Any` - has a class property (i.e., "static" property) `TYPE_NAME: str`, which contains the DSDL name of the type.
   - `Primitive` - primitive values; has virtual property `native_value` which yields an appropriate Python-native
@@ -155,13 +156,13 @@ import sys
 import pydsdl
 
 try:
-    compound_types = pydsdl.read_namespace('path/to/root_namespace', ['path/to/dependencies'])
+    composite_types = pydsdl.read_namespace('path/to/root_namespace', ['path/to/dependencies'])
 except pydsdl.InvalidDefinitionError as ex:
     print(ex, file=sys.stderr)                      # The DSDL definition is invalid
 except pydsdl.InternalError as ex:
     print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
 else:
-    for t in compound_types:
+    for t in composite_types:
         if isinstance(t, pydsdl.ServiceType):
             blr, blv = 0, {0}
         else:
@@ -201,7 +202,7 @@ scope leakage, unless you really want it to be externally visible.
 
 ```python
 from . import data_type                 # Good
-from .data_type import CompoundType     # Pls no
+from .data_type import CompositeType     # Pls no
 ```
 
 ### Writing tests

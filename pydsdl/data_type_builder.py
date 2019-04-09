@@ -52,7 +52,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         self._structs = [data_schema_builder.DataSchemaBuilder()]
         self._is_deprecated = False
 
-    def finalize(self) -> serializable.CompoundType:
+    def finalize(self) -> serializable.CompositeType:
         if len(self._structs) == 1:     # Message type
             struct, = self._structs     # type: data_schema_builder.DataSchemaBuilder,
             if struct.union:
@@ -62,7 +62,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
                     attributes=struct.attributes,
                     deprecated=self._is_deprecated,
                     fixed_port_id=self._definition.fixed_port_id,
-                    source_file_path=self._definition.file_path)  # type: serializable.CompoundType
+                    source_file_path=self._definition.file_path)  # type: serializable.CompositeType
             else:
                 out = serializable.StructureType(
                     name=self._definition.full_name,
@@ -97,7 +97,7 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
                         'Consider using allow_unregulated_fixed_port_id.' %
                         (port_id, 'service' if is_service_type else 'message', out.full_name))
 
-        assert isinstance(out, serializable.CompoundType)
+        assert isinstance(out, serializable.CompositeType)
         return out
 
     def on_constant(self,
@@ -149,11 +149,12 @@ class DataTypeBuilder(parser.StatementStreamProcessor):
         else:
             raise UndefinedIdentifierError('Undefined identifier: %r' % name)
 
-    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompoundType:
-        if serializable.CompoundType.NAME_COMPONENT_SEPARATOR in name:
+    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompositeType:
+        if serializable.CompositeType.NAME_COMPONENT_SEPARATOR in name:
             full_name = name
         else:
-            full_name = serializable.CompoundType.NAME_COMPONENT_SEPARATOR.join([self._definition.full_namespace, name])
+            full_name = serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join([self._definition.full_namespace,
+                                                                                  name])
             _logger.info('The full name of a relatively referred type %r reconstructed as %r', name, full_name)
 
         del name

@@ -24,7 +24,8 @@ _DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 
 def _parse_definition(definition:         dsdl_definition.DSDLDefinition,
-                      lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) -> serializable.CompoundType:
+                      lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) \
+        -> serializable.CompositeType:
     return definition.read(lookup_definitions,
                            print_output_handler=lambda *_: None,
                            allow_unregulated_fixed_port_id=False)
@@ -250,7 +251,7 @@ def _unittest_simple() -> None:
 def _unittest_error() -> None:
     from pytest import raises
 
-    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> serializable.CompoundType:
+    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> serializable.CompositeType:
         return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
     with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):

@@ -82,7 +82,7 @@ class StatementStreamProcessor:
         """Must throw an appropriate exception if the reference cannot be resolved."""
         raise NotImplementedError  # pragma: no cover
 
-    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompoundType:
+    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompositeType:
         """Must throw an appropriate exception if the data type is not found."""
         raise NotImplementedError  # pragma: no cover
 
@@ -228,12 +228,12 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         element_type, _s0, _bl, _s1, length, _s2, _br = children
         return serializable.FixedLengthArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_versioned(self, _n: _Node, children: _Children) -> serializable.CompoundType:
+    def visit_type_versioned(self, _n: _Node, children: _Children) -> serializable.CompositeType:
         name, name_tail, _, version = children
         assert isinstance(name, str) and name and isinstance(version, serializable.Version)
         for _, component in name_tail:
             assert isinstance(component, str)
-            name += serializable.CompoundType.NAME_COMPONENT_SEPARATOR + component
+            name += serializable.CompositeType.NAME_COMPONENT_SEPARATOR + component
 
         return self._statement_stream_processor.resolve_versioned_data_type(name, version)
 

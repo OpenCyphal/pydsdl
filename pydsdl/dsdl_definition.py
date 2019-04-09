@@ -35,7 +35,7 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if serializable.CompoundType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
+        if serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
             raise FileNameFormatError('Invalid namespace name', path=root_namespace_path)
 
         # Determining the relative path within the root namespace directory
@@ -73,18 +73,18 @@ class DSDLDefinition:
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
         for nc in namespace_components:
-            if serializable.CompoundType.NAME_COMPONENT_SEPARATOR in nc:
+            if serializable.CompositeType.NAME_COMPONENT_SEPARATOR in nc:
                 raise FileNameFormatError('Invalid name for namespace component', path=self._file_path)
 
-        self._name = serializable.CompoundType.NAME_COMPONENT_SEPARATOR\
+        self._name = serializable.CompositeType.NAME_COMPONENT_SEPARATOR\
             .join(namespace_components + [str(short_name)])  # type: str
 
-        self._cached_type = None    # type: typing.Optional[serializable.CompoundType]
+        self._cached_type = None    # type: typing.Optional[serializable.CompositeType]
 
     def read(self,
              lookup_definitions:              typing.Iterable['DSDLDefinition'],
              print_output_handler:            typing.Callable[[int, str], None],
-             allow_unregulated_fixed_port_id: bool) -> serializable.CompoundType:
+             allow_unregulated_fixed_port_id: bool) -> serializable.CompositeType:
         """
         Reads the data type definition and returns its high-level data type representation.
         The output is cached; all following invocations will read from the cache.
@@ -132,7 +132,7 @@ class DSDLDefinition:
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(serializable.CompoundType.NAME_COMPONENT_SEPARATOR)
+        return self._name.split(serializable.CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -142,7 +142,7 @@ class DSDLDefinition:
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return str(serializable.CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:

@@ -702,7 +702,7 @@ def _unittest_attribute() -> None:
     assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=rational(-123))' % data_type
 
 
-class CompoundType(SerializableType):
+class CompositeType(SerializableType):
     MAX_NAME_LENGTH = 63
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
@@ -723,7 +723,7 @@ class CompoundType(SerializableType):
 
         # Name check
         if not self._name:
-            raise InvalidNameError('Compound type name cannot be empty')
+            raise InvalidNameError('Composite type name cannot be empty')
 
         if self.NAME_COMPONENT_SEPARATOR not in self._name:
             raise InvalidNameError('Root namespace is not specified')
@@ -768,12 +768,12 @@ class CompoundType(SerializableType):
         if not self.deprecated:
             for a in self._attributes:
                 t = a.data_type
-                if isinstance(t, CompoundType):
+                if isinstance(t, CompositeType):
                     if t.deprecated:
                         raise DeprecatedDependencyError('A type cannot depend on deprecated types '
                                                         'unless it is also deprecated.')
 
-    def is_mutually_bit_compatible_with(self, other: 'CompoundType') -> bool:
+    def is_mutually_bit_compatible_with(self, other: 'CompositeType') -> bool:
         """
         Checks for bit compatibility between two data types.
         The current implementation uses a relaxed simplified check that may yield a false-negative,
@@ -792,7 +792,7 @@ class CompoundType(SerializableType):
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(CompoundType.NAME_COMPONENT_SEPARATOR)
+        return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -802,7 +802,7 @@ class CompoundType(SerializableType):
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return str(CompoundType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
@@ -854,7 +854,7 @@ class CompoundType(SerializableType):
                 assert isinstance(c.value, expression.Any)
                 return c.value
 
-        return super(CompoundType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+        return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
     def __str__(self) -> str:
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
@@ -870,7 +870,7 @@ class CompoundType(SerializableType):
              self.fixed_port_id)
 
 
-class UnionType(CompoundType):
+class UnionType(CompositeType):
     MIN_NUMBER_OF_VARIANTS = 2
 
     def __init__(self,
@@ -915,7 +915,7 @@ class UnionType(CompoundType):
         return compute_bit_length_values_for_tagged_union(map(lambda f: f.data_type, self.fields))
 
 
-class StructureType(CompoundType):
+class StructureType(CompositeType):
     @property
     def bit_length_range(self) -> BitLengthRange:
         blr = [f.data_type.bit_length_range for f in self.fields]
@@ -926,7 +926,7 @@ class StructureType(CompoundType):
         return compute_bit_length_values_for_struct(map(lambda f: f.data_type, self.fields))
 
 
-class ServiceType(CompoundType):
+class ServiceType(CompositeType):
     def __init__(self,
                  name:                str,
                  version:             Version,
@@ -943,7 +943,7 @@ class ServiceType(CompoundType):
                                                attributes=request_attributes,
                                                deprecated=deprecated,
                                                fixed_port_id=None,
-                                               source_file_path='')  # type: CompoundType
+                                               source_file_path='')  # type: CompositeType
 
         response_meta_type = UnionType if response_is_union else StructureType  # type: type
         self._response_type = response_meta_type(name=name + '.Response',
@@ -951,7 +951,7 @@ class ServiceType(CompoundType):
                                                  attributes=response_attributes,
                                                  deprecated=deprecated,
                                                  fixed_port_id=None,
-                                                 source_file_path='')  # type: CompoundType
+                                                 source_file_path='')  # type: CompositeType
 
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
@@ -966,11 +966,11 @@ class ServiceType(CompoundType):
                                           source_file_path=source_file_path)
 
     @property
-    def request_type(self) -> CompoundType:
+    def request_type(self) -> CompositeType:
         return self._request_type
 
     @property
-    def response_type(self) -> CompoundType:
+    def response_type(self) -> CompositeType:
         return self._response_type
 
     def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
@@ -993,16 +993,16 @@ def _check_name(name: str) -> None:
             raise InvalidNameError('Disallowed name: %r matches the following pattern: %s' % (name, pat))
 
 
-def _unittest_compound_types() -> None:
+def _unittest_composite_types() -> None:
     from pytest import raises
 
-    def try_name(name: str) -> CompoundType:
-        return CompoundType(name=name,
-                            version=Version(0, 1),
-                            attributes=[],
-                            deprecated=False,
-                            fixed_port_id=None,
-                            source_file_path='')
+    def try_name(name: str) -> CompositeType:
+        return CompositeType(name=name,
+                             version=Version(0, 1),
+                             attributes=[],
+                             deprecated=False,
+                             fixed_port_id=None,
+                             source_file_path='')
 
     with raises(InvalidNameError, match='(?i).*empty.*'):
         try_name('')

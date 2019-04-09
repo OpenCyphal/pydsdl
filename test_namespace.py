@@ -32,4 +32,4 @@ else:
         for c in t.constants:
             print('\t', str(c.data_type), c.name, '=', str(c.value.native_value))
 
-print('%d types parsed in %.1f seconds' % (len(compound_types), done_at - started_at))
+    print('%d types parsed in %.1f seconds' % (len(compound_types), done_at - started_at))

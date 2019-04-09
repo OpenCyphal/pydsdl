@@ -37,7 +37,7 @@ from .serializable import BooleanType
 from .serializable import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType, FloatType
 from .serializable import VoidType
 from .serializable import ArrayType, FixedLengthArrayType, VariableLengthArrayType
-from .serializable import CompoundType, UnionType, StructureType, ServiceType
+from .serializable import CompositeType, UnionType, StructureType, ServiceType
 
 # Data type model - attributes.
 from .serializable import Attribute, Field, PaddingField, Constant
