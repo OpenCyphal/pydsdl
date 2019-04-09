@@ -724,6 +724,29 @@ def _unittest_parse_namespace() -> None:
     assert print_output[1] == 8
     assert print_output[2] == '{0}'
 
+    _define(
+        'zubax/colliding/iceberg/300.Ice.30.0.uavcan',
+        dedent("""
+        ---
+        """)
+    )
+    with raises(namespace.DataTypeNameCollisionError):
+        namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
+            os.path.join(directory.name, 'zubax'),
+        ])
+
+    os.unlink(os.path.join(directory.name, 'zubax/colliding/iceberg/300.Ice.30.0.uavcan'))
+    _define(
+        'zubax/COLLIDING/300.Iceberg.30.0.uavcan',
+        dedent("""
+        ---
+        """)
+    )
+    with raises(namespace.DataTypeNameCollisionError, match='.*letter case.*'):
+        namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
+            os.path.join(directory.name, 'zubax'),
+        ])
+
 
 def _unittest_parse_namespace_versioning() -> None:
     from pytest import raises
@@ -987,14 +1010,14 @@ def _unittest_parse_namespace_faults() -> None:
         assert False
 
     try:
-        namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/baz'])
-    except namespace.NamespaceNameCollisionError as ex:
+        namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/BAZ'])  # Notice the letter case
+    except namespace.RootNamespaceNameCollisionError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
     try:
         namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/zoo', '/foo/bar/doo/roo/baz'])
-    except namespace.NamespaceNameCollisionError as ex:
+    except namespace.RootNamespaceNameCollisionError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False

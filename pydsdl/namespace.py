@@ -13,10 +13,17 @@ from . import dsdl_definition
 from . import error
 
 
-class NamespaceNameCollisionError(error.InvalidDefinitionError):
+class RootNamespaceNameCollisionError(error.InvalidDefinitionError):
     """
     Raised when there is more than one namespace under the same name.
     This may occur if there are identically named namespaces located in different directories.
+    """
+    pass
+
+
+class DataTypeNameCollisionError(error.InvalidDefinitionError):
+    """
+    Raised when there are conflicting data type names.
     """
     pass
 
@@ -108,21 +115,21 @@ def read_namespace(root_namespace_directory:        str,
 
     :raises: FrontendError, OSError (if directories do not exist or inaccessible)
     """
-    # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates
+    # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates.
     lookup_directories = list(sorted(set(list(lookup_directories) + [root_namespace_directory])))
 
-    # Normalize paths
+    # Normalize paths.
     root_namespace_directory = os.path.abspath(root_namespace_directory)
     lookup_directories = list(map(lambda d: str(os.path.abspath(d)), lookup_directories))
     _logger.debug('Lookup directories are listed below:')
     for a in lookup_directories:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
-    # Check the namespaces
+    # Check the namespaces.
     _ensure_no_nested_root_namespaces(lookup_directories)
     _ensure_no_namespace_name_collisions(lookup_directories)
 
-    # Construct DSDL definitions from the target and the lookup dirs
+    # Construct DSDL definitions from the target and the lookup dirs.
     target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
     _logger.debug('Target DSDL definitions are listed below:')
     for x in target_dsdl_definitions:
@@ -132,11 +139,15 @@ def read_namespace(root_namespace_directory:        str,
     for ld in lookup_directories:
         lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
+    # Check for collisions against the lookup definitions also.
+    _ensure_no_name_collisions(target_dsdl_definitions,
+                               lookup_dsdl_definitions)
+
     _logger.debug('Lookup DSDL definitions are listed below:')
     for x in lookup_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-    # Read the constructed definitions
+    # Read the constructed definitions.
     types = _read_namespace_definitions(target_dsdl_definitions,
                                         lookup_dsdl_definitions,
                                         print_output_handler,
@@ -195,6 +206,23 @@ def _read_namespace_definitions(target_definitions:              typing.List[dsd
             types.append(dt)
 
     return types
+
+
+def _ensure_no_name_collisions(target_definitions: typing.List[dsdl_definition.DSDLDefinition],
+                               lookup_definitions: typing.List[dsdl_definition.DSDLDefinition]) -> None:
+    for tg in target_definitions:
+        for lu in lookup_definitions:
+            if tg.full_name != lu.full_name and tg.full_name.lower() == lu.full_name.lower():
+                raise DataTypeNameCollisionError('Full name of this definition differs from %r only by letter case, '
+                                                 'which is not permitted' % lu.file_path, path=tg.file_path)
+
+            if tg.full_namespace.lower().startswith(lu.full_name.lower()):  # pragma: no cover
+                raise DataTypeNameCollisionError('The namespace of this type conflicts with %r' % lu.file_path,
+                                                 path=tg.file_path)
+
+            if lu.full_namespace.lower().startswith(tg.full_name.lower()):
+                raise DataTypeNameCollisionError('This type conflicts with the namespace of %r' % lu.file_path,
+                                                 path=tg.file_path)
 
 
 def _ensure_no_fixed_port_id_collisions(types: typing.List[serializable.CompositeType]) -> None:
@@ -301,9 +329,8 @@ def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> N
     directories = list(sorted([str(os.path.abspath(x)) for x in set(directories)]))
     for a in directories:
         for b in directories:
-            if (a != b) and get_namespace_name(a) == get_namespace_name(b):
-                raise NamespaceNameCollisionError('The name of this namespace conflicts with %r' % b,
-                                                  path=a)
+            if (a != b) and get_namespace_name(a).lower() == get_namespace_name(b).lower():
+                raise RootNamespaceNameCollisionError('The name of this namespace conflicts with %r' % b, path=a)
 
 
 def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) -> typing.List[dsdl_definition.DSDLDefinition]:
