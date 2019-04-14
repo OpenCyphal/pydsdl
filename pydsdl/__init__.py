@@ -10,7 +10,7 @@ if sys.version_info[:2] < (3, 5):   # pragma: no cover
     print('A newer version of Python is required', file=sys.stderr)
     sys.exit(1)
 
-__version__ = 0, 5, 0
+__version__ = 0, 6, 0
 __license__ = 'MIT'
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.
@@ -24,30 +24,30 @@ _original_sys_path = sys.path
 sys.path = [os.path.join(os.path.dirname(__file__), 'third_party')] + sys.path
 
 # Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
-from .namespace import read_namespace
-from .namespace import PrintOutputHandler
+from ._namespace import read_namespace
+from ._namespace import PrintOutputHandler
 
 # Error model.
-from .error import FrontendError, InvalidDefinitionError, InternalError
+from ._error import FrontendError, InvalidDefinitionError, InternalError
 
 # Data type model - meta types.
-from .serializable import SerializableType
-from .serializable import PrimitiveType
-from .serializable import BooleanType
-from .serializable import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType, FloatType
-from .serializable import VoidType
-from .serializable import ArrayType, FixedLengthArrayType, VariableLengthArrayType
-from .serializable import CompositeType, UnionType, StructureType, ServiceType
+from ._serializable import SerializableType
+from ._serializable import PrimitiveType
+from ._serializable import BooleanType
+from ._serializable import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType, FloatType
+from ._serializable import VoidType
+from ._serializable import ArrayType, FixedLengthArrayType, VariableLengthArrayType
+from ._serializable import CompositeType, UnionType, StructureType, ServiceType
 
 # Data type model - attributes.
-from .serializable import Attribute, Field, PaddingField, Constant
+from ._serializable import Attribute, Field, PaddingField, Constant
 
 # Data type model - auxiliary.
-from .serializable import BitLengthRange, ValueRange, Version
+from ._serializable import BitLengthRange, ValueRange, Version
 
 # Expression model.
-from .expression import Any
-from .expression import Primitive, Boolean, Rational, String
-from .expression import Container, Set
+from ._expression import Any
+from ._expression import Primitive, Boolean, Rational, String
+from ._expression import Container, Set
 
 sys.path = _original_sys_path

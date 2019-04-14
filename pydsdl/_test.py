@@ -7,13 +7,13 @@ import os
 import typing
 import tempfile
 from textwrap import dedent
-from . import expression
-from . import error
-from . import parser
-from . import data_type_builder
-from . import dsdl_definition
-from . import serializable
-from . import namespace
+from . import _expression
+from . import _error
+from . import _parser
+from . import _data_type_builder
+from . import _dsdl_definition
+from . import _serializable
+from . import _namespace
 
 
 # Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
@@ -23,15 +23,15 @@ from . import namespace
 _DIRECTORY = None       # type : typing.Optional[tempfile.TemporaryDirectory]
 
 
-def _parse_definition(definition:         dsdl_definition.DSDLDefinition,
-                      lookup_definitions: typing.Sequence[dsdl_definition.DSDLDefinition]) \
-        -> serializable.CompositeType:
+def _parse_definition(definition:         _dsdl_definition.DSDLDefinition,
+                      lookup_definitions: typing.Sequence[_dsdl_definition.DSDLDefinition]) \
+        -> _serializable.CompositeType:
     return definition.read(lookup_definitions,
                            print_output_handler=lambda *_: None,
                            allow_unregulated_fixed_port_id=False)
 
 
-def _define(rel_path: str, text: str) -> dsdl_definition.DSDLDefinition:
+def _define(rel_path: str, text: str) -> _dsdl_definition.DSDLDefinition:
     assert _DIRECTORY
     path = os.path.join(_DIRECTORY.name, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -39,7 +39,7 @@ def _define(rel_path: str, text: str) -> dsdl_definition.DSDLDefinition:
         f.write(text)
 
     root_namespace_path = os.path.join(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep)[0])
-    out = dsdl_definition.DSDLDefinition(path, root_namespace_path)
+    out = _dsdl_definition.DSDLDefinition(path, root_namespace_path)
     print('New definition:', out, 'Root NS:', root_namespace_path)
     return out
 
@@ -93,7 +93,7 @@ def _unittest_simple() -> None:
 
     p = _parse_definition(abc, [])
     print('Parsed:', p)
-    assert isinstance(p, serializable.StructureType)
+    assert isinstance(p, _serializable.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith('vendor/nested/29000.Abc.1.2.uavcan')
     assert p.source_file_path == abc.file_path
@@ -110,11 +110,11 @@ def _unittest_simple() -> None:
     assert len(p.constants) == 1
     assert str(p.constants[0].data_type) == 'saturated uint8'
     assert p.constants[0].name == 'CHARACTER'
-    assert isinstance(p.constants[0].value, expression.Rational)
-    assert p.constants[0].value == expression.Rational(ord('#'))
+    assert isinstance(p.constants[0].value, _expression.Rational)
+    assert p.constants[0].value == _expression.Rational(ord('#'))
 
     t = p.fields[1].data_type
-    assert isinstance(t, serializable.ArrayType)
+    assert isinstance(t, _serializable.ArrayType)
     assert str(t.element_type) == 'saturated int64'
 
     empty_new = _define(
@@ -155,7 +155,7 @@ def _unittest_simple() -> None:
         constants,
     ])
     print('Parsed:', p)
-    assert isinstance(p, serializable.ServiceType)
+    assert isinstance(p, _serializable.ServiceType)
     assert p.full_name == 'another.Service'
     assert p.fixed_port_id == 300
     assert p.deprecated
@@ -166,8 +166,8 @@ def _unittest_simple() -> None:
     assert p.fields[0].name == 'request'
     assert p.fields[1].name == 'response'
     req, res = [x.data_type for x in p.fields]
-    assert isinstance(req, serializable.UnionType)
-    assert isinstance(res, serializable.StructureType)
+    assert isinstance(req, _serializable.UnionType)
+    assert isinstance(res, _serializable.StructureType)
     assert req.full_name == 'another.Service.Request'
     assert res.full_name == 'another.Service.Response'
     assert req is p.request_type
@@ -183,17 +183,17 @@ def _unittest_simple() -> None:
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
-    assert isinstance(t, serializable.StructureType)
+    assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected implicitly
 
     t = req.fields[1].data_type
-    assert isinstance(t, serializable.StructureType)
+    assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected explicitly
 
     t = req.fields[2].data_type
-    assert isinstance(t, serializable.StructureType)
+    assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 254)          # Selected explicitly
 
@@ -205,12 +205,12 @@ def _unittest_simple() -> None:
     assert res.bit_length_range == (14, 14 + 64 * 32)
 
     t = res.fields[0].data_type
-    assert isinstance(t, serializable.StructureType)
+    assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'another.Constants'
     assert t.version == (5, 0)
 
     t = res.fields[1].data_type
-    assert isinstance(t, serializable.StructureType)
+    assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
@@ -235,7 +235,7 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id is None
     assert not p.has_fixed_port_id
     assert not p.deprecated
-    assert isinstance(p, serializable.UnionType)
+    assert isinstance(p, _serializable.UnionType)
     assert p.number_of_variants == 3
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
@@ -251,114 +251,114 @@ def _unittest_simple() -> None:
 def _unittest_error() -> None:
     from pytest import raises
 
-    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> serializable.CompositeType:
+    def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> _serializable.CompositeType:
         return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
-    with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*port ID.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*subject ID.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*subject ID.*'):
         standalone('vendor/100000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*service ID.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*service ID.*'):
         standalone('vendor/1000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*tagged union cannot contain less than.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain less than.*'):
         standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
                       'bool BOOLEAN = false').constants[0].name == 'BOOLEAN'
-    with raises(error.InvalidDefinitionError, match='.*Invalid value for boolean constant.*'):
+    with raises(_error.InvalidDefinitionError, match='.*Invalid value for boolean constant.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = 0')   # Should be false
 
-    with raises(error.InvalidDefinitionError, match='.*undefined_identifier.*'):
+    with raises(_error.InvalidDefinitionError, match='.*undefined_identifier.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = undefined_identifier')
 
-    with raises(parser.DSDLSyntaxError):
+    with raises(_parser.DSDLSyntaxError):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = -')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*exceeds the range.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*exceeds the range.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'uint10 INTEGRAL = 2000')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*character.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*character.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint8 CH = '\u0451'")
 
-    with raises(error.InvalidDefinitionError, match='.*uint8.*'):
+    with raises(_error.InvalidDefinitionError, match='.*uint8.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint9 CH = 'q'")
 
-    with raises(error.InvalidDefinitionError, match='.*uint8.*'):
+    with raises(_error.InvalidDefinitionError, match='.*uint8.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 'q'")
 
-    with raises(error.InvalidDefinitionError, match='.*integer constant.*'):
+    with raises(_error.InvalidDefinitionError, match='.*integer constant.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.1")
 
-    with raises(error.InvalidDefinitionError, match='(?i).*type.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = true")
 
-    with raises(error.InvalidDefinitionError, match='(?i).*type.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*type.*'):
         standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = 't'")
 
-    with raises(parser.DSDLSyntaxError):
+    with raises(_parser.DSDLSyntaxError):
         standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool[true] array')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*array capacity.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
         standalone('vendor/array_size/A.1.0.uavcan', 'bool["text"] array')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*service response marker.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*service response marker.*'):
         standalone('vendor/service/A.1.0.uavcan', 'bool request\n---\nbool response\n---\nbool again')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*unknown directive.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*unknown directive.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@sho_tse_take')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*requires an expression.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*requires an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@assert')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@union true || false')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
         standalone('vendor/directive/A.1.0.uavcan', '@deprecated true || false')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.0.uavcan', '')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.0.256.uavcan', '')
 
-    with raises(dsdl_definition.FileNameFormatError):
+    with raises(_dsdl_definition.FileNameFormatError):
         standalone('vendor/version/A.0..256.uavcan', '')
 
-    with raises(error.InvalidDefinitionError, match='(?i).*version number.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*version number.*'):
         standalone('vendor/version/A.256.0.uavcan', '')
 
-    with raises(parser.DSDLSyntaxError):
+    with raises(_parser.DSDLSyntaxError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
 
-    with raises(serializable.InvalidCastModeError):
+    with raises(_serializable.InvalidCastModeError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated bool foo')
 
-    with raises(serializable.InvalidCastModeError):
+    with raises(_serializable.InvalidCastModeError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated int8 foo')
 
-    with raises(data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
+    with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for less.*'):
+    with raises(_error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for less.*'):
         standalone('vendor/types/A.1.0.uavcan',
                    dedent('''
                    @union
@@ -367,7 +367,7 @@ def _unittest_error() -> None:
                    int16 b
                    '''))
 
-    with raises(error.InvalidDefinitionError, match=r'(?i).*field offset is not defined for unions.*'):
+    with raises(_error.InvalidDefinitionError, match=r'(?i).*field offset is not defined for unions.*'):
         standalone('vendor/types/A.1.0.uavcan',
                    dedent('''
                    @union
@@ -377,7 +377,7 @@ def _unittest_error() -> None:
                    int8 c
                    '''))
 
-    with raises(data_type_builder.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
+    with raises(_data_type_builder.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
         _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
             [
@@ -385,7 +385,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*Bit length cannot exceed.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*Bit length cannot exceed.*'):
         _parse_definition(
             _define('vendor/types/A.1.0.uavcan', 'int128 field'),
             [
@@ -394,7 +394,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*type.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*type.*'):
         _parse_definition(
             _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type_.1.1 VALUE = 123'),
             [
@@ -403,14 +403,14 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(data_type_builder.UndefinedDataTypeError):
+    with raises(_data_type_builder.UndefinedDataTypeError):
         defs = [
             _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b'),
             _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b'),
         ]
         _parse_definition(defs[0], defs)
 
-    with raises(error.InvalidDefinitionError, match='(?i).*union directive.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*union directive.*'):
         _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@union'),
             [
@@ -418,7 +418,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
         _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@deprecated'),
             [
@@ -426,7 +426,7 @@ def _unittest_error() -> None:
             ]
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
         _parse_definition(
             _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n---\n@deprecated'),
             [
@@ -442,18 +442,18 @@ def _unittest_error() -> None:
                    @assert false  # Will error here, line number 4
                    # Blank
                    '''))
-    except error.FrontendError as ex:
+    except _error.FrontendError as ex:
         assert ex.path and ex.path.endswith('vendor/types/A.1.0.uavcan')
         assert ex.line and ex.line == 4
     else:  # pragma: no cover
         assert False
 
     standalone('vendor/types/1.A.1.0.uavcan', '', allow_unregulated=True)
-    with raises(serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+    with raises(_serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '')
 
     standalone('vendor/types/1.A.1.0.uavcan', '---', allow_unregulated=True)
-    with raises(serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+    with raises(_serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '---')
 
 
@@ -531,7 +531,7 @@ def _unittest_assert() -> None:
         ]
     )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*operator is not defined.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*operator is not defined.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -542,7 +542,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(expression.UndefinedAttributeError):
+    with raises(_expression.UndefinedAttributeError):
         _parse_definition(
             _define('ns/C.1.0.uavcan', '@print Service.1.0._bit_length_'),
             [
@@ -550,7 +550,7 @@ def _unittest_assert() -> None:
             ]
         )
 
-    with raises(expression.UndefinedAttributeError):
+    with raises(_expression.UndefinedAttributeError):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -558,7 +558,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*void.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*void.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -566,10 +566,10 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(serializable.InvalidConstantValueError):
+    with raises(_serializable.InvalidConstantValueError):
         _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true'), [])
 
-    with raises(error.InvalidDefinitionError, match='.*value.*'):
+    with raises(_error.InvalidDefinitionError, match='.*value.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -605,7 +605,7 @@ def _unittest_assert() -> None:
         []
     )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*unions.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*unions.*'):
         _parse_definition(
             _define(
                 'ns/F.1.0.uavcan',
@@ -619,7 +619,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(data_type_builder.AssertionCheckFailureError):
+    with raises(_data_type_builder.AssertionCheckFailureError):
         _parse_definition(
             _define(
                 'ns/G.1.0.uavcan',
@@ -630,7 +630,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*yield a boolean.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*yield a boolean.*'):
         _parse_definition(
             _define(
                 'ns/H.1.0.uavcan',
@@ -646,9 +646,9 @@ def _unittest_parse_namespace() -> None:
     from pytest import raises
     directory = tempfile.TemporaryDirectory()
 
-    print_output = None  # type: typing.Optional[typing.Tuple[dsdl_definition.DSDLDefinition, int, str]]
+    print_output = None  # type: typing.Optional[typing.Tuple[_dsdl_definition.DSDLDefinition, int, str]]
 
-    def print_handler(d: dsdl_definition.DSDLDefinition, line: int, text: str) -> None:
+    def print_handler(d: _dsdl_definition.DSDLDefinition, line: int, text: str) -> None:
         nonlocal print_output
         print_output = d, line, text
 
@@ -694,7 +694,7 @@ def _unittest_parse_namespace() -> None:
     _define('zubax/nested/300.Spartans.30.0.txt', 'completely unrelated stuff')
     _define('zubax/300.Spartans.30.0', 'completely unrelated stuff')
 
-    parsed = namespace.read_namespace(
+    parsed = _namespace.read_namespace(
         os.path.join(directory.name, 'zubax'),
         [],
         print_handler
@@ -712,8 +712,8 @@ def _unittest_parse_namespace() -> None:
         """)
     )
 
-    with raises(namespace.FixedPortIDCollisionError):
-        namespace.read_namespace(
+    with raises(_namespace.FixedPortIDCollisionError):
+        _namespace.read_namespace(
             os.path.join(directory.name, 'zubax'),
             [],
             print_handler
@@ -730,8 +730,8 @@ def _unittest_parse_namespace() -> None:
         ---
         """)
     )
-    with raises(namespace.DataTypeNameCollisionError):
-        namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
+    with raises(_namespace.DataTypeNameCollisionError):
+        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
             os.path.join(directory.name, 'zubax'),
         ])
 
@@ -742,8 +742,8 @@ def _unittest_parse_namespace() -> None:
         ---
         """)
     )
-    with raises(namespace.DataTypeNameCollisionError, match='.*letter case.*'):
-        namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
+    with raises(_namespace.DataTypeNameCollisionError, match='.*letter case.*'):
+        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
             os.path.join(directory.name, 'zubax'),
         ])
 
@@ -789,7 +789,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = namespace.read_namespace(
+    parsed = _namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -808,8 +808,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.MinorVersionsNotBitCompatibleError):
-        namespace.read_namespace(
+    with raises(_namespace.MinorVersionsNotBitCompatibleError):
+        _namespace.read_namespace(
             os.path.join(directory.name, 'ns'),
             []
         )
@@ -825,8 +825,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.VersionsOfDifferentKindError):
-        namespace.read_namespace(
+    with raises(_namespace.VersionsOfDifferentKindError):
+        _namespace.read_namespace(
             os.path.join(directory.name, 'ns'),
             []
         )
@@ -844,7 +844,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = namespace.read_namespace(
+    parsed = _namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -862,8 +862,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.MinorVersionsNotBitCompatibleError):
-        namespace.read_namespace(
+    with raises(_namespace.MinorVersionsNotBitCompatibleError):
+        _namespace.read_namespace(
             os.path.join(directory.name, 'ns'),
             []
         )
@@ -890,12 +890,12 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.MultipleDefinitionsUnderSameVersionError):
-        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(_namespace.MultipleDefinitionsUnderSameVersionError):
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     _undefine_glob('ns/Spartans.30.2.uavcan')
 
-    parsed = namespace.read_namespace(
+    parsed = _namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -913,8 +913,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.MinorVersionFixedPortIDError):
-        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(_namespace.MinorVersionFixedPortIDError):
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     _undefine_glob('ns/Spartans.30.1.uavcan')
     _define(
@@ -928,7 +928,7 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    parsed = namespace.read_namespace(
+    parsed = _namespace.read_namespace(
         os.path.join(directory.name, 'ns'),
         []
     )
@@ -946,8 +946,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.MinorVersionFixedPortIDError):
-        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(_namespace.MinorVersionFixedPortIDError):
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Adding new major version under the same FPID
     _undefine_glob('ns/28701.Spartans.30.1.uavcan')
@@ -962,8 +962,8 @@ def _unittest_parse_namespace_versioning() -> None:
         """)
     )
 
-    with raises(namespace.FixedPortIDCollisionError):
-        namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    with raises(_namespace.FixedPortIDCollisionError):
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Major version zero allows us to re-use the same FPID under a different (non-zero) major version
     _undefine_glob('ns/28700.Spartans.31.0.uavcan')
@@ -985,7 +985,7 @@ def _unittest_parse_namespace_versioning() -> None:
     _define('ns/28800.Empty.3.0.uavcan', '')
     _define('ns/28801.Empty.4.0.uavcan', '')
 
-    parsed = namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
     assert len(parsed) == 8
 
     # Check ordering - the definitions must be sorted properly by name (lexicographically) and version (newest first).
@@ -1003,21 +1003,21 @@ def _unittest_parse_namespace_versioning() -> None:
 
 def _unittest_parse_namespace_faults() -> None:
     try:
-        namespace.read_namespace('/foo/bar/baz', ['/bat/wot', '/foo/bar/baz/bad'])
-    except namespace.NestedRootNamespaceError as ex:
+        _namespace.read_namespace('/foo/bar/baz', ['/bat/wot', '/foo/bar/baz/bad'])
+    except _namespace.NestedRootNamespaceError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
 
     try:
-        namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/BAZ'])  # Notice the letter case
-    except namespace.RootNamespaceNameCollisionError as ex:
+        _namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/BAZ'])  # Notice the letter case
+    except _namespace.RootNamespaceNameCollisionError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
     try:
-        namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/zoo', '/foo/bar/doo/roo/baz'])
-    except namespace.RootNamespaceNameCollisionError as ex:
+        _namespace.read_namespace('/foo/bar/baz', ['/foo/bar/zoo', '/foo/bar/doo/roo/zoo', '/foo/bar/doo/roo/baz'])
+    except _namespace.RootNamespaceNameCollisionError as ex:
         print(ex)
     else:               # pragma: no cover
         assert False
@@ -1038,7 +1038,7 @@ def _unittest_inconsistent_deprecation() -> None:
         ]
     )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*depend.*deprecated.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*depend.*deprecated.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
@@ -1078,7 +1078,7 @@ def _unittest_repeated_directives() -> None:
         []
     )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*deprecated.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*deprecated.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
@@ -1088,7 +1088,7 @@ def _unittest_repeated_directives() -> None:
             []
         )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*deprecated.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*deprecated.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
@@ -1113,7 +1113,7 @@ def _unittest_repeated_directives() -> None:
         []
     )
 
-    with raises(error.InvalidDefinitionError, match='(?i).*union.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*union.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
@@ -1160,7 +1160,7 @@ def _unittest_dsdl_parser_basics() -> None:
 def _unittest_dsdl_parser_expressions() -> None:
     from pytest import raises
 
-    def throws(definition: str, exc: typing.Type[Exception] = expression.InvalidOperandError) -> None:
+    def throws(definition: str, exc: typing.Type[Exception] = _expression.InvalidOperandError) -> None:
         with raises(exc):
             _parse_definition(_define('ns/Throws.0.1.uavcan', dedent(definition)), [])
 
@@ -1280,9 +1280,9 @@ def _unittest_public_api() -> None:
     # Ensure that all descendants of the specified classes are exported from the library.
     # If this test fails, you probably forgot to update __init__.py.
     public_roots = [
-        serializable.SerializableType,
-        serializable.Attribute,
-        expression.Any,
+        _serializable.SerializableType,
+        _serializable.Attribute,
+        _expression.Any,
     ]
 
     for root in public_roots:

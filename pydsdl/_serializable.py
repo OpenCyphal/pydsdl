@@ -9,9 +9,9 @@ import string
 import typing
 import itertools
 import fractions
-from . import expression
-from . import error
-from . import port_id_ranges
+from . import _expression
+from . import _error
+from . import _port_id_ranges
 
 
 BitLengthRange = typing.NamedTuple('BitLengthRange', [('min', int), ('max', int)])
@@ -61,7 +61,7 @@ _DISALLOWED_NAME_PATTERNS = [
 ]
 
 
-class TypeParameterError(error.InvalidDefinitionError):
+class TypeParameterError(_error.InvalidDefinitionError):
     pass
 
 
@@ -109,7 +109,7 @@ class DeprecatedDependencyError(TypeParameterError):
     pass
 
 
-class SerializableType(expression.Any):
+class SerializableType(_expression.Any):
     """
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
         - uavcan.node.Heartbeat.1.0[<=36]
@@ -136,10 +136,10 @@ class SerializableType(expression.Any):
         """
         raise NotImplementedError
 
-    def _attribute(self, name: expression.String) -> expression.Any:
+    def _attribute(self, name: _expression.String) -> _expression.Any:
         if name.native_value == '_bit_length_':
             try:
-                return expression.Set(map(expression.Rational, self.compute_bit_length_values()))
+                return _expression.Set(map(_expression.Rational, self.compute_bit_length_values()))
             except TypeError:
                 pass
 
@@ -619,10 +619,10 @@ class Constant(Attribute):
     def __init__(self,
                  data_type: SerializableType,
                  name: str,
-                 value: expression.Any):
+                 value: _expression.Any):
         super(Constant, self).__init__(data_type, name)
 
-        if not isinstance(value, expression.Primitive):
+        if not isinstance(value, _expression.Primitive):
             raise InvalidConstantValueError('The constant value must be a primitive expression value')
 
         self._value = value
@@ -631,15 +631,15 @@ class Constant(Attribute):
         # Interestingly, both the type of the constant and its value are instances of the same meta-type: expression.
         # BooleanType inherits from expression.Any, same as expression.Boolean.
         if isinstance(data_type, BooleanType):      # Boolean constant
-            if not isinstance(self._value, expression.Boolean):
+            if not isinstance(self._value, _expression.Boolean):
                 raise InvalidConstantValueError('Invalid value for boolean constant: %r' % self._value)
 
         elif isinstance(data_type, IntegerType):    # Integer constant
-            if isinstance(self._value, expression.Rational):
+            if isinstance(self._value, _expression.Rational):
                 if not self._value.is_integer():
                     raise InvalidConstantValueError('The value of an integer constant must be an integer; got %s' %
                                                     self._value)
-            elif isinstance(self._value, expression.String):
+            elif isinstance(self._value, _expression.String):
                 as_bytes = self._value.native_value.encode('utf8')
                 if len(as_bytes) != 1:
                     raise InvalidConstantValueError('A constant string must be exactly one ASCII character long')
@@ -647,23 +647,23 @@ class Constant(Attribute):
                 if not isinstance(data_type, UnsignedIntegerType) or data_type.bit_length != 8:
                     raise InvalidConstantValueError('Constant strings can be used only with uint8')
 
-                self._value = expression.Rational(ord(as_bytes))    # Replace string with integer
+                self._value = _expression.Rational(ord(as_bytes))    # Replace string with integer
             else:
                 raise InvalidConstantValueError('Invalid value type for integer constant: %r' % self._value)
 
         elif isinstance(data_type, FloatType):      # Floating point constant
-            if not isinstance(self._value, expression.Rational):
+            if not isinstance(self._value, _expression.Rational):
                 raise InvalidConstantValueError('Invalid value type for float constant: %r' % self._value)
 
         else:
             raise InvalidTypeError('Invalid constant type: %r' % data_type)
 
-        assert isinstance(self._value, expression.Any)
-        assert isinstance(self._value, expression.Rational) == isinstance(self.data_type, (FloatType, IntegerType))
-        assert isinstance(self._value, expression.Boolean)  == isinstance(self.data_type, BooleanType)
+        assert isinstance(self._value, _expression.Any)
+        assert isinstance(self._value, _expression.Rational) == isinstance(self.data_type, (FloatType, IntegerType))
+        assert isinstance(self._value, _expression.Boolean) == isinstance(self.data_type, BooleanType)
 
         # Range check
-        if isinstance(self._value, expression.Rational):
+        if isinstance(self._value, _expression.Rational):
             assert isinstance(data_type, ArithmeticType)
             rng = data_type.inclusive_value_range
             if not (rng.min <= self._value.native_value <= rng.max):
@@ -671,7 +671,7 @@ class Constant(Attribute):
                                                 (self._value, data_type))
 
     @property
-    def value(self) -> expression.Any:
+    def value(self) -> _expression.Any:
         return self._value
 
     def __str__(self) -> str:
@@ -696,11 +696,11 @@ def _unittest_attribute() -> None:
         repr(PaddingField(SignedIntegerType(8, PrimitiveType.CastMode.SATURATED)))   # type: ignore
 
     data_type = SignedIntegerType(32, PrimitiveType.CastMode.SATURATED)
-    const = Constant(data_type, 'FOO_CONST', expression.Rational(-123))
+    const = Constant(data_type, 'FOO_CONST', _expression.Rational(-123))
     assert str(const) == 'saturated int32 FOO_CONST = -123'
     assert const.data_type is data_type
     assert const.name == 'FOO_CONST'
-    assert const.value == expression.Rational(-123)
+    assert const.value == _expression.Rational(-123)
 
     assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=rational(-123))' % data_type
 
@@ -759,10 +759,10 @@ class CompositeType(SerializableType):
         if port_id is not None:
             assert port_id is not None
             if isinstance(self, ServiceType):
-                if not (0 <= port_id <= port_id_ranges.MAX_SERVICE_ID):
+                if not (0 <= port_id <= _port_id_ranges.MAX_SERVICE_ID):
                     raise InvalidFixedPortIDError('Fixed service ID %r is not valid' % port_id)
             else:
-                if not (0 <= port_id <= port_id_ranges.MAX_SUBJECT_ID):
+                if not (0 <= port_id <= _port_id_ranges.MAX_SUBJECT_ID):
                     raise InvalidFixedPortIDError('Fixed subject ID %r is not valid' % port_id)
 
         # Consistent deprecation check.
@@ -848,13 +848,13 @@ class CompositeType(SerializableType):
     def compute_bit_length_values(self) -> typing.Set[int]:     # pragma: no cover
         raise NotImplementedError
 
-    def _attribute(self, name: expression.String) -> expression.Any:
+    def _attribute(self, name: _expression.String) -> _expression.Any:
         """
         This is the handler for DSDL expressions like uavcan.node.Heartbeat.1.0.MODE_OPERATIONAL.
         """
         for c in self.constants:
             if c.name == name.native_value:
-                assert isinstance(c.value, expression.Any)
+                assert isinstance(c.value, _expression.Any)
                 return c.value
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important

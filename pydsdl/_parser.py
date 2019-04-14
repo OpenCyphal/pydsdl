@@ -11,12 +11,12 @@ import functools
 import fractions
 import parsimonious
 from parsimonious.nodes import Node as _Node
-from . import error
-from . import serializable
-from . import expression
+from . import _error
+from . import _serializable
+from . import _expression
 
 
-class DSDLSyntaxError(error.InvalidDefinitionError):
+class DSDLSyntaxError(_error.InvalidDefinitionError):
     pass
 
 
@@ -29,7 +29,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
     try:
         pr.parse(text)  # type: ignore
 
-    except error.FrontendError as ex:
+    except _error.FrontendError as ex:
         # Inject error location. If this exception is being propagated from a recursive instance, it already has
         # its error location populated, so nothing will happen here.
         ex.set_error_location_if_unknown(line=pr.current_line_number)
@@ -46,7 +46,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
             line = pr.current_line_number
         # Treat as internal because all intentional errors are not wrapped into VisitationError.
         assert line > 0
-        raise error.InternalError(str(ex), line=line)
+        raise _error.InternalError(str(ex), line=line)
 
 
 class StatementStreamProcessor:
@@ -57,32 +57,32 @@ class StatementStreamProcessor:
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
     def on_constant(self,
-                    constant_type: serializable.SerializableType,
+                    constant_type: _serializable.SerializableType,
                     name: str,
-                    value: expression.Any) -> None:
+                    value: _expression.Any) -> None:
         raise NotImplementedError  # pragma: no cover
 
-    def on_field(self, field_type: serializable.SerializableType, name: str) -> None:
+    def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
         raise NotImplementedError  # pragma: no cover
 
-    def on_padding_field(self, padding_field_type: serializable.VoidType) -> None:
+    def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
         raise NotImplementedError  # pragma: no cover
 
     def on_directive(self,
                      line_number: int,
                      directive_name: str,
-                     associated_expression_value: typing.Optional[expression.Any]) -> None:
+                     associated_expression_value: typing.Optional[_expression.Any]) -> None:
         raise NotImplementedError  # pragma: no cover
 
     def on_service_response_marker(self) -> None:
         """The correctness of the marker placement is not validated by the caller."""
         raise NotImplementedError  # pragma: no cover
 
-    def resolve_top_level_identifier(self, name: str) -> expression.Any:
+    def resolve_top_level_identifier(self, name: str) -> _expression.Any:
         """Must throw an appropriate exception if the reference cannot be resolved."""
         raise NotImplementedError  # pragma: no cover
 
-    def resolve_versioned_data_type(self, name: str, version: serializable.Version) -> serializable.CompositeType:
+    def resolve_versioned_data_type(self, name: str, version: _serializable.Version) -> _serializable.CompositeType:
         """Must throw an appropriate exception if the data type is not found."""
         raise NotImplementedError  # pragma: no cover
 
@@ -92,7 +92,7 @@ _logger = logging.getLogger(__name__)
 
 _Children = typing.Tuple[typing.Any, ...]
 _VisitorHandler = typing.Callable[['_ParseTreeProcessor', _Node, _Children], typing.Any]
-_PrimitiveTypeConstructor = typing.Callable[[serializable.PrimitiveType.CastMode], serializable.PrimitiveType]
+_PrimitiveTypeConstructor = typing.Callable[[_serializable.PrimitiveType.CastMode], _serializable.PrimitiveType]
 
 
 def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
@@ -122,7 +122,7 @@ def _make_typesafe_child_lifter(expected_type: typing.Type[object], logged: bool
     return _logged_transformation(visitor_handler) if logged else visitor_handler
 
 
-def _make_binary_operator_handler(operator: expression.BinaryOperator[expression.OperatorOutput]) -> _VisitorHandler:
+def _make_binary_operator_handler(operator: _expression.BinaryOperator[_expression.OperatorOutput]) -> _VisitorHandler:
     return lambda _self, _node, _children: operator
 
 
@@ -143,7 +143,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = error.FrontendError,  # type: ignore
+    unwrapped_exceptions = _error.FrontendError,  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
@@ -170,18 +170,18 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     def visit_statement_constant(self, _n: _Node, children: _Children) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
-        assert isinstance(constant_type, serializable.SerializableType) and isinstance(name, str) and name
-        assert isinstance(exp, expression.Any)
+        assert isinstance(constant_type, _serializable.SerializableType) and isinstance(name, str) and name
+        assert isinstance(exp, _expression.Any)
         self._statement_stream_processor.on_constant(constant_type, name, exp)
 
     def visit_statement_field(self, _n: _Node, children: _Children) -> None:
         field_type, _space, name = children
-        assert isinstance(field_type, serializable.SerializableType) and isinstance(name, str) and name
+        assert isinstance(field_type, _serializable.SerializableType) and isinstance(name, str) and name
         self._statement_stream_processor.on_field(field_type, name)
 
     def visit_statement_padding_field(self, _n: _Node, children: _Children) -> None:
         void_type = children[0]
-        assert isinstance(void_type, serializable.VoidType)
+        assert isinstance(void_type, _serializable.VoidType)
         self._statement_stream_processor.on_padding_field(void_type)
 
     def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:
@@ -189,7 +189,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     def visit_statement_directive_with_expression(self, _n: _Node, children: _Children) -> None:
         _at, name, _space, exp = children
-        assert isinstance(name, str) and name and isinstance(exp, expression.Any)
+        assert isinstance(name, str) and name and isinstance(exp, _expression.Any)
         self._statement_stream_processor.on_directive(line_number=self.current_line_number,
                                                       directive_name=name,
                                                       associated_expression_value=exp)
@@ -207,66 +207,66 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # ================================================== Data types ==================================================
 
-    visit_type           = _make_typesafe_child_lifter(serializable.SerializableType)
-    visit_type_array     = _make_typesafe_child_lifter(serializable.ArrayType, logged=True)
-    visit_type_scalar    = _make_typesafe_child_lifter(serializable.SerializableType, logged=True)
-    visit_type_primitive = _make_typesafe_child_lifter(serializable.PrimitiveType)
+    visit_type           = _make_typesafe_child_lifter(_serializable.SerializableType)
+    visit_type_array     = _make_typesafe_child_lifter(_serializable.ArrayType, logged=True)
+    visit_type_scalar    = _make_typesafe_child_lifter(_serializable.SerializableType, logged=True)
+    visit_type_primitive = _make_typesafe_child_lifter(_serializable.PrimitiveType)
 
     visit_type_primitive_name = parsimonious.NodeVisitor.lift_child
 
     def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) \
-            -> serializable.VariableLengthArrayType:
+            -> _serializable.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length))
+        return _serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length))
 
     def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) \
-            -> serializable.VariableLengthArrayType:
+            -> _serializable.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
-        return serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length) - 1)
+        return _serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
-    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> serializable.FixedLengthArrayType:
+    def visit_type_array_fixed(self, _n: _Node, children: _Children) -> _serializable.FixedLengthArrayType:
         element_type, _s0, _bl, _s1, length, _s2, _br = children
-        return serializable.FixedLengthArrayType(element_type, _unwrap_array_capacity(length))
+        return _serializable.FixedLengthArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_versioned(self, _n: _Node, children: _Children) -> serializable.CompositeType:
+    def visit_type_versioned(self, _n: _Node, children: _Children) -> _serializable.CompositeType:
         name, name_tail, _, version = children
-        assert isinstance(name, str) and name and isinstance(version, serializable.Version)
+        assert isinstance(name, str) and name and isinstance(version, _serializable.Version)
         for _, component in name_tail:
             assert isinstance(component, str)
-            name += serializable.CompositeType.NAME_COMPONENT_SEPARATOR + component
+            name += _serializable.CompositeType.NAME_COMPONENT_SEPARATOR + component
 
         return self._statement_stream_processor.resolve_versioned_data_type(name, version)
 
-    def visit_type_version_specifier(self, _n: _Node, children: _Children) -> serializable.Version:
+    def visit_type_version_specifier(self, _n: _Node, children: _Children) -> _serializable.Version:
         major, _, minor = children
-        assert isinstance(major, expression.Rational) and isinstance(minor, expression.Rational)
-        return serializable.Version(major=major.as_native_integer(),
-                                    minor=minor.as_native_integer())
+        assert isinstance(major, _expression.Rational) and isinstance(minor, _expression.Rational)
+        return _serializable.Version(major=major.as_native_integer(),
+                                     minor=minor.as_native_integer())
 
-    def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> serializable.PrimitiveType:
+    def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
         _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
-        return cons(serializable.PrimitiveType.CastMode.TRUNCATED)
+        return cons(_serializable.PrimitiveType.CastMode.TRUNCATED)
 
-    def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> serializable.PrimitiveType:
+    def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
         _, cons = children  # type: _Node, _PrimitiveTypeConstructor
-        return cons(serializable.PrimitiveType.CastMode.SATURATED)
+        return cons(_serializable.PrimitiveType.CastMode.SATURATED)
 
     def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: serializable.BooleanType(cm)     # lambda is only needed to make mypy shut up
+        return lambda cm: _serializable.BooleanType(cm)     # lambda is only needed to make mypy shut up
 
     def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: serializable.UnsignedIntegerType(children[-1], cm)
+        return lambda cm: _serializable.UnsignedIntegerType(children[-1], cm)
 
     def visit_type_primitive_name_signed_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: serializable.SignedIntegerType(children[-1], cm)
+        return lambda cm: _serializable.SignedIntegerType(children[-1], cm)
 
     def visit_type_primitive_name_floating_point(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: serializable.FloatType(children[-1], cm)
+        return lambda cm: _serializable.FloatType(children[-1], cm)
 
-    def visit_type_void(self, _n: _Node, children: _Children) -> serializable.VoidType:
+    def visit_type_void(self, _n: _Node, children: _Children) -> _serializable.VoidType:
         _, width = children
         assert isinstance(width, int)
-        return serializable.VoidType(width)
+        return _serializable.VoidType(width)
 
     def visit_type_bit_length_suffix(self, node: _Node, _c: _Children) -> int:
         return int(node.text)
@@ -282,8 +282,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_mul = parsimonious.NodeVisitor.lift_child
     visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
-    def visit_expression_list(self, _n: _Node, children: _Children) -> typing.Tuple[expression.Any, ...]:
-        out = []    # type: typing.List[expression.Any]
+    def visit_expression_list(self, _n: _Node, children: _Children) -> typing.Tuple[_expression.Any, ...]:
+        out = []    # type: typing.List[_expression.Any]
         if children:
             children = children[0]
             assert len(children) == 2
@@ -291,36 +291,36 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
             for _, _, _, exp in children[1]:
                 out.append(exp)
 
-        assert all(map(lambda x: isinstance(x, expression.Any), out))
+        assert all(map(lambda x: isinstance(x, _expression.Any), out))
         return tuple(out)
 
     @_logged_transformation
-    def visit_expression_parenthesized(self, _n: _Node, children: _Children) -> expression.Any:
+    def visit_expression_parenthesized(self, _n: _Node, children: _Children) -> _expression.Any:
         _, _, exp, _, _ = children
-        assert isinstance(exp, expression.Any)
+        assert isinstance(exp, _expression.Any)
         return exp
 
-    def visit_expression_atom(self, _n: _Node, children: _Children) -> expression.Any:
+    def visit_expression_atom(self, _n: _Node, children: _Children) -> _expression.Any:
         atom, = children
         if isinstance(atom, str):   # Identifier resolution
             new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
-            if not isinstance(new_atom, expression.Any):
-                raise error.InternalError('Identifier %r resolved as %r, expected expression' %
-                                          (atom, type(new_atom)))  # pragma: no cover
+            if not isinstance(new_atom, _expression.Any):
+                raise _error.InternalError('Identifier %r resolved as %r, expected expression' %
+                                           (atom, type(new_atom)))  # pragma: no cover
             _logger.debug('Identifier resolution: %r --> %s', atom, new_atom.TYPE_NAME)
             atom = new_atom
             del new_atom
 
-        assert isinstance(atom, expression.Any)
+        assert isinstance(atom, _expression.Any)
         return atom
 
-    def _visit_binary_operator_chain(self, _n: _Node, children: _Children) -> expression.Any:
+    def _visit_binary_operator_chain(self, _n: _Node, children: _Children) -> _expression.Any:
         left = children[0]
-        assert isinstance(left, expression.Any)
+        assert isinstance(left, _expression.Any)
         for _, operator, _, right in children[1]:
             assert callable(operator)
             left = operator(left, right)
-            assert isinstance(left, expression.Any)
+            assert isinstance(left, _expression.Any)
         return left
 
     # Operators are handled through different grammar rules for precedence management purposes.
@@ -337,72 +337,72 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_ex_logical_not = parsimonious.NodeVisitor.lift_child
     visit_ex_inversion   = parsimonious.NodeVisitor.lift_child
 
-    def visit_op1_form_log_not(self, _n: _Node, children: _Children) -> expression.Any:
+    def visit_op1_form_log_not(self, _n: _Node, children: _Children) -> _expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, _Node) and isinstance(exp, expression.Any)
-        return expression.logical_not(exp)
+        assert isinstance(_op, _Node) and isinstance(exp, _expression.Any)
+        return _expression.logical_not(exp)
 
-    def visit_op1_form_inv_pos(self, _n: _Node, children: _Children) -> expression.Any:
+    def visit_op1_form_inv_pos(self, _n: _Node, children: _Children) -> _expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, _Node) and isinstance(exp, expression.Any)
-        return expression.positive(exp)
+        assert isinstance(_op, _Node) and isinstance(exp, _expression.Any)
+        return _expression.positive(exp)
 
-    def visit_op1_form_inv_neg(self, _n: _Node, children: _Children) -> expression.Any:
+    def visit_op1_form_inv_neg(self, _n: _Node, children: _Children) -> _expression.Any:
         _op, _, exp = children
-        assert isinstance(_op, _Node) and isinstance(exp, expression.Any)
-        return expression.negative(exp)
+        assert isinstance(_op, _Node) and isinstance(exp, _expression.Any)
+        return _expression.negative(exp)
 
-    visit_op2_log_or  = _make_binary_operator_handler(expression.logical_or)
-    visit_op2_log_and = _make_binary_operator_handler(expression.logical_and)
-    visit_op2_cmp_equ = _make_binary_operator_handler(expression.equal)
-    visit_op2_cmp_neq = _make_binary_operator_handler(expression.not_equal)
-    visit_op2_cmp_leq = _make_binary_operator_handler(expression.less_or_equal)
-    visit_op2_cmp_geq = _make_binary_operator_handler(expression.greater_or_equal)
-    visit_op2_cmp_lss = _make_binary_operator_handler(expression.less)
-    visit_op2_cmp_grt = _make_binary_operator_handler(expression.greater)
-    visit_op2_bit_or  = _make_binary_operator_handler(expression.bitwise_or)
-    visit_op2_bit_xor = _make_binary_operator_handler(expression.bitwise_xor)
-    visit_op2_bit_and = _make_binary_operator_handler(expression.bitwise_and)
-    visit_op2_add_add = _make_binary_operator_handler(expression.add)
-    visit_op2_add_sub = _make_binary_operator_handler(expression.subtract)
-    visit_op2_mul_mul = _make_binary_operator_handler(expression.multiply)
-    visit_op2_mul_div = _make_binary_operator_handler(expression.divide)
-    visit_op2_mul_mod = _make_binary_operator_handler(expression.modulo)
-    visit_op2_exp_pow = _make_binary_operator_handler(expression.power)
+    visit_op2_log_or  = _make_binary_operator_handler(_expression.logical_or)
+    visit_op2_log_and = _make_binary_operator_handler(_expression.logical_and)
+    visit_op2_cmp_equ = _make_binary_operator_handler(_expression.equal)
+    visit_op2_cmp_neq = _make_binary_operator_handler(_expression.not_equal)
+    visit_op2_cmp_leq = _make_binary_operator_handler(_expression.less_or_equal)
+    visit_op2_cmp_geq = _make_binary_operator_handler(_expression.greater_or_equal)
+    visit_op2_cmp_lss = _make_binary_operator_handler(_expression.less)
+    visit_op2_cmp_grt = _make_binary_operator_handler(_expression.greater)
+    visit_op2_bit_or  = _make_binary_operator_handler(_expression.bitwise_or)
+    visit_op2_bit_xor = _make_binary_operator_handler(_expression.bitwise_xor)
+    visit_op2_bit_and = _make_binary_operator_handler(_expression.bitwise_and)
+    visit_op2_add_add = _make_binary_operator_handler(_expression.add)
+    visit_op2_add_sub = _make_binary_operator_handler(_expression.subtract)
+    visit_op2_mul_mul = _make_binary_operator_handler(_expression.multiply)
+    visit_op2_mul_div = _make_binary_operator_handler(_expression.divide)
+    visit_op2_mul_mod = _make_binary_operator_handler(_expression.modulo)
+    visit_op2_exp_pow = _make_binary_operator_handler(_expression.power)
 
-    def visit_op2_attrib(self, _n: _Node, _c: _Children) -> expression.AttributeOperator[expression.Any]:
-        return expression.attribute
+    def visit_op2_attrib(self, _n: _Node, _c: _Children) -> _expression.AttributeOperator[_expression.Any]:
+        return _expression.attribute
 
     # ================================================== Literals ==================================================
 
-    visit_literal         = _make_typesafe_child_lifter(expression.Any, logged=True)
-    visit_literal_boolean = _make_typesafe_child_lifter(expression.Boolean)
-    visit_literal_string  = _make_typesafe_child_lifter(expression.String)
+    visit_literal         = _make_typesafe_child_lifter(_expression.Any, logged=True)
+    visit_literal_boolean = _make_typesafe_child_lifter(_expression.Boolean)
+    visit_literal_string  = _make_typesafe_child_lifter(_expression.String)
 
-    def visit_literal_set(self, _n: _Node, children: _Children) -> expression.Set:
+    def visit_literal_set(self, _n: _Node, children: _Children) -> _expression.Set:
         _, _, exp_list, _, _ = children
-        assert all(map(lambda x: isinstance(x, expression.Any), exp_list))
-        return expression.Set(exp_list)
+        assert all(map(lambda x: isinstance(x, _expression.Any), exp_list))
+        return _expression.Set(exp_list)
 
-    def visit_literal_real(self, node: _Node, _c: _Children) -> expression.Rational:
-        return expression.Rational(fractions.Fraction(node.text.replace('_', '')))
+    def visit_literal_real(self, node: _Node, _c: _Children) -> _expression.Rational:
+        return _expression.Rational(fractions.Fraction(node.text.replace('_', '')))
 
-    def visit_literal_integer(self, node: _Node, _c: _Children) -> expression.Rational:
-        return expression.Rational(int(node.text.replace('_', ''), base=0))
+    def visit_literal_integer(self, node: _Node, _c: _Children) -> _expression.Rational:
+        return _expression.Rational(int(node.text.replace('_', ''), base=0))
 
-    def visit_literal_integer_decimal(self, node: _Node, _c: _Children) -> expression.Rational:
-        return expression.Rational(int(node.text.replace('_', '')))
+    def visit_literal_integer_decimal(self, node: _Node, _c: _Children) -> _expression.Rational:
+        return _expression.Rational(int(node.text.replace('_', '')))
 
-    def visit_literal_boolean_true(self, _n: _Node, _c: _Children) -> expression.Boolean:
-        return expression.Boolean(True)
+    def visit_literal_boolean_true(self, _n: _Node, _c: _Children) -> _expression.Boolean:
+        return _expression.Boolean(True)
 
-    def visit_literal_boolean_false(self, _n: _Node, _c: _Children) -> expression.Boolean:
-        return expression.Boolean(False)
+    def visit_literal_boolean_false(self, _n: _Node, _c: _Children) -> _expression.Boolean:
+        return _expression.Boolean(False)
 
-    def visit_literal_string_single_quoted(self, node: _Node, _c: _Children) -> expression.String:
+    def visit_literal_string_single_quoted(self, node: _Node, _c: _Children) -> _expression.String:
         return _parse_string_literal(node.text)
 
-    def visit_literal_string_double_quoted(self, node: _Node, _c: _Children) -> expression.String:
+    def visit_literal_string_double_quoted(self, node: _Node, _c: _Children) -> _expression.String:
         return _parse_string_literal(node.text)
 
 
@@ -423,18 +423,18 @@ def _print_node(n: typing.Any) -> str:
         return repr(n)
 
 
-def _unwrap_array_capacity(ex: expression.Any) -> int:
-    assert isinstance(ex, expression.Any)
-    if isinstance(ex, expression.Rational):
+def _unwrap_array_capacity(ex: _expression.Any) -> int:
+    assert isinstance(ex, _expression.Any)
+    if isinstance(ex, _expression.Rational):
         out = ex.as_native_integer()
         assert isinstance(out, int)     # Oh mypy, why are you so weird
         return out
     else:
-        raise error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
-                                           ex.TYPE_NAME)
+        raise _error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
+                                            ex.TYPE_NAME)
 
 
-def _parse_string_literal(literal: str) -> expression.String:
+def _parse_string_literal(literal: str) -> _expression.String:
     assert literal[0] == literal[-1]
     assert literal[0] in '\'\"'
     assert len(literal) >= 2
@@ -489,7 +489,7 @@ def _parse_string_literal(literal: str) -> expression.String:
                 assert len(symbol) == 1
                 out += symbol
 
-    return expression.String(out)
+    return _expression.String(out)
 
 
 def _unittest_parse_string_literal() -> None:
