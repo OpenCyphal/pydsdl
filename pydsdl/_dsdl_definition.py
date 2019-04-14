@@ -5,12 +5,12 @@
 
 import os
 import typing
-from . import error
-from . import serializable
-from . import parser
+from . import _error
+from . import _serializable
+from . import _parser
 
 
-class FileNameFormatError(error.InvalidDefinitionError):
+class FileNameFormatError(_error.InvalidDefinitionError):
     """
     Raised when a DSDL definition file is named incorrectly.
     """
@@ -35,7 +35,7 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
+        if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
             raise FileNameFormatError('Invalid namespace name', path=root_namespace_path)
 
         # Determining the relative path within the root namespace directory
@@ -65,26 +65,26 @@ class DSDLDefinition:
 
         # Parsing the version numbers
         try:
-            self._version = serializable.Version(major=int(str_major_version),
-                                                 minor=int(str_minor_version))
+            self._version = _serializable.Version(major=int(str_major_version),
+                                                  minor=int(str_minor_version))
         except ValueError:
             raise FileNameFormatError('Could not parse the version numbers', path=self._file_path) from None
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
         for nc in namespace_components:
-            if serializable.CompositeType.NAME_COMPONENT_SEPARATOR in nc:
+            if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in nc:
                 raise FileNameFormatError('Invalid name for namespace component', path=self._file_path)
 
-        self._name = serializable.CompositeType.NAME_COMPONENT_SEPARATOR\
+        self._name = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR\
             .join(namespace_components + [str(short_name)])  # type: str
 
-        self._cached_type = None    # type: typing.Optional[serializable.CompositeType]
+        self._cached_type = None    # type: typing.Optional[_serializable.CompositeType]
 
     def read(self,
              lookup_definitions:              typing.Iterable['DSDLDefinition'],
              print_output_handler:            typing.Callable[[int, str], None],
-             allow_unregulated_fixed_port_id: bool) -> serializable.CompositeType:
+             allow_unregulated_fixed_port_id: bool) -> _serializable.CompositeType:
         """
         Reads the data type definition and returns its high-level data type representation.
         The output is cached; all following invocations will read from the cache.
@@ -108,21 +108,21 @@ class DSDLDefinition:
         try:
             # We have to import this class at function level to break recursive dependency.
             # Maybe I have messed up the architecture? Should think about it later.
-            from .data_type_builder import DataTypeBuilder
+            from ._data_type_builder import DataTypeBuilder
             builder = DataTypeBuilder(definition=self,
                                       lookup_definitions=lookup_definitions,
                                       print_output_handler=print_output_handler,
                                       allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id)
             with open(self.file_path) as f:
-                parser.parse(f.read(), builder)
+                _parser.parse(f.read(), builder)
 
             self._cached_type = builder.finalize()
             return self._cached_type
-        except error.FrontendError as ex:                      # pragma: no cover
+        except _error.FrontendError as ex:                      # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
         except Exception as ex:                                         # pragma: no cover
-            raise error.InternalError(culprit=ex, path=self.file_path)
+            raise _error.InternalError(culprit=ex, path=self.file_path)
 
     @property
     def full_name(self) -> str:
@@ -132,7 +132,7 @@ class DSDLDefinition:
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(serializable.CompositeType.NAME_COMPONENT_SEPARATOR)
+        return self._name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -142,7 +142,7 @@ class DSDLDefinition:
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return str(serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
@@ -155,7 +155,7 @@ class DSDLDefinition:
         return self._text
 
     @property
-    def version(self) -> serializable.Version:
+    def version(self) -> _serializable.Version:
         return self._version
 
     @property
