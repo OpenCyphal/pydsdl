@@ -8,7 +8,7 @@ python:
   - 3.5
   - 3.6
   - 3.7-dev     # TODO: Replace with plain "3.7" when supported by Travis
-  - 3.8-dev     # TODO: Replace with plain "3.8" when supported by Travis
+#  - 3.8-dev    # TODO: Compatibility issues with MyPy, see https://travis-ci.org/UAVCAN/pydsdl/jobs/519988157
 
 before_script:
   - pip install -r requirements.txt
