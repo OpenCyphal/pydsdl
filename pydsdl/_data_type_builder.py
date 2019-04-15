@@ -155,7 +155,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         else:
             full_name = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join([self._definition.full_namespace,
                                                                                    name])
-            _logger.info('The full name of a relatively referred type %r reconstructed as %r', name, full_name)
+            _logger.debug('The full name of a relatively referred type %r reconstructed as %r', name, full_name)
 
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
