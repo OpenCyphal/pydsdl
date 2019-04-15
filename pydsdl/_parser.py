@@ -138,8 +138,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     done currently.
     """
     # Populating the default grammar (see the NodeVisitor API).
-    grammar = parsimonious.Grammar(  # type: ignore
-        open(os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')).read())
+    with open(os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')) as _grammar_file:
+        grammar = parsimonious.Grammar(_grammar_file.read())  # type: ignore
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
