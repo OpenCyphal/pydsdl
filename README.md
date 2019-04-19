@@ -92,9 +92,9 @@ Every data type (i.e., the `SerializableType` root class) has the following publ
 (although they raise `TypeError` when used against an instance of `ServiceType`):
 
 - `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
-which represent the minimum and the maximum possible bit length of an encoded representation.
-- `compute_bit_length_values() -> Set[int]` - this function performs a bit length combination analysis on
-the data type and returns a full set of bit lengths of all possible valid encoded representations of the data type.
+which represent the minimum and the maximum possible bit length of a serialized representation.
+- `compute_bit_length_set() -> Set[int]` - this function performs a bit length combination analysis on
+the data type and returns a full set of bit lengths of all possible valid serialized representations of the data type.
 Due to the involved computations, the function can be expensive to invoke, so use with care.
 
 Instances of `CompositeType` (and its derivatives) contain *attributes*.
@@ -166,7 +166,7 @@ else:
         if isinstance(t, pydsdl.ServiceType):
             blr, blv = 0, {0}
         else:
-            blr, blv = t.bit_length_range, t.compute_bit_length_values()
+            blr, blv = t.bit_length_range, t.compute_bit_length_set()
         # The above is because service types are not directly serializable (see the UAVCAN specification)
         print(t.full_name, t.version, t.fixed_port_id, t.deprecated, blr, len(blv))
         for f in t.fields:

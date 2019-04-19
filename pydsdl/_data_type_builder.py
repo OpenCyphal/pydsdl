@@ -143,7 +143,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 return c.value
 
         if name == '_offset_':
-            blv = self._structs[-1].compute_bit_length_values()
+            blv = self._structs[-1].compute_bit_length_set()
             assert isinstance(blv, set) and len(blv) > 0 and all(map(lambda x: isinstance(x, int), blv))
             return _expression.Set(map(_expression.Rational, blv))
         else:

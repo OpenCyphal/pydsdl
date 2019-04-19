@@ -24,7 +24,7 @@ else:
         if isinstance(t, pydsdl.ServiceType):
             blr, blv = 0, {0}
         else:
-            blr, blv = t.bit_length_range, t.compute_bit_length_values()
+            blr, blv = t.bit_length_range, t.compute_bit_length_set()
         # The above is because service types are not directly serializable (see the UAVCAN specification)
         print(t.full_name, t.version, t.fixed_port_id, t.deprecated, blr, len(blv))
         for f in t.fields:
