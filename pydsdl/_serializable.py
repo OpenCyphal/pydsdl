@@ -93,7 +93,7 @@ class InvalidTypeError(TypeParameterError):
     pass
 
 
-class AttributeNameCollision(TypeParameterError):
+class AttributeNameCollisionError(TypeParameterError):
     pass
 
 
@@ -750,7 +750,7 @@ class CompositeType(SerializableType):
         used_names = set()      # type: typing.Set[str]
         for a in self._attributes:
             if a.name and a.name in used_names:
-                raise AttributeNameCollision('Multiple attributes under the same name: %r' % a.name)
+                raise AttributeNameCollisionError('Multiple attributes under the same name: %r' % a.name)
             else:
                 used_names.add(a.name)
 
