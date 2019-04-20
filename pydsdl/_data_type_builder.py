@@ -143,9 +143,9 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 return c.value
 
         if name == '_offset_':
-            blv = self._structs[-1].compute_bit_length_set()
-            assert isinstance(blv, set) and len(blv) > 0 and all(map(lambda x: isinstance(x, int), blv))
-            return _expression.Set(map(_expression.Rational, blv))
+            bls = self._structs[-1].compute_bit_length_set()
+            assert len(bls) > 0 and all(map(lambda x: isinstance(x, int), bls))
+            return _expression.Set(map(_expression.Rational, bls))
         else:
             raise UndefinedIdentifierError('Undefined identifier: %r' % name)
 

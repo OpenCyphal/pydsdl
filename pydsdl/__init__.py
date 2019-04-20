@@ -43,7 +43,7 @@ from ._serializable import CompositeType, UnionType, StructureType, ServiceType
 from ._serializable import Attribute, Field, PaddingField, Constant
 
 # Data type model - auxiliary.
-from ._serializable import BitLengthRange, ValueRange, Version
+from ._serializable import BitLengthSet, BitLengthRange, ValueRange, Version
 
 # Expression model.
 from ._expression import Any

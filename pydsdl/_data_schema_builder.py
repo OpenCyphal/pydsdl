@@ -60,7 +60,7 @@ class DataSchemaBuilder:
         assert not self.union, 'This operation is not idempotent'
         self._is_union = True
 
-    def compute_bit_length_set(self) -> typing.Set[int]:     # oh mypy, why are you so stupid
+    def compute_bit_length_set(self) -> _serializable.BitLengthSet:     # oh mypy, why are you so stupid
         # We set this flag in order to detect invalid reliance on the bit length estimates for unions:
         # we process definitions sequentially, statement-by-statement, so we can't know if there are going to be
         # extra fields added after the bit length values are computed. If we are building a regular structure,
@@ -76,5 +76,5 @@ class DataSchemaBuilder:
         else:
             out = _serializable.compute_bit_length_set_for_struct(field_type_gen)
 
-        assert isinstance(out, set) and len(out) > 0
+        assert isinstance(out, _serializable.BitLengthSet) and len(out) > 0
         return out

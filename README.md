@@ -93,9 +93,11 @@ Every data type (i.e., the `SerializableType` root class) has the following publ
 
 - `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
 which represent the minimum and the maximum possible bit length of a serialized representation.
-- `compute_bit_length_set() -> Set[int]` - this function performs a bit length combination analysis on
-the data type and returns a full set of bit lengths of all possible valid serialized representations of the data type.
+- `compute_bit_length_set() -> BitLengthSet` - this function performs a bit length combination analysis on
+the data type and returns a full set of bit lengths of all serialized representations of the data type.
 Due to the involved computations, the function can be expensive to invoke, so use with care.
+The type `BitLengthSet` is similar to the native set of integers: it is iterable and comparable,
+plus there are several important convenience methods for bit length set manipulation.
 
 Instances of `CompositeType` (and its derivatives) contain *attributes*.
 Per the specification, an attribute can be a field or a constant.
