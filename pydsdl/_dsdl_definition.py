@@ -4,10 +4,15 @@
 #
 
 import os
+import time
 import typing
+import logging
 from . import _error
 from . import _serializable
 from . import _parser
+
+
+_logger = logging.getLogger(__name__)
 
 
 class FileNameFormatError(_error.InvalidDefinitionError):
@@ -102,9 +107,16 @@ class DSDLDefinition:
         if self._cached_type is not None:
             return self._cached_type
 
+        started_at = time.monotonic()
+
         # Remove the target definition from the lookup list in order to prevent
         # infinite recursion on self-referential definitions.
         lookup_definitions = list(filter(lambda d: d != self, lookup_definitions))
+
+        log_prefix = '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
+        _logger.info('%s: Starting processing with %d lookup definitions located in root namespaces: %s',
+                     log_prefix, len(lookup_definitions),
+                     ', '.join(set(map(lambda x: x.root_namespace, lookup_definitions))))
         try:
             # We have to import this class at function level to break recursive dependency.
             # Maybe I have messed up the architecture? Should think about it later.
@@ -117,6 +129,8 @@ class DSDLDefinition:
                 _parser.parse(f.read(), builder)
 
             self._cached_type = builder.finalize()
+
+            _logger.info('%s: Processed successfully in %.3f seconds', log_prefix, time.monotonic() - started_at)
             return self._cached_type
         except _error.FrontendError as ex:                      # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)

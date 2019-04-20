@@ -7,6 +7,9 @@
 import sys
 import time
 import pydsdl
+import logging
+
+logging.basicConfig(stream=sys.stderr, level='INFO', format='%(levelname)s: %(message)s')
 
 target_directory = sys.argv[1]
 lookup_directories = sys.argv[2:]
