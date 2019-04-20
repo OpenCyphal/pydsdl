@@ -72,9 +72,9 @@ class DataSchemaBuilder:
 
         field_type_gen = map(lambda f: f.data_type, self.fields)
         if self.union:
-            out = _serializable.compute_bit_length_set_for_tagged_union(field_type_gen)
+            out = _serializable.BitLengthSet.for_tagged_union(field_type_gen)
         else:
-            out = _serializable.compute_bit_length_set_for_struct(field_type_gen)
+            out = _serializable.BitLengthSet.for_struct(field_type_gen)
 
         assert isinstance(out, _serializable.BitLengthSet) and len(out) > 0
         return out
