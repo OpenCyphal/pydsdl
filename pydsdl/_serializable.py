@@ -150,16 +150,33 @@ class BitLengthSet:
     def unite_with(self, other: 'BitLengthSet') -> None:
         self._value |= BitLengthSet(other)._value
 
-    def increment_each(self, bit_length: int) -> None:
+    def increment(self, bit_length_set_or_scalar: typing.Union[typing.Iterable[int], int]) -> None:
         """
-        Adds the specified value to every bit length in the set.
-        This represents addition of a fixed-length field to a data structure.
-        """
-        bit_length = int(bit_length)
-        if bit_length <= 0:
-            raise ValueError('Bit length increment cannot be negative: %r' % bit_length)
+        This operation represents addition of a new object to a serialized representation.
 
-        self._value = set(map(lambda c: c + bit_length, self._value))
+        If the argument is a bit length set, an elementwise sum set of the Cartesian product of the argument set
+        with the current set will be computed, and the result will replace the current set (i.e., this method updates
+        the object it is invoked on). One can easily see that if the argument is a set of one value (or a scalar),
+        this method will result in addition of said scalar to every element of the current set.
+
+        SPECIAL CASE: if the current set is empty at the time of invocation, it will be assumed to be equal {0}.
+
+        Example A - scalar input (or a set of one element):
+            current value: {1, 2, 3}
+            argument of this method: 4
+            new value: {1+4, 2+4, 3+4} = {5, 6, 7}
+
+        Example B - scalar input (or a set of one element):
+            current value: {1, 2, 3}
+            argument of this method: {4, 5, 6}
+            new value: {1+4, 1+5, 1+6,
+                        2+4, 2+5, 2+6,
+                        3+4, 3+5, 3+6} = {5, 6, 7, 8, 9}
+        """
+        self._value = BitLengthSet.compute_elementwise_sums_of_cartesian_product([
+            self or BitLengthSet(0),
+            BitLengthSet(bit_length_set_or_scalar)
+        ])._value
 
     def compute_elementwise_sums_of_k_multicombinations(self, k: int) -> 'BitLengthSet':
         """
@@ -244,7 +261,7 @@ class BitLengthSet:
         for t in ts:
             out.unite_with(t.compute_bit_length_set())
         # Add the union tag
-        out.increment_each((len(ts) - 1).bit_length())
+        out.increment((len(ts) - 1).bit_length())
         return out or BitLengthSet(0)
 
     def __iter__(self) -> typing.Iterator[int]:
@@ -291,10 +308,10 @@ def _unittest_bit_length_set() -> None:
         BitLengthSet({-1})
 
     s = BitLengthSet({0, 8})
-    s.increment_each(8)
+    s.increment(8)
     assert s == {8, 16}
-    with raises(ValueError):
-        s.increment_each(-1)
+    s.increment({0, 4, 8})
+    assert s == {8, 16, 12, 20, 24}
 
 
 class SerializableType(_expression.Any):
@@ -700,7 +717,7 @@ class VariableLengthArrayType(ArrayType):
             case = self.element_type.compute_bit_length_set().compute_elementwise_sums_of_k_multicombinations(capacity)
             output.unite_with(case)
         # Add the bit length of the implicit array length field.
-        output.increment_each(self.implicit_length_field_bit_length)
+        output.increment(self.implicit_length_field_bit_length)
         return output
 
     def __str__(self) -> str:
@@ -1035,6 +1052,15 @@ class CompositeType(SerializableType):
     def compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
         raise NotImplementedError
 
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        """
+        TODO: documentation
+        :param base_offset:
+        :return:
+        """
+        raise NotImplementedError
+
     def _attribute(self, name: _expression.String) -> _expression.Any:
         """
         This is the handler for DSDL expressions like uavcan.node.Heartbeat.1.0.MODE_OPERATIONAL.
@@ -1104,6 +1130,13 @@ class UnionType(CompositeType):
     def compute_bit_length_set(self) -> BitLengthSet:
         return BitLengthSet.for_tagged_union(map(lambda f: f.data_type, self.fields))
 
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        base_offset = BitLengthSet(base_offset or {0})
+        base_offset.increment(self.tag_bit_length)
+        for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
+            yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
+
 
 class StructureType(CompositeType):
     @property
@@ -1117,7 +1150,16 @@ class StructureType(CompositeType):
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
-        raise NotImplementedError  # TODO
+        base_offset = BitLengthSet(base_offset or {0})
+        _self_test_field_type_collection = []  # type: typing.List[SerializableType]
+        for f in self.fields:
+            yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
+            base_offset.increment(f.data_type.compute_bit_length_set())
+
+            # This is only for ensuring that the logic is functioning as intended.
+            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
+            _self_test_field_type_collection.append(f.data_type)
+            assert BitLengthSet.for_struct(_self_test_field_type_collection) == base_offset
 
 
 class ServiceType(CompositeType):
@@ -1169,6 +1211,10 @@ class ServiceType(CompositeType):
 
     def compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
         raise TypeError('Service types are not directly serializable. Use either request or response.')
+
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        raise TypeError('Service types do not have serializable fields. Use either request or response.')
 
 
 def _check_name(name: str) -> None:
@@ -1335,3 +1381,52 @@ def _unittest_composite_types() -> None:
     ]).compute_bit_length_set() == {4 + 16, 12 + 16, 20 + 16, 28 + 16, 36 + 16}
 
     assert try_struct_fields([outer]).compute_bit_length_set() == {4, 12, 20, 28, 36}
+
+
+def _unittest_field_iterators() -> None:
+    saturated = PrimitiveType.CastMode.SATURATED
+    _seq_no = 0
+
+    def make_type(meta: typing.Type[CompositeType], attributes: typing.Iterable[Attribute]) -> CompositeType:
+        nonlocal _seq_no
+        _seq_no += 1
+        return meta('ns.Type' + str(_seq_no),
+                    version=Version(1, 0),
+                    attributes=attributes,
+                    deprecated=False,
+                    fixed_port_id=None,
+                    source_file_path='')
+
+    def validate_iterator(t: CompositeType,
+                          reference: typing.Iterable[typing.Tuple[str, typing.Set[int]]],
+                          base_offset: typing.Optional[BitLengthSet] = None) -> None:
+        for (name, ref_set), (field, real_set) in itertools.zip_longest(reference,
+                                                                        t.iterate_fields_with_offsets(base_offset)):
+            assert field.name == name
+            assert real_set == ref_set
+
+    a = make_type(StructureType, [
+        Field(UnsignedIntegerType(10, saturated), 'a'),
+        Field(BooleanType(saturated), 'b'),
+        Field(VariableLengthArrayType(FloatType(32, saturated), 2), 'c'),
+        Field(FixedLengthArrayType(FloatType(32, saturated), 7), 'd'),
+        PaddingField(VoidType(1)),
+    ])
+
+    validate_iterator(a, [
+        ('a', {0}),
+        ('b', {10}),
+        ('c', {11}),
+        ('d', {
+            11 + 2 + 32 * 0,
+            11 + 2 + 32 * 1,
+            11 + 2 + 32 * 2,
+        }),
+        ('', {
+            11 + 2 + 32 * 0 + 32 * 7,   # suka
+            11 + 2 + 32 * 1 + 32 * 7,
+            11 + 2 + 32 * 2 + 32 * 7,
+        }),
+    ])
+
+    # TODO: more tests
