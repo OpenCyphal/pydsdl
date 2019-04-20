@@ -161,6 +161,92 @@ class BitLengthSet:
 
         self._value = set(map(lambda c: c + bit_length, self._value))
 
+    def compute_elementwise_sums_of_k_multicombinations(self, k: int) -> 'BitLengthSet':
+        """
+        This is a special case of the elementwise sum of a Cartesian product, implemented in adjacent method.
+
+        One can replace this method with the aforementioned general case method and the behavior would not change;
+        however, we need this special case method for performance reasons. When dealing with arrays (either fixed- or
+        variable-length), usage of this method instead of the generic one yields significantly better performance,
+        since the computational complexity of k-selections is much lower than that of the Cartesian product.
+
+        Example:
+            input: {1, 2, 3} taken k=2 times
+            output: {1+1, 1+2, 1+3,
+                     2+1, 2+2, 2+3,
+                     3+1, 3+2, 3+3} = {2, 3, 4, 5, 6}
+        """
+        k_multicombination = itertools.combinations_with_replacement(self, k)
+        elementwise_sums = map(sum, k_multicombination)
+        return BitLengthSet(elementwise_sums)  # type: ignore
+
+    @staticmethod
+    def compute_elementwise_sums_of_cartesian_product(sets: typing.Iterable['BitLengthSet']) -> 'BitLengthSet':
+        """
+        This operation is fundamental for bit length and bit offset (which are, generally, the same thing) computation.
+
+        The basic background is explained in the specification. The idea is that the bit offset of a given entity
+        in a data type definition of the structure category (or, in other words, the bit length set of serialized
+        representations of the preceding entities, which is the same thing, assuming that the data type is of the
+        structure category) is a function of bit length sets of each preceding entity. Various combinations of
+        bit lengths of the preceding entities are possible, which can be expressed through the Cartesian product over
+        the bit length sets of the preceding entities. Since in a type of the structure category entities are arranged
+        as an ordered sequence of a fixed length (meaning that entities can't be added or removed), the resulting
+        bit length (offset) is computed by elementwise summation of each element of the Cartesian product.
+
+        This method is not applicable for the tagged union type category, since a tagged union holds exactly one
+        value at any moment; therefore, the bit length set of a tagged union is simply a union of bit length sets
+        of each entity that can be contained in the union, plus the length of the implicit union tag field.
+
+        From the standpoint of bit length combination analysis, fixed-length arrays are a special case of structures,
+        because they also contain a fixed ordered sequence of fields, where all fields are of the same type.
+        The method defined for structures applies to fixed-length arrays, but one should be aware that it may be
+        computationally suboptimal, since the fact that the elements are of the same type allows us to replace
+        the relatively expensive Cartesian product with k-multicombinations (k-selections).
+
+        In the context of bit length analysis, variable-length arrays do not require special treatment, since a
+        variable-length array with the capacity of N elements can be modeled as a tagged union containing
+        N fixed arrays of length from 1 to N, plus one empty field (representing the case of an empty variable-length
+        array).
+
+        Example:
+            input: {1, 2, 3}, {4, 5, 6}
+            output: {1+4, 1+5, 1+6,
+                     2+4, 2+5, 2+6,
+                     3+4, 3+5, 3+6} = {5, 6, 7, 8, 9}
+        """
+        sets = list(map(BitLengthSet, sets))
+        cartesian_product = itertools.product(*sets)
+        elementwise_sums = map(sum, cartesian_product)
+        return BitLengthSet(elementwise_sums)  # type: ignore
+
+    @staticmethod
+    def for_struct(member_data_types: typing.Iterable['SerializableType']) -> 'BitLengthSet':
+        # As far as bit length combinations are concerned, structures are similar to fixed-length arrays.
+        # The difference here is that the length value sets are not homogeneous across fields,
+        # as they can be of different types.
+        return BitLengthSet.compute_elementwise_sums_of_cartesian_product(
+            x.compute_bit_length_set() for x in member_data_types
+        ) or BitLengthSet(0)  # Empty output not permitted
+
+    @staticmethod
+    def for_tagged_union(member_data_types: typing.Iterable['SerializableType']) -> 'BitLengthSet':
+        ts = list(member_data_types)
+        del member_data_types
+        if len(ts) < UnionType.MIN_NUMBER_OF_VARIANTS:
+            raise MalformedUnionError('Cannot perform bit length analysis on less than {0} members because '
+                                      'tagged unions are not defined for less than {0} variants'
+                                      .format(UnionType.MIN_NUMBER_OF_VARIANTS))
+        # Unions are easy to handle because when serialized, a union is essentially just a single field,
+        # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
+        # add the tag length to each element.
+        out = BitLengthSet()
+        for t in ts:
+            out.unite_with(t.compute_bit_length_set())
+        # Add the union tag
+        out.increment_each((len(ts) - 1).bit_length())
+        return out or BitLengthSet(0)
+
     def __iter__(self) -> typing.Iterator[int]:
         return iter(self._value)
 
@@ -182,40 +268,6 @@ class BitLengthSet:
 
     def __repr__(self) -> str:
         return type(self).__name__ + '(' + str(self) + ')'
-
-    @staticmethod
-    def for_struct(member_data_types: typing.Iterable['SerializableType']) -> 'BitLengthSet':
-        # As far as bit length combinations are concerned, structures are similar to static arrays.
-        # Please refer to the bit length computation method for static arrays for reference.
-        # The difference here is that the length value sets are not homogeneous across fields, as they
-        # can be of different types, which sets structures apart from arrays. So instead of looking for
-        # k-combinations, we need to find a Cartesian product of bit length value sets of each field.
-        # For large structures with dynamic arrays this can be very computationally expensive.
-        blv_sets = [x.compute_bit_length_set() for x in member_data_types]
-        combinations = itertools.product(*blv_sets)
-        # The interface prohibits empty sets at the output
-        out = BitLengthSet(map(sum, combinations)) or BitLengthSet({0})
-        assert out
-        return out
-
-    @staticmethod
-    def for_tagged_union(member_data_types: typing.Iterable['SerializableType']) -> 'BitLengthSet':
-        ts = list(member_data_types)
-        del member_data_types
-        if len(ts) < UnionType.MIN_NUMBER_OF_VARIANTS:
-            raise MalformedUnionError('Cannot perform bit length analysis on less than {0} members because '
-                                      'tagged unions are not defined for less than {0} variants'
-                                      .format(UnionType.MIN_NUMBER_OF_VARIANTS))
-        # Unions are easy to handle because when serialized, a union is essentially just a single field,
-        # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
-        # add the tag length to each element. Easy.
-        out = BitLengthSet()
-        for t in ts:
-            out.unite_with(t.compute_bit_length_set())
-        # Add the union tag
-        out.increment_each((len(ts) - 1).bit_length())
-        assert out
-        return out
 
 
 def _unittest_bit_length_set() -> None:
@@ -554,7 +606,7 @@ class ArrayType(SerializableType):
     def string_like(self) -> bool:
         """
         Returns True if the array might contain a text string, in which case it is termed to be "string-like".
-        A string-like array is a dynamic array of uint8.
+        A string-like array is a variable-length array of uint8.
         """
         return False
 
@@ -577,12 +629,11 @@ class FixedLengthArrayType(ArrayType):
                               max=self.element_type.bit_length_range.max * self.capacity)
 
     def compute_bit_length_set(self) -> BitLengthSet:
-        # combinations_with_replacement() implements the standard n-combination function.
-        combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_set(),
-                                                               self.capacity)
-        # We do not care about permutations because the final bit length is invariant to the order of
-        # serialized elements. Having found all combinations, we need to obtain a set of resulting length values.
-        return BitLengthSet(map(sum, combinations))
+        # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
+        # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
+        # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
+        # performance measured on the standard data type set was about tenfold.
+        return self.element_type.compute_bit_length_set().compute_elementwise_sums_of_k_multicombinations(self.capacity)
 
     def __str__(self) -> str:
         return '%s[%d]' % (self.element_type, self.capacity)
@@ -641,15 +692,15 @@ class VariableLengthArrayType(ArrayType):
         )
 
     def compute_bit_length_set(self) -> BitLengthSet:
-        # Please refer to the corresponding implementation for the static array.
-        # The idea here is that we treat the dynamic array as a combination of static arrays of different sizes,
-        # from zero elements up to the maximum number of elements.
+        # Please refer to the corresponding implementation for the fixed-length array.
+        # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
+        # different sizes, from zero elements up to the maximum number of elements.
         output = BitLengthSet()
         for capacity in range(self.capacity + 1):
-            combinations = itertools.combinations_with_replacement(self.element_type.compute_bit_length_set(),
-                                                                   capacity)
-            output.unite_with(BitLengthSet(map(lambda c: sum(c) + self.length_prefix_bit_length, combinations)))
-
+            case = self.element_type.compute_bit_length_set().compute_elementwise_sums_of_k_multicombinations(capacity)
+            output.unite_with(case)
+        # Add the implicit array length field.
+        output.increment_each(self.length_prefix_bit_length)
         return output
 
     def __str__(self) -> str:
