@@ -681,14 +681,14 @@ class VariableLengthArrayType(ArrayType):
         return isinstance(et, UnsignedIntegerType) and (et.bit_length == 8)
 
     @property
-    def length_prefix_bit_length(self) -> int:
+    def implicit_length_field_bit_length(self) -> int:
         return self.capacity.bit_length()
 
     @property
     def bit_length_range(self) -> BitLengthRange:
         return BitLengthRange(
-            min=self.length_prefix_bit_length,
-            max=self.length_prefix_bit_length + self.element_type.bit_length_range.max * self.capacity
+            min=self.implicit_length_field_bit_length,
+            max=self.implicit_length_field_bit_length + self.element_type.bit_length_range.max * self.capacity
         )
 
     def compute_bit_length_set(self) -> BitLengthSet:
@@ -699,8 +699,8 @@ class VariableLengthArrayType(ArrayType):
         for capacity in range(self.capacity + 1):
             case = self.element_type.compute_bit_length_set().compute_elementwise_sums_of_k_multicombinations(capacity)
             output.unite_with(case)
-        # Add the implicit array length field.
-        output.increment_each(self.length_prefix_bit_length)
+        # Add the bit length of the implicit array length field.
+        output.increment_each(self.implicit_length_field_bit_length)
         return output
 
     def __str__(self) -> str:
