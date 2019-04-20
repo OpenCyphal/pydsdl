@@ -104,7 +104,10 @@ class DSDLDefinition:
         :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
         :return: The data type representation.
         """
+        log_prefix = '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
+
         if self._cached_type is not None:
+            _logger.debug('%s: Cache hit', log_prefix)
             return self._cached_type
 
         started_at = time.monotonic()
@@ -113,7 +116,6 @@ class DSDLDefinition:
         # infinite recursion on self-referential definitions.
         lookup_definitions = list(filter(lambda d: d != self, lookup_definitions))
 
-        log_prefix = '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
         _logger.info('%s: Starting processing with %d lookup definitions located in root namespaces: %s',
                      log_prefix, len(lookup_definitions),
                      ', '.join(set(map(lambda x: x.root_namespace, lookup_definitions))))
@@ -132,7 +134,7 @@ class DSDLDefinition:
 
             _logger.info('%s: Processed successfully in %.3f seconds', log_prefix, time.monotonic() - started_at)
             return self._cached_type
-        except _error.FrontendError as ex:                      # pragma: no cover
+        except _error.FrontendError as ex:                              # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
         except Exception as ex:                                         # pragma: no cover
