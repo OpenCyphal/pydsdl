@@ -1150,16 +1150,21 @@ class StructureType(CompositeType):
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
-        base_offset = BitLengthSet(base_offset or {0})
+        base_offset = BitLengthSet(base_offset or 0)
+
+        # The following variables do not serve the business logic, they are needed only for runtime cross-checking
+        _self_test_original_offset = BitLengthSet(0)
         _self_test_field_type_collection = []  # type: typing.List[SerializableType]
+
         for f in self.fields:
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
             base_offset.increment(f.data_type.compute_bit_length_set())
 
             # This is only for ensuring that the logic is functioning as intended.
             # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
+            _self_test_original_offset.increment(f.data_type.compute_bit_length_set())
             _self_test_field_type_collection.append(f.data_type)
-            assert BitLengthSet.for_struct(_self_test_field_type_collection) == base_offset
+            assert BitLengthSet.for_struct(_self_test_field_type_collection) == _self_test_original_offset
 
 
 class ServiceType(CompositeType):
@@ -1384,6 +1389,8 @@ def _unittest_composite_types() -> None:
 
 
 def _unittest_field_iterators() -> None:
+    from pytest import raises
+
     saturated = PrimitiveType.CastMode.SATURATED
     _seq_no = 0
 
@@ -1403,14 +1410,14 @@ def _unittest_field_iterators() -> None:
         for (name, ref_set), (field, real_set) in itertools.zip_longest(reference,
                                                                         t.iterate_fields_with_offsets(base_offset)):
             assert field.name == name
-            assert real_set == ref_set
+            assert real_set == ref_set, field.name + ': ' + str(real_set)
 
     a = make_type(StructureType, [
         Field(UnsignedIntegerType(10, saturated), 'a'),
         Field(BooleanType(saturated), 'b'),
         Field(VariableLengthArrayType(FloatType(32, saturated), 2), 'c'),
         Field(FixedLengthArrayType(FloatType(32, saturated), 7), 'd'),
-        PaddingField(VoidType(1)),
+        PaddingField(VoidType(3)),
     ])
 
     validate_iterator(a, [
@@ -1423,10 +1430,125 @@ def _unittest_field_iterators() -> None:
             11 + 2 + 32 * 2,
         }),
         ('', {
-            11 + 2 + 32 * 0 + 32 * 7,   # suka
+            11 + 2 + 32 * 0 + 32 * 7,
             11 + 2 + 32 * 1 + 32 * 7,
             11 + 2 + 32 * 2 + 32 * 7,
         }),
     ])
 
-    # TODO: more tests
+    a_bls_options = [
+        11 + 2 + 32 * 0 + 32 * 7 + 3,
+        11 + 2 + 32 * 1 + 32 * 7 + 3,
+        11 + 2 + 32 * 2 + 32 * 7 + 3,
+    ]
+    assert a.compute_bit_length_set() == BitLengthSet(a_bls_options)
+
+    # Testing "a" again, this time with non-zero base offset
+    validate_iterator(a, [
+        ('a', {1, 16}),
+        ('b', {1 + 10, 16 + 10}),
+        ('c', {1 + 11, 16 + 11}),
+        ('d', {
+            1 + 11 + 2 + 32 * 0,
+            1 + 11 + 2 + 32 * 1,
+            1 + 11 + 2 + 32 * 2,
+            16 + 11 + 2 + 32 * 0,
+            16 + 11 + 2 + 32 * 1,
+            16 + 11 + 2 + 32 * 2,
+        }),
+        ('', {
+            1 + 11 + 2 + 32 * 0 + 32 * 7,
+            1 + 11 + 2 + 32 * 1 + 32 * 7,
+            1 + 11 + 2 + 32 * 2 + 32 * 7,
+            16 + 11 + 2 + 32 * 0 + 32 * 7,
+            16 + 11 + 2 + 32 * 1 + 32 * 7,
+            16 + 11 + 2 + 32 * 2 + 32 * 7,
+        }),
+    ], BitLengthSet({1, 16}))
+
+    b = make_type(StructureType, [
+        Field(a, 'z'),
+        Field(VariableLengthArrayType(a, 2), 'y'),
+        Field(UnsignedIntegerType(6, saturated), 'x'),
+    ])
+
+    validate_iterator(b, [
+        ('z', {0}),
+        ('y', {
+            a_bls_options[0],
+            a_bls_options[1],
+            a_bls_options[2],
+        }),
+        ('x', {  # The lone "+2" is for the variable-length array's implicit length field
+            # First length option of z
+            a_bls_options[0] + 2 + a_bls_options[0] * 0,  # suka
+            a_bls_options[0] + 2 + a_bls_options[1] * 0,
+            a_bls_options[0] + 2 + a_bls_options[2] * 0,
+            a_bls_options[0] + 2 + a_bls_options[0] * 1,
+            a_bls_options[0] + 2 + a_bls_options[1] * 1,
+            a_bls_options[0] + 2 + a_bls_options[2] * 1,
+            a_bls_options[0] + 2 + a_bls_options[0] * 2,
+            a_bls_options[0] + 2 + a_bls_options[1] * 2,
+            a_bls_options[0] + 2 + a_bls_options[2] * 2,
+            # Second length option of z
+            a_bls_options[1] + 2 + a_bls_options[0] * 0,
+            a_bls_options[1] + 2 + a_bls_options[1] * 0,
+            a_bls_options[1] + 2 + a_bls_options[2] * 0,
+            a_bls_options[1] + 2 + a_bls_options[0] * 1,
+            a_bls_options[1] + 2 + a_bls_options[1] * 1,
+            a_bls_options[1] + 2 + a_bls_options[2] * 1,
+            a_bls_options[1] + 2 + a_bls_options[0] * 2,
+            a_bls_options[1] + 2 + a_bls_options[1] * 2,
+            a_bls_options[1] + 2 + a_bls_options[2] * 2,
+            # Third length option of z
+            a_bls_options[2] + 2 + a_bls_options[0] * 0,
+            a_bls_options[2] + 2 + a_bls_options[1] * 0,
+            a_bls_options[2] + 2 + a_bls_options[2] * 0,
+            a_bls_options[2] + 2 + a_bls_options[0] * 1,
+            a_bls_options[2] + 2 + a_bls_options[1] * 1,
+            a_bls_options[2] + 2 + a_bls_options[2] * 1,
+            a_bls_options[2] + 2 + a_bls_options[0] * 2,
+            a_bls_options[2] + 2 + a_bls_options[1] * 2,
+            a_bls_options[2] + 2 + a_bls_options[2] * 2,
+        }),
+    ])
+
+    # Ensuring the equivalency between bit length and bit offset
+    b_offset = BitLengthSet()
+    for f in b.fields:
+        b_offset.increment(f.data_type.compute_bit_length_set())
+    print('b_offset:', b_offset)
+    assert b_offset == b.compute_bit_length_set()
+    assert b_offset.is_aligned_at_byte()
+    assert not b_offset.is_aligned_at(32)
+
+    c = make_type(UnionType, [
+        Field(a, 'foo'),
+        Field(b, 'bar'),
+    ])
+
+    validate_iterator(c, [
+        ('foo', {1}),       # The offset is the same because it's a union
+        ('bar', {1}),
+    ])
+
+    validate_iterator(c, [
+        ('foo', {8 + 1}),
+        ('bar', {8 + 1}),
+    ], BitLengthSet(8))
+
+    validate_iterator(c, [
+        ('foo', {0 + 1, 4 + 1, 8 + 1}),
+        ('bar', {0 + 1, 4 + 1, 8 + 1}),
+    ], BitLengthSet({0, 4, 8}))
+
+    with raises(TypeError, match='.*request or response.*'):
+        ServiceType(name='ns.S',
+                    version=Version(1, 0),
+                    request_attributes=[],
+                    response_attributes=[],
+                    request_is_union=False,
+                    response_is_union=False,
+                    deprecated=False,
+                    fixed_port_id=None,
+                    source_file_path='').iterate_fields_with_offsets()
