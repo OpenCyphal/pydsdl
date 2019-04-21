@@ -294,7 +294,7 @@ def _ensure_minor_version_compatibility(types: typing.List[_serializable.Composi
                         ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
                             a.response_type.is_mutually_bit_compatible_with(b.response_type)
                     else:
-                        ok = a.compute_bit_length_set() == b.compute_bit_length_set()
+                        ok = a.bit_length_set == b.bit_length_set
 
                     if not ok:
                         raise MinorVersionsNotBitCompatibleError(

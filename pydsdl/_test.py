@@ -100,7 +100,8 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id == 29000
     assert p.deprecated
     assert p.version == (1, 2)
-    assert p.bit_length_range == (14, 14 + 64 * 32)
+    assert min(p.bit_length_set) == 14
+    assert max(p.bit_length_set) == 14 + 64 * 32
     assert len(p.attributes) == 3
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
@@ -179,7 +180,7 @@ def _unittest_simple() -> None:
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
-    assert req.bit_length_range == (2, 2)   # Remember this is a union
+    assert req.bit_length_set == 2   # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
@@ -202,7 +203,8 @@ def _unittest_simple() -> None:
     assert res.deprecated
     assert not res.has_fixed_port_id
     assert res.version == (0, 1)
-    assert res.bit_length_range == (14, 14 + 64 * 32)
+    assert min(res.bit_length_set) == 14
+    assert max(res.bit_length_set) == 14 + 64 * 32
 
     t = res.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
@@ -240,7 +242,8 @@ def _unittest_simple() -> None:
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
-    assert p.bit_length_range == (2, 2 + 8 + 255)
+    assert min(p.bit_length_set) == 2
+    assert max(p.bit_length_set) == 2 + 8 + 255
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
