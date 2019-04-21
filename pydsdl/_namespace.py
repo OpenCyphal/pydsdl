@@ -147,6 +147,13 @@ def read_namespace(root_namespace_directory:        str,
     for x in lookup_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
+    _logger.info('Reading %d definitions from the root namespace %r, '
+                 'with %d lookup definitions located in root namespaces: %s',
+                 len(target_dsdl_definitions),
+                 list(set(map(lambda t: t.root_namespace, target_dsdl_definitions)))[0],
+                 len(lookup_dsdl_definitions),
+                 ', '.join(set(sorted(map(lambda t: t.root_namespace, lookup_dsdl_definitions)))))
+
     # Read the constructed definitions.
     types = _read_namespace_definitions(target_dsdl_definitions,
                                         lookup_dsdl_definitions,
