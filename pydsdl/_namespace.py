@@ -76,10 +76,10 @@ class MinorVersionFixedPortIDError(_error.InvalidDefinitionError):
 
 
 # Invoked when the frontend encounters a print directive or needs to output a generic diagnostic. Arguments:
-#   - the containing definition
+#   - path to the source DSDL file
 #   - line number, one based
 #   - text to print
-PrintOutputHandler = typing.Callable[[_dsdl_definition.DSDLDefinition, int, str], None]
+PrintOutputHandler = typing.Callable[[str, int, str], None]
 
 
 def read_namespace(root_namespace_directory:        str,
@@ -195,7 +195,7 @@ def _read_namespace_definitions(target_definitions:              typing.List[_ds
             if print_output_handler:  # pragma: no branch
                 assert isinstance(line_number, int) and isinstance(text, str)
                 assert line_number > 0, 'Line numbers must be one-based'
-                print_output_handler(definition, line_number, text)
+                print_output_handler(definition.file_path, line_number, text)
         return handler
 
     types = []  # type: typing.List[_serializable.CompositeType]

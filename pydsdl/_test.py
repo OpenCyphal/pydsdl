@@ -646,9 +646,9 @@ def _unittest_parse_namespace() -> None:
     from pytest import raises
     directory = tempfile.TemporaryDirectory()
 
-    print_output = None  # type: typing.Optional[typing.Tuple[_dsdl_definition.DSDLDefinition, int, str]]
+    print_output = None  # type: typing.Optional[typing.Tuple[str, int, str]]
 
-    def print_handler(d: _dsdl_definition.DSDLDefinition, line: int, text: str) -> None:
+    def print_handler(d: str, line: int, text: str) -> None:
         nonlocal print_output
         print_output = d, line, text
 
@@ -720,7 +720,7 @@ def _unittest_parse_namespace() -> None:
         )
 
     assert print_output is not None
-    assert print_output[0].full_name == 'zubax.nested.Spartans'
+    assert '300.Spartans' in print_output[0]
     assert print_output[1] == 8
     assert print_output[2] == '{0}'
 
