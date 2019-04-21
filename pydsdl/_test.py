@@ -361,7 +361,7 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(_error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for.*'):
+    with raises(_error.InvalidDefinitionError, match=r'(?i).*not defined for.*'):
         standalone('vendor/types/A.1.0.uavcan',
                    dedent('''
                    @union
@@ -608,7 +608,7 @@ def _unittest_assert() -> None:
         []
     )
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*unions.*'):
+    with raises(_error.InvalidDefinitionError):
         _parse_definition(
             _define(
                 'ns/F.1.0.uavcan',

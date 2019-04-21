@@ -42,12 +42,13 @@ from ._serializable import CompositeType, UnionType, StructureType, ServiceType
 # Data type model - attributes.
 from ._serializable import Attribute, Field, PaddingField, Constant
 
-# Data type model - auxiliary.
-from ._serializable import BitLengthSet, ValueRange, Version
-
 # Expression model.
 from ._expression import Any
 from ._expression import Primitive, Boolean, Rational, String
 from ._expression import Container, Set
+
+# Auxiliary.
+from ._serializable import ValueRange, Version
+from ._bit_length_set import BitLengthSet
 
 sys.path = _original_sys_path

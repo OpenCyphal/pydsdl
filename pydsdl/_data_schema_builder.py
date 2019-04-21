@@ -4,8 +4,9 @@
 #
 
 import typing
-from . import _serializable
 from . import _error
+from . import _serializable
+from . import _bit_length_set
 
 
 class BitLengthAnalysisError(_error.InvalidDefinitionError):
@@ -61,7 +62,7 @@ class DataSchemaBuilder:
         self._is_union = True
 
     @property
-    def bit_length_set(self) -> _serializable.BitLengthSet:     # oh mypy, why are you so stupid
+    def bit_length_set(self) -> _bit_length_set.BitLengthSet:     # oh mypy, why are you so stupid
         # We set this flag in order to detect invalid reliance on the bit length estimates for unions:
         # we process definitions sequentially, statement-by-statement, so we can't know if there are going to be
         # extra fields added after the bit length values are computed. If we are building a regular structure,
@@ -73,9 +74,9 @@ class DataSchemaBuilder:
 
         field_bls_gen = map(lambda f: f.data_type.bit_length_set, self.fields)
         if self.union:
-            out = _serializable.BitLengthSet.for_tagged_union(field_bls_gen)
+            out = _bit_length_set.BitLengthSet.for_tagged_union(field_bls_gen)
         else:
-            out = _serializable.BitLengthSet.for_struct(field_bls_gen)
+            out = _bit_length_set.BitLengthSet.for_struct(field_bls_gen)
 
-        assert isinstance(out, _serializable.BitLengthSet) and len(out) > 0
+        assert isinstance(out, _bit_length_set.BitLengthSet) and len(out) > 0
         return out
