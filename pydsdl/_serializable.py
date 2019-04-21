@@ -698,14 +698,14 @@ class VariableLengthArrayType(ArrayType):
         return isinstance(et, UnsignedIntegerType) and (et.bit_length == 8)
 
     @property
-    def implicit_length_field_bit_length(self) -> int:
+    def length_field_bit_length(self) -> int:
         return self.capacity.bit_length()
 
     @property
     def bit_length_range(self) -> BitLengthRange:
         return BitLengthRange(
-            min=self.implicit_length_field_bit_length,
-            max=self.implicit_length_field_bit_length + self.element_type.bit_length_range.max * self.capacity
+            min=self.length_field_bit_length,
+            max=self.length_field_bit_length + self.element_type.bit_length_range.max * self.capacity
         )
 
     def compute_bit_length_set(self) -> BitLengthSet:
@@ -717,7 +717,7 @@ class VariableLengthArrayType(ArrayType):
             case = self.element_type.compute_bit_length_set().compute_elementwise_sums_of_k_multicombinations(capacity)
             output.unite_with(case)
         # Add the bit length of the implicit array length field.
-        output.increment(self.implicit_length_field_bit_length)
+        output.increment(self.length_field_bit_length)
         return output
 
     def __str__(self) -> str:
@@ -1055,9 +1055,32 @@ class CompositeType(SerializableType):
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
-        TODO: documentation
-        :param base_offset:
-        :return:
+        This method is intended for code generators. It iterates over every field (not attribute, i.e.,
+        constants are excluded) of the data type, yielding it together with its offset, where the offset is
+        represented as BitLengthSet. The offset of each field is added to the base offset, which may be specified
+        by the caller; if not specified, the base offset is assumed to be zero.
+
+        The objective of this method is to allow code generators to easily implement fully unrolled serialization and
+        deserialization routines, where "unrolled" means that upon encountering another (nested) composite type, the
+        serialization routine would not delegate its serialization to the serialization routine of the encountered type,
+        but instead would serialize it in-place, as if the field of that type was replaced with its own fields in-place.
+        The lack of delegation has very important performance implications: when the serialization routine does
+        not delegate serialization of the nested types, it can perform infinitely deep field alignment analysis,
+        thus being able to reliably statically determine whether each field of the type, including nested types
+        at arbitrarily deep levels of nesting, is aligned relative to the origin of the serialized representation
+        of the outermost type. As a result, the code generator will be able to avoid unnecessary reliance on slow
+        bit-level copy routines replacing them instead with much faster byte-level copy (like memcpy()) or even
+        plain memory aliasing, since it will be able to determine and prove the alignment of each field statically.
+
+        When invoked on a tagged union type, the method yields the same offset for every field (since that's how
+        tagged unions are serialized), where the offset equals the bit length of the implicit union tag (plus the
+        base offset, of course, if provided).
+
+        Please refer to the usage examples to see how this feature can be used.
+
+        :param base_offset: Assume the specified base offset; assume zero offset if the parameter is not provided.
+                            This parameter should be used when serializing nested composite data types.
+        :return: A generator of (Field, BitLengthSet).
         """
         raise NotImplementedError
 
@@ -1119,6 +1142,7 @@ class UnionType(CompositeType):
 
     @property
     def tag_bit_length(self) -> int:
+        assert (self.number_of_variants - 1) > 0
         return (self.number_of_variants - 1).bit_length()
 
     @property
