@@ -269,7 +269,7 @@ def _unittest_error() -> None:
     with raises(_error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain less than.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain fewer than.*'):
         standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
@@ -358,7 +358,7 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(_error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for less.*'):
+    with raises(_error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for.*'):
         standalone('vendor/types/A.1.0.uavcan',
                    dedent('''
                    @union

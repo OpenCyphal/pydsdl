@@ -251,8 +251,8 @@ class BitLengthSet:
         ts = list(member_data_types)
         del member_data_types
         if len(ts) < UnionType.MIN_NUMBER_OF_VARIANTS:
-            raise MalformedUnionError('Cannot perform bit length analysis on less than {0} members because '
-                                      'tagged unions are not defined for less than {0} variants'
+            raise MalformedUnionError('Cannot perform bit length analysis on fewer than {0} members because '
+                                      'tagged unions are not defined for fewer than {0} variants'
                                       .format(UnionType.MIN_NUMBER_OF_VARIANTS))
         # Unions are easy to handle because when serialized, a union is essentially just a single field,
         # prefixed with a fixed-length integer tag. So we just build a full set of combinations and then
@@ -1106,7 +1106,7 @@ class UnionType(CompositeType):
                                         source_file_path=source_file_path)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
-            raise MalformedUnionError('A tagged union cannot contain less than %d variants' %
+            raise MalformedUnionError('A tagged union cannot contain fewer than %d variants' %
                                       self.MIN_NUMBER_OF_VARIANTS)
 
         for a in attributes:
