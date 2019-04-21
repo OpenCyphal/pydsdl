@@ -110,6 +110,7 @@ class DeprecatedDependencyError(TypeParameterError):
 
 class SerializableType(_expression.Any):
     """
+    Type objects are immutable. Immutability enables lazy evaluation of properties and hashability.
     Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
         - uavcan.node.Heartbeat.1.0[<=36]
         - truncated float16[<=36]
@@ -117,22 +118,37 @@ class SerializableType(_expression.Any):
 
     TYPE_NAME = 'metaserializable'
 
+    def __init__(self):
+        super(SerializableType, self).__init__()
+        self._cached_bit_length_set = None  # type: typing.Optional[BitLengthSet]
+
     @property
     def bit_length_set(self) -> BitLengthSet:     # pragma: no cover
         """
         A set of all possible bit length values of serialized representations of the data type.
         Refer to the specification for the background. This method must never return an empty set.
+        This is an expensive operation, so the result is cached in the base class. Derived classes should not
+        override this property themselves; they must implement the method _compute_bit_length_set() instead.
         """
-        raise NotImplementedError
+        if self._cached_bit_length_set is None:
+            self._cached_bit_length_set = self._compute_bit_length_set()
+        return self._cached_bit_length_set
 
     def _attribute(self, name: _expression.String) -> _expression.Any:
-        if name.native_value == '_bit_length_':
+        if name.native_value == '_bit_length_':  # Experimental non-standard extension
             try:
                 return _expression.Set(map(_expression.Rational, self.bit_length_set))
             except TypeError:
                 pass
 
         return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
+
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        """
+        This is an expensive operation, so the result is cached in the base class. Derived classes should not
+        override the bit_length_set property themselves; they must implement this method instead.
+        """
+        raise NotImplementedError
 
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
@@ -173,8 +189,7 @@ class PrimitiveType(SerializableType):
         """All primitives are of a fixed bit length, hence just one value is enough."""
         return self._bit_length
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:
+    def _compute_bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
     @property
@@ -359,8 +374,7 @@ class VoidType(SerializableType):
     def bit_length(self) -> int:
         return self._bit_length
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:
+    def _compute_bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
     def __str__(self) -> str:
@@ -413,8 +427,7 @@ class ArrayType(SerializableType):
         """
         return False
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:     # pragma: no cover
+    def _compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
         raise NotImplementedError
 
     def __str__(self) -> str:   # pragma: no cover
@@ -427,8 +440,7 @@ class FixedLengthArrayType(ArrayType):
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:
+    def _compute_bit_length_set(self) -> BitLengthSet:
         # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
         # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
@@ -484,8 +496,7 @@ class VariableLengthArrayType(ArrayType):
     def length_field_bit_length(self) -> int:
         return self.capacity.bit_length()
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:
+    def _compute_bit_length_set(self) -> BitLengthSet:
         # Please refer to the corresponding implementation for the fixed-length array.
         # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
         # different sizes, from zero elements up to the maximum number of elements.
@@ -697,6 +708,8 @@ class CompositeType(SerializableType):
                  deprecated:    bool,
                  fixed_port_id: typing.Optional[int],
                  source_file_path:  str):
+        super(CompositeType, self).__init__()
+
         self._name = str(name).strip()
         self._version = version
         self._attributes = list(attributes)
@@ -825,10 +838,6 @@ class CompositeType(SerializableType):
         """Empty if this is a synthesized type, e.g. a service request or response section."""
         return self._source_file_path
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:     # pragma: no cover
-        raise NotImplementedError
-
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
@@ -871,6 +880,9 @@ class CompositeType(SerializableType):
                 return c.value
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        raise NotImplementedError
 
     def __str__(self) -> str:
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
@@ -922,10 +934,6 @@ class UnionType(CompositeType):
         assert (self.number_of_variants - 1) > 0
         return (self.number_of_variants - 1).bit_length()
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self.fields))
-
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         base_offset = BitLengthSet(base_offset or {0})
@@ -933,12 +941,11 @@ class UnionType(CompositeType):
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self.fields))
+
 
 class StructureType(CompositeType):
-    @property
-    def bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
-
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         base_offset = BitLengthSet(base_offset or 0)
@@ -956,6 +963,9 @@ class StructureType(CompositeType):
             _self_test_original_offset.increment(f.data_type.bit_length_set)
             _self_test_field_bls_collection.append(f.data_type.bit_length_set)
             assert BitLengthSet.for_struct(_self_test_field_bls_collection) == _self_test_original_offset
+
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
 
 
 class ServiceType(CompositeType):
@@ -1005,13 +1015,12 @@ class ServiceType(CompositeType):
     def response_type(self) -> CompositeType:
         return self._response_type
 
-    @property
-    def bit_length_set(self) -> BitLengthSet:     # pragma: no cover
-        raise TypeError('Service types are not directly serializable. Use either request or response.')
-
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
+
+    def _compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
+        raise TypeError('Service types are not directly serializable. Use either request or response.')
 
 
 def _check_name(name: str) -> None:
