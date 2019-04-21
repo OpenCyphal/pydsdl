@@ -77,12 +77,10 @@ class BitLengthSet:
                         2+4, 2+5, 2+6,
                         3+4, 3+5, 3+6} = {5, 6, 7, 8, 9}
         """
-        self._value = BitLengthSet.compute_elementwise_sums_of_cartesian_product([
-            self or BitLengthSet(0),
-            BitLengthSet(bit_length_set_or_scalar)
-        ])._value
+        self._value = BitLengthSet.elementwise_sum_cartesian_product([self or BitLengthSet(0),
+                                                                      BitLengthSet(bit_length_set_or_scalar)])._value
 
-    def compute_elementwise_sums_of_k_multicombinations(self, k: int) -> 'BitLengthSet':
+    def elementwise_sum_k_multicombinations(self, k: int) -> 'BitLengthSet':
         """
         This is a special case of the elementwise sum of a Cartesian product, implemented in adjacent method.
 
@@ -102,7 +100,7 @@ class BitLengthSet:
         return BitLengthSet(elementwise_sums)  # type: ignore
 
     @staticmethod
-    def compute_elementwise_sums_of_cartesian_product(sets: typing.Iterable['BitLengthSet']) -> 'BitLengthSet':
+    def elementwise_sum_cartesian_product(sets: typing.Iterable['BitLengthSet']) -> 'BitLengthSet':
         """
         This operation is fundamental for bit length and bit offset (which are, generally, the same thing) computation.
 
@@ -148,7 +146,7 @@ class BitLengthSet:
         As far as bit length sets are concerned, structures are similar to fixed-length arrays. The difference
         here is that the length value sets are not homogeneous across fields, as they can be of different types.
         """
-        return BitLengthSet.compute_elementwise_sums_of_cartesian_product(member_bit_length_sets) \
+        return BitLengthSet.elementwise_sum_cartesian_product(member_bit_length_sets) \
             or BitLengthSet(0)  # Empty output not permitted
 
     @staticmethod
