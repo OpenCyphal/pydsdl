@@ -16,6 +16,7 @@ class BitLengthSet:
     Comparable with itself, plain integer, and native sets of integers.
     When cast to bool, evaluates to True unless empty.
     The alignment check methods ensure whether all of the contained offset values match the specified alignment goal.
+    This class, just like the UAVCAN specification, assumes that one byte contains eight bits.
     """
 
     def __init__(self, values: typing.Optional[typing.Union[typing.Iterable[int], int]] = None):

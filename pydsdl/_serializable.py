@@ -5,6 +5,7 @@
 
 import re
 import enum
+import math
 import string
 import typing
 import itertools
@@ -166,6 +167,7 @@ class SerializableType(_expression.Any):
 
 class PrimitiveType(SerializableType):
     MAX_BIT_LENGTH = 64
+    BITS_IN_BYTE = 8  # Defined in the UAVCAN specification
 
     class CastMode(enum.Enum):
         SATURATED = 0
@@ -184,13 +186,24 @@ class PrimitiveType(SerializableType):
         if self._bit_length > self.MAX_BIT_LENGTH:
             raise InvalidBitLengthError('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
 
+        self._is_standard_size = \
+            (self._bit_length >= self.BITS_IN_BYTE) and (2 ** round(math.log2(self._bit_length)) == self._bit_length)
+
     @property
     def bit_length(self) -> int:
         """All primitives are of a fixed bit length, hence just one value is enough."""
         return self._bit_length
 
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet(self.bit_length)
+    @property
+    def standard_length(self) -> bool:
+        """
+        "Standard length" means that values of such bit length are commonly used in modern computer microarchitectures,
+        such as uint8, float64, int32, and so on. Booleans are excluded.
+        More precisely, a primitive is said to be "standard length" when the following hold:
+            bit_length >= 8
+            2**round(log2(bit_length)) == bit_length.
+        """
+        return self._is_standard_size
 
     @property
     def cast_mode(self) -> 'PrimitiveType.CastMode':
@@ -203,6 +216,9 @@ class PrimitiveType(SerializableType):
             self.CastMode.SATURATED: 'saturated',
             self.CastMode.TRUNCATED: 'truncated',
         }[self.cast_mode]
+
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet(self.bit_length)
 
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
@@ -355,6 +371,13 @@ def _unittest_primitive() -> None:
     assert a != b
     assert b == BooleanType(PrimitiveType.CastMode.SATURATED)
     assert b != 123    # Not implemented
+
+    for bl in range(1, PrimitiveType.MAX_BIT_LENGTH + 1):
+        if bl > 1:
+            t = UnsignedIntegerType(bl, PrimitiveType.CastMode.SATURATED)  # type: PrimitiveType
+        else:
+            t = BooleanType(PrimitiveType.CastMode.SATURATED)
+        assert t.standard_length == (t.bit_length in {8, 16, 32, 64, 128, 256})
 
 
 class VoidType(SerializableType):
@@ -866,7 +889,10 @@ class CompositeType(SerializableType):
 
         :param base_offset: Assume the specified base offset; assume zero offset if the parameter is not provided.
                             This parameter should be used when serializing nested composite data types.
-        :return: A generator of (Field, BitLengthSet).
+
+        :return: A generator of (Field, BitLengthSet). Each instance of BitLengthSet yielded by the generator is
+                 a dedicated copy, meaning that the consumer can mutate the returned instances arbitrarily without
+                 affecting future values. It is guaranteed that each yielded instance of BitLengthSet is non-empty.
         """
         raise NotImplementedError
 
