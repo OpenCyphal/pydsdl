@@ -20,37 +20,64 @@ def _print_handler(file: str, line: int, text: str) -> None:
     print('%s:%d:' % (file, line), text)
 
 
-def _show_fields(field_prefix: str, t: pydsdl.CompositeType, base_offset: pydsdl.BitLengthSet) -> None:
+def _show_fields(indent_level: int,
+                 field_prefix: str,
+                 t: pydsdl.CompositeType,
+                 base_offset: pydsdl.BitLengthSet) -> None:
+    # This function is intended to be a crude demonstration of how the static bit layout analysis can be leveraged
+    # to generate very efficient serialization and deserialization routines. With PyDSDL it is possible to determine
+    # whether any given field at an arbitrary level of nesting always meets a certain alignment goal. This information
+    # allows the code generator to choose the most efficient serialization/deserialization strategy. For example:
+    #
+    #   - If every field of a data structure is a standard-bit-length field (e.g., uint64) and its offset meets the
+    #     native alignment requirement, the whole structure can be serialized and deserialized by simple memcpy().
+    #     We call it "zero-cost serialization".
+    #
+    #   - Otherwise, if a field is standard-bit-length and its offset is always a multiple of eight bits, the field
+    #     itself can be serialized by memcpy(). This case differs from the above in that the whole structure may not
+    #     be zero-cost-serializable, but some or all of its fields still may be.
+    #
+    #  - Various other optimizations are possible depending on whether the bit length of a field is a multiple of
+    #    eight bits and/or whether its base offset is byte-aligned. Many optimization possibilities depend on a
+    #    particular programming language and platform, so they will not be reviewed here in detail. Interested readers
+    #    are advised to consult with existing implementations.
+    #
+    #  - In the worst case, if none of the possible optimizations are discoverable statically, the code generator will
+    #    resort to bit-level serialization, where a field is serialized/deserialized bit-by-bit. Such fields are
+    #    extremely uncommon, and a data type designer can easily ensure that their data type definitions are free from
+    #    such fields by using @assert expressions checking against _offset_. More info in the specification.
+    #
+    # The key part of static layout analysis is the class pydsdl.BitLengthSet; please read its documentation.
+    indent = ' ' * indent_level * 4
     for field, offset in t.iterate_fields_with_offsets(base_offset):
         field_type = field.data_type
         prefixed_name = '.'.join(filter(None, [field_prefix, field.name or '(padding)']))
 
         if isinstance(field_type, pydsdl.PrimitiveType):
-            print('\t', prefixed_name, '# byte-aligned: %s; standard size: %s; standard-aligned: %s' %
+            print(indent, prefixed_name, '# byte-aligned: %s; standard bit length: %s; standard-aligned: %s' %
                   (offset.is_aligned_at_byte(),
-                   field_type.standard_length,
-                   field_type.standard_length and offset.is_aligned_at(field_type.bit_length)))
+                   field_type.standard_bit_length,
+                   field_type.standard_bit_length and offset.is_aligned_at(field_type.bit_length)))
 
         elif isinstance(field_type, pydsdl.VoidType):
-            print('\t', prefixed_name)
+            print(indent, prefixed_name)
 
         elif isinstance(field_type, pydsdl.VariableLengthArrayType):
             first_element_offset = offset + field_type.length_field_bit_length
             element_length = field_type.element_type.bit_length_set
             all_elements_byte_aligned = \
                 first_element_offset.is_aligned_at_byte() and element_length.is_aligned_at_byte()
-            print('\t', prefixed_name, '# length field is byte-aligned: %s; all elements are byte-aligned: %s' %
+            print(indent, prefixed_name, '# length field is byte-aligned: %s; every element is byte-aligned: %s' %
                   (offset.is_aligned_at_byte(), all_elements_byte_aligned))
 
         elif isinstance(field_type, pydsdl.FixedLengthArrayType):
             element_length = field_type.element_type.bit_length_set
-            print('\t', prefixed_name, '# all elements are byte-aligned:',
+            print(indent, prefixed_name, '# every element is byte-aligned:',
                   offset.is_aligned_at_byte() and element_length.is_aligned_at_byte())
 
         elif isinstance(field_type, pydsdl.CompositeType):
-            print('\t', '# unrolling a composite field', field)
-            _show_fields(prefixed_name, field_type, offset)
-            print('\t', '# end of unrolled composite field', field)
+            print(indent, str(field) + ':')
+            _show_fields(indent_level + 1, prefixed_name, field_type, offset)
 
         else:
             raise RuntimeError('Unhandled type: %r' % field_type)
@@ -66,15 +93,14 @@ def _main():
         print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
     else:
         for t in compound_types:
-            # Service types are not directly serializable (see the UAVCAN specification)
             if isinstance(t, pydsdl.ServiceType):
                 print(t, 'request:')
-                _show_fields('request', t.request_type, pydsdl.BitLengthSet())
+                _show_fields(1, 'request', t.request_type, pydsdl.BitLengthSet())
                 print(t, 'response:')
-                _show_fields('response', t.response_type, pydsdl.BitLengthSet())
+                _show_fields(1, 'response', t.response_type, pydsdl.BitLengthSet())
             else:
                 print(t, ':', sep='')
-                _show_fields('', t, pydsdl.BitLengthSet())
+                _show_fields(1, '', t, pydsdl.BitLengthSet())
             print()
 
         print('%d types parsed in %.1f seconds' % (len(compound_types), time.monotonic() - started_at))

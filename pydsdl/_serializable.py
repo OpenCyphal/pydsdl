@@ -186,7 +186,7 @@ class PrimitiveType(SerializableType):
         if self._bit_length > self.MAX_BIT_LENGTH:
             raise InvalidBitLengthError('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
 
-        self._is_standard_size = \
+        self._standard_bit_length = \
             (self._bit_length >= self.BITS_IN_BYTE) and (2 ** round(math.log2(self._bit_length)) == self._bit_length)
 
     @property
@@ -195,7 +195,7 @@ class PrimitiveType(SerializableType):
         return self._bit_length
 
     @property
-    def standard_length(self) -> bool:
+    def standard_bit_length(self) -> bool:
         """
         "Standard length" means that values of such bit length are commonly used in modern computer microarchitectures,
         such as uint8, float64, int32, and so on. Booleans are excluded.
@@ -203,7 +203,7 @@ class PrimitiveType(SerializableType):
             bit_length >= 8
             2**round(log2(bit_length)) == bit_length.
         """
-        return self._is_standard_size
+        return self._standard_bit_length
 
     @property
     def cast_mode(self) -> 'PrimitiveType.CastMode':
@@ -377,7 +377,7 @@ def _unittest_primitive() -> None:
             t = UnsignedIntegerType(bl, PrimitiveType.CastMode.SATURATED)  # type: PrimitiveType
         else:
             t = BooleanType(PrimitiveType.CastMode.SATURATED)
-        assert t.standard_length == (t.bit_length in {8, 16, 32, 64, 128, 256})
+        assert t.standard_bit_length == (t.bit_length in {8, 16, 32, 64, 128, 256})
 
 
 class VoidType(SerializableType):
