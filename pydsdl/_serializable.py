@@ -118,7 +118,7 @@ class SerializableType(_expression.Any):
 
     TYPE_NAME = 'metaserializable'
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(SerializableType, self).__init__()
         self._cached_bit_length_set = None  # type: typing.Optional[BitLengthSet]
 

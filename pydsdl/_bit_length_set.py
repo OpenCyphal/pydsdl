@@ -19,6 +19,10 @@ class BitLengthSet:
     """
 
     def __init__(self, values: typing.Optional[typing.Union[typing.Iterable[int], int]] = None):
+        """
+        The source container is always deep-copied.
+        If a scalar integer is supplied, it is treated as a container of one element.
+        """
         if values is None:
             values = set()
         elif isinstance(values, int):
@@ -50,7 +54,7 @@ class BitLengthSet:
 
     def unite_with(self, other: 'BitLengthSet') -> None:
         """
-        Modifies the object so that it is a union of itself with another bit set.
+        Modifies the object so that it is a union of itself with another bit length set.
         """
         self._value |= BitLengthSet(other)._value
 
