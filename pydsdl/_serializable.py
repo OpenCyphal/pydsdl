@@ -463,6 +463,25 @@ class FixedLengthArrayType(ArrayType):
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
 
+    def enumerate_elements_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
+        """
+        This is a convenience method for code generation. Its behavior mimics that of iterate_fields_with_offsets()
+        for structure types, except that we iterate indexes instead of fields since we don't have fields in arrays.
+        For each element in the fixed array we return its index and the offset represented as a bit length set
+        counting from the supplied base. If the base is not supplied, it is assumed to equal {0}.
+        """
+        base_offset = BitLengthSet(base_offset or 0)
+        _self_test_base_offset = BitLengthSet(0)
+        for index in range(self.capacity):
+            yield index, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
+            base_offset.increment(self.element_type.bit_length_set)
+
+            # This is only for ensuring that the logic is functioning as intended.
+            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
+            assert self.element_type.bit_length_set.elementwise_sum_k_multicombinations(index) == _self_test_base_offset
+            _self_test_base_offset.increment(self.element_type.bit_length_set)
+
     def _compute_bit_length_set(self) -> BitLengthSet:
         # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
@@ -502,6 +521,7 @@ def _unittest_fixed_array() -> None:
 
     small = FixedLengthArrayType(su8, 2)
     assert small.bit_length_set == {16}
+    assert list(small.enumerate_elements_with_offsets()) == [(0, BitLengthSet(0)), (1, BitLengthSet(8))]
 
 
 class VariableLengthArrayType(ArrayType):

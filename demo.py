@@ -63,17 +63,14 @@ def _show_fields(indent_level: int,
             print(indent, prefixed_name)
 
         elif isinstance(field_type, pydsdl.VariableLengthArrayType):
-            first_element_offset = offset + field_type.length_field_bit_length
-            element_length = field_type.element_type.bit_length_set
-            all_elements_byte_aligned = \
-                first_element_offset.is_aligned_at_byte() and element_length.is_aligned_at_byte()
+            offset_of_every_element = offset + field_type.bit_length_set  # All possible element offsets for this array
             print(indent, prefixed_name, '# length field is byte-aligned: %s; every element is byte-aligned: %s' %
-                  (offset.is_aligned_at_byte(), all_elements_byte_aligned))
+                  (offset.is_aligned_at_byte(), offset_of_every_element.is_aligned_at_byte()))
 
         elif isinstance(field_type, pydsdl.FixedLengthArrayType):
-            element_length = field_type.element_type.bit_length_set
-            print(indent, prefixed_name, '# every element is byte-aligned:',
-                  offset.is_aligned_at_byte() and element_length.is_aligned_at_byte())
+            for index, element_offset in field_type.enumerate_elements_with_offsets(offset):
+                # Real implementations would recurse; this is not shown in this demo for compactness.
+                print(indent, prefixed_name + '[%d]' % index, '# byte-aligned:', element_offset.is_aligned_at_byte())
 
         elif isinstance(field_type, pydsdl.CompositeType):
             print(indent, str(field) + ':')
