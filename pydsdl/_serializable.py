@@ -310,10 +310,12 @@ class FloatType(ArithmeticType):
         super(FloatType, self).__init__(bit_length, cast_mode)
 
         try:
+            frac = fractions.Fraction
+            # The limits are exact
             self._magnitude = {
-                16: fractions.Fraction(65504),
-                32: fractions.Fraction('3.40282346638528859812e+38'),
-                64: fractions.Fraction('1.79769313486231570815e+308'),
+                16: (2 ** 0x00F) * (2 - frac(2) ** frac(-10)),   # IEEE 754 binary16
+                32: (2 ** 0x07F) * (2 - frac(2) ** frac(-23)),   # IEEE 754 binary32
+                64: (2 ** 0x3FF) * (2 - frac(2) ** frac(-52)),   # IEEE 754 binary64
             }[self.bit_length]  # type: fractions.Fraction
         except KeyError:
             raise InvalidBitLengthError('Invalid bit length for float type: %d' % bit_length) from None
@@ -328,7 +330,7 @@ class FloatType(ArithmeticType):
 
 
 def _unittest_primitive() -> None:
-    from pytest import raises
+    from pytest import raises, approx
 
     assert str(BooleanType(PrimitiveType.CastMode.SATURATED)) == 'saturated bool'
 
@@ -343,6 +345,12 @@ def _unittest_primitive() -> None:
     assert str(FloatType(64, PrimitiveType.CastMode.SATURATED)) == 'saturated float64'
     assert FloatType(32, PrimitiveType.CastMode.SATURATED).bit_length_set == 32
     assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-65504, +65504)
+
+    assert FloatType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == \
+        (approx(-3.4028234664e+38), approx(+3.4028234664e+38))
+
+    assert FloatType(64, PrimitiveType.CastMode.SATURATED).inclusive_value_range == \
+        (approx(-1.7976931348623157e+308), approx(+1.7976931348623157e+308))
 
     with raises(InvalidBitLengthError):
         FloatType(8, PrimitiveType.CastMode.TRUNCATED)
