@@ -10,7 +10,7 @@ if sys.version_info[:2] < (3, 5):   # pragma: no cover
     print('A newer version of Python is required', file=sys.stderr)
     sys.exit(1)
 
-__version__ = 0, 7, 0
+__version__ = 0, 7, 1
 __license__ = 'MIT'
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.

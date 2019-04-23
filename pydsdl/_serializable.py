@@ -258,9 +258,6 @@ class IntegerType(ArithmeticType):
                  cast_mode: PrimitiveType.CastMode):
         super(IntegerType, self).__init__(bit_length, cast_mode)
 
-        if self._bit_length < 2:
-            raise InvalidBitLengthError('Bit length of integer types cannot be less than 2')
-
     @property
     def inclusive_value_range(self) -> ValueRange:   # pragma: no cover
         raise NotImplementedError
@@ -274,6 +271,9 @@ class SignedIntegerType(IntegerType):
                  bit_length: int,
                  cast_mode: PrimitiveType.CastMode):
         super(SignedIntegerType, self).__init__(bit_length, cast_mode)
+
+        if self._bit_length < 2:
+            raise InvalidBitLengthError('Bit length of signed integer types cannot be less than 2')
 
         if cast_mode != PrimitiveType.CastMode.SATURATED:
             raise InvalidCastModeError('Invalid cast mode for signed integer: %r' % cast_mode)
@@ -354,7 +354,7 @@ def _unittest_primitive() -> None:
         SignedIntegerType(0, PrimitiveType.CastMode.SATURATED)
 
     with raises(InvalidBitLengthError):
-        UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED)
+        UnsignedIntegerType(0, PrimitiveType.CastMode.SATURATED)
 
     with raises(InvalidBitLengthError):
         UnsignedIntegerType(65, PrimitiveType.CastMode.TRUNCATED)
@@ -509,6 +509,8 @@ class VariableLengthArrayType(ArrayType):
                  element_type: SerializableType,
                  capacity: int):
         super(VariableLengthArrayType, self).__init__(element_type, capacity)
+        # Construct once to allow reference equality checks
+        self._length_field_type = UnsignedIntegerType(self.capacity.bit_length(), PrimitiveType.CastMode.TRUNCATED)
 
     @property
     def string_like(self) -> bool:
@@ -516,8 +518,12 @@ class VariableLengthArrayType(ArrayType):
         return isinstance(et, UnsignedIntegerType) and (et.bit_length == 8)
 
     @property
-    def length_field_bit_length(self) -> int:
-        return self.capacity.bit_length()
+    def length_field_type(self) -> UnsignedIntegerType:
+        """
+        Returns the best-matching unsigned integer type of the implicit array length field.
+        This is convenient for code generation.
+        """
+        return self._length_field_type
 
     def _compute_bit_length_set(self) -> BitLengthSet:
         # Please refer to the corresponding implementation for the fixed-length array.
@@ -528,7 +534,7 @@ class VariableLengthArrayType(ArrayType):
             case = self.element_type.bit_length_set.elementwise_sum_k_multicombinations(capacity)
             output.unite_with(case)
         # Add the bit length of the implicit array length field.
-        output.increment(self.length_field_bit_length)
+        output.increment(self.length_field_type.bit_length)
         return output
 
     def __str__(self) -> str:
@@ -951,19 +957,27 @@ class UnionType(CompositeType):
             if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
                 raise MalformedUnionError('Padding fields not allowed in unions')
 
+        # Construct once to allow reference equality checks
+        assert (self.number_of_variants - 1) > 0
+        tag_bit_length = (self.number_of_variants - 1).bit_length()
+        self._tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
+
     @property
     def number_of_variants(self) -> int:
         return len(self.fields)
 
     @property
-    def tag_bit_length(self) -> int:
-        assert (self.number_of_variants - 1) > 0
-        return (self.number_of_variants - 1).bit_length()
+    def tag_field_type(self) -> UnsignedIntegerType:
+        """
+        Returns the best-matching unsigned integer type of the implicit union tag field.
+        This is convenient for code generation.
+        """
+        return self._tag_field_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         base_offset = BitLengthSet(base_offset or {0})
-        base_offset.increment(self.tag_bit_length)
+        base_offset.increment(self.tag_field_type.bit_length)
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
