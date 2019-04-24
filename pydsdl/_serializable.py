@@ -124,7 +124,7 @@ class SerializableType(_expression.Any):
         self._cached_bit_length_set = None  # type: typing.Optional[BitLengthSet]
 
     @property
-    def bit_length_set(self) -> BitLengthSet:     # pragma: no cover
+    def bit_length_set(self) -> BitLengthSet:
         """
         A set of all possible bit length values of serialized representations of the data type.
         Refer to the specification for the background. This method must never return an empty set.

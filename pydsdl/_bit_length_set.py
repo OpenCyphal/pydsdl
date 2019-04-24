@@ -118,7 +118,7 @@ class BitLengthSet:
 
     def elementwise_sum_k_multicombinations(self, k: int) -> 'BitLengthSet':
         """
-        This is a special case of the elementwise sum of a Cartesian product, implemented in adjacent method.
+        This is a special case of elementwise_sum_cartesian_product().
 
         One can replace this method with the aforementioned general case method and the behavior would not change;
         however, we need this special case method for performance reasons. When dealing with arrays (either fixed- or
