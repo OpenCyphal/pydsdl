@@ -3,12 +3,12 @@
 # This software is distributed under the terms of the MIT License.
 #
 
-import os
-import sys
+import os as _os
+import sys as _sys
 
-if sys.version_info[:2] < (3, 5):   # pragma: no cover
-    print('A newer version of Python is required', file=sys.stderr)
-    sys.exit(1)
+if _sys.version_info[:2] < (3, 5):   # pragma: no cover
+    print('A newer version of Python is required', file=_sys.stderr)
+    _sys.exit(1)
 
 __version__ = 0, 7, 3
 __license__ = 'MIT'
@@ -20,8 +20,8 @@ __license__ = 'MIT'
 # when done, we restore the path back to its original value. One implication is that it won't be possible
 # to import stuff dynamically after the initialization is finished (e.g., function-local imports won't be
 # able to reach the third-party stuff), but we don't care.
-_original_sys_path = sys.path
-sys.path = [os.path.join(os.path.dirname(__file__), 'third_party')] + sys.path
+_original_sys_path = _sys.path
+_sys.path = [_os.path.join(_os.path.dirname(__file__), 'third_party')] + _sys.path
 
 # Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
 from ._namespace import read_namespace
@@ -51,4 +51,4 @@ from ._expression import Container, Set
 from ._serializable import ValueRange, Version
 from ._bit_length_set import BitLengthSet
 
-sys.path = _original_sys_path
+_sys.path = _original_sys_path
