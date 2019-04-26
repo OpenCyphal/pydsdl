@@ -18,7 +18,7 @@ statement_constant      = type _ identifier _? "=" _? expression
 statement_field         = type _ identifier
 statement_padding_field = type_void ""  # The trailing empty symbol is to prevent the node from being optimized away.
 
-statement_service_response_marker = "---"  # Separates request/response, specifies that the definition is a service.
+statement_service_response_marker = ~r"---+"  # Separates request/response, specifies that the definition is a service.
 
 statement_directive = statement_directive_with_expression
                     / statement_directive_without_expression
