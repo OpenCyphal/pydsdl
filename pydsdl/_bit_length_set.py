@@ -343,10 +343,10 @@ def _unittest_bit_length_set() -> None:
     assert {1, 2, 3} + BitLengthSet([4, 5, 6]) == {5, 6, 7, 8, 9}
 
     with raises(TypeError):
-        BitLengthSet([4, 5, 6]) + '1'
+        assert BitLengthSet([4, 5, 6]) + '1'
 
     with raises(TypeError):
-        '1' + BitLengthSet([4, 5, 6])
+        assert '1' + BitLengthSet([4, 5, 6])
 
     with raises(TypeError):
         s = BitLengthSet([4, 5, 6])
