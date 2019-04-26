@@ -152,6 +152,10 @@ class SerializableType(_expression.Any):
         raise NotImplementedError
 
     def __str__(self) -> str:   # pragma: no cover
+        """
+        Must return a DSDL spec-compatible textual representation of the type.
+        The string representation is used for determining equivalency by the comparison operator __eq__().
+        """
         raise NotImplementedError
 
     def __hash__(self) -> int:
