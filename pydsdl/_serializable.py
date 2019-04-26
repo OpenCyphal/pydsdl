@@ -754,7 +754,7 @@ def _unittest_attribute() -> None:
 
 
 class CompositeType(SerializableType):
-    MAX_NAME_LENGTH = 63
+    MAX_NAME_LENGTH = 50
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
 
