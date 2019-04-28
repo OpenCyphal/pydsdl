@@ -100,7 +100,8 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id == 29000
     assert p.deprecated
     assert p.version == (1, 2)
-    assert p.bit_length_range == (14, 14 + 64 * 32)
+    assert min(p.bit_length_set) == 14
+    assert max(p.bit_length_set) == 14 + 64 * 32
     assert len(p.attributes) == 3
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
@@ -179,7 +180,7 @@ def _unittest_simple() -> None:
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
-    assert req.bit_length_range == (2, 2)   # Remember this is a union
+    assert req.bit_length_set == 2   # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
@@ -202,7 +203,8 @@ def _unittest_simple() -> None:
     assert res.deprecated
     assert not res.has_fixed_port_id
     assert res.version == (0, 1)
-    assert res.bit_length_range == (14, 14 + 64 * 32)
+    assert min(res.bit_length_set) == 14
+    assert max(res.bit_length_set) == 14 + 64 * 32
 
     t = res.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
@@ -240,7 +242,8 @@ def _unittest_simple() -> None:
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
-    assert p.bit_length_range == (2, 2 + 8 + 255)
+    assert min(p.bit_length_set) == 2
+    assert max(p.bit_length_set) == 2 + 8 + 255
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
@@ -269,7 +272,7 @@ def _unittest_error() -> None:
     with raises(_error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain less than.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain fewer than.*'):
         standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
@@ -358,7 +361,7 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(_error.InvalidDefinitionError, match=r'(?i).*tagged unions are not defined for less.*'):
+    with raises(_error.InvalidDefinitionError, match=r'(?i).*not defined for.*'):
         standalone('vendor/types/A.1.0.uavcan',
                    dedent('''
                    @union
@@ -605,7 +608,7 @@ def _unittest_assert() -> None:
         []
     )
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*unions.*'):
+    with raises(_error.InvalidDefinitionError):
         _parse_definition(
             _define(
                 'ns/F.1.0.uavcan',
@@ -646,9 +649,9 @@ def _unittest_parse_namespace() -> None:
     from pytest import raises
     directory = tempfile.TemporaryDirectory()
 
-    print_output = None  # type: typing.Optional[typing.Tuple[_dsdl_definition.DSDLDefinition, int, str]]
+    print_output = None  # type: typing.Optional[typing.Tuple[str, int, str]]
 
-    def print_handler(d: _dsdl_definition.DSDLDefinition, line: int, text: str) -> None:
+    def print_handler(d: str, line: int, text: str) -> None:
         nonlocal print_output
         print_output = d, line, text
 
@@ -720,7 +723,7 @@ def _unittest_parse_namespace() -> None:
         )
 
     assert print_output is not None
-    assert print_output[0].full_name == 'zubax.nested.Spartans'
+    assert '300.Spartans' in print_output[0]
     assert print_output[1] == 8
     assert print_output[2] == '{0}'
 

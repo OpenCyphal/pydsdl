@@ -76,10 +76,10 @@ class MinorVersionFixedPortIDError(_error.InvalidDefinitionError):
 
 
 # Invoked when the frontend encounters a print directive or needs to output a generic diagnostic. Arguments:
-#   - the containing definition
+#   - path to the source DSDL file
 #   - line number, one based
 #   - text to print
-PrintOutputHandler = typing.Callable[[_dsdl_definition.DSDLDefinition, int, str], None]
+PrintOutputHandler = typing.Callable[[str, int, str], None]
 
 
 def read_namespace(root_namespace_directory:        str,
@@ -147,6 +147,13 @@ def read_namespace(root_namespace_directory:        str,
     for x in lookup_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
+    _logger.info('Reading %d definitions from the root namespace %r, '
+                 'with %d lookup definitions located in root namespaces: %s',
+                 len(target_dsdl_definitions),
+                 list(set(map(lambda t: t.root_namespace, target_dsdl_definitions)))[0],
+                 len(lookup_dsdl_definitions),
+                 ', '.join(set(sorted(map(lambda t: t.root_namespace, lookup_dsdl_definitions)))))
+
     # Read the constructed definitions.
     types = _read_namespace_definitions(target_dsdl_definitions,
                                         lookup_dsdl_definitions,
@@ -188,7 +195,7 @@ def _read_namespace_definitions(target_definitions:              typing.List[_ds
             if print_output_handler:  # pragma: no branch
                 assert isinstance(line_number, int) and isinstance(text, str)
                 assert line_number > 0, 'Line numbers must be one-based'
-                print_output_handler(definition, line_number, text)
+                print_output_handler(definition.file_path, line_number, text)
         return handler
 
     types = []  # type: typing.List[_serializable.CompositeType]
@@ -287,7 +294,7 @@ def _ensure_minor_version_compatibility(types: typing.List[_serializable.Composi
                         ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
                             a.response_type.is_mutually_bit_compatible_with(b.response_type)
                     else:
-                        ok = a.compute_bit_length_values() == b.compute_bit_length_values()
+                        ok = a.bit_length_set == b.bit_length_set
 
                     if not ok:
                         raise MinorVersionsNotBitCompatibleError(

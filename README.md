@@ -12,6 +12,8 @@ PyDSDL supports all DSDL features defined in the UAVCAN specification,
 and performs all mandatory static definition validity checks.
 Additionally, it checks for bit compatibility for data type definitions under the same major version.
 
+A brief usage example is provided in the file `demo.py`.
+
 ## Installation
 
 PyDSDL requires Python 3.5 or newer.
@@ -91,11 +93,13 @@ response structure of the service type, respectively.
 Every data type (i.e., the `SerializableType` root class) has the following public attributes
 (although they raise `TypeError` when used against an instance of `ServiceType`):
 
-- `bit_length_range: Tuple[int, int]` - returns a named tuple containing `min:int` and `max:int`, in bits,
-which represent the minimum and the maximum possible bit length of an encoded representation.
-- `compute_bit_length_values() -> Set[int]` - this function performs a bit length combination analysis on
-the data type and returns a full set of bit lengths of all possible valid encoded representations of the data type.
-Due to the involved computations, the function can be expensive to invoke, so use with care.
+- `bit_length_set: BitLengthSet` - the set of bit length values of all serialized representations of the type.
+The type `BitLengthSet` is similar to the native set of integers `typing.Set[int]`: it is iterable and comparable,
+plus there are several important convenience methods for bit length set manipulation.
+- `__str__()` - a string representation of a data type is a valid DSDL expression that would
+have yielded the same data type if evaluated by a DSDL processor.
+For example: `saturated uint8[<=2]`, `uavcan.node.Heartbeat.1.0`.
+- `__hash__()` - data types are hashable.
 
 Instances of `CompositeType` (and its derivatives) contain *attributes*.
 Per the specification, an attribute can be a field or a constant.
@@ -149,32 +153,6 @@ representation of the contained value.
   - `Container` - generic container; has `element_type: Type[Any]` and is iterable.
     - `Set` - a DSDL constant homogeneous set.
 
-## Usage example
-
-```python
-import sys
-import pydsdl
-
-try:
-    composite_types = pydsdl.read_namespace('path/to/root_namespace', ['path/to/dependencies'])
-except pydsdl.InvalidDefinitionError as ex:
-    print(ex, file=sys.stderr)                      # The DSDL definition is invalid
-except pydsdl.InternalError as ex:
-    print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
-else:
-    for t in composite_types:
-        if isinstance(t, pydsdl.ServiceType):
-            blr, blv = 0, {0}
-        else:
-            blr, blv = t.bit_length_range, t.compute_bit_length_values()
-        # The above is because service types are not directly serializable (see the UAVCAN specification)
-        print(t.full_name, t.version, t.fixed_port_id, t.deprecated, blr, len(blv))
-        for f in t.fields:
-            print('\t', str(f.data_type), f.name)
-        for c in t.constants:
-            print('\t', str(c.data_type), c.name, '=', str(c.value.native_value))
-```
-
 ## Development
 
 ### Dependencies
@@ -201,8 +179,8 @@ If you really need to import a specific entity, consider prefixing it with an un
 scope leakage, unless you really want it to be externally visible.
 
 ```python
-from . import data_type               # Good
-from .data_type import CompositeType  # Pls no
+from . import _serializable               # Good
+from ._serializable import CompositeType  # Pls no
 ```
 
 ### Writing tests

@@ -4,10 +4,15 @@
 #
 
 import os
+import time
 import typing
+import logging
 from . import _error
 from . import _serializable
 from . import _parser
+
+
+_logger = logging.getLogger(__name__)
 
 
 class FileNameFormatError(_error.InvalidDefinitionError):
@@ -99,12 +104,20 @@ class DSDLDefinition:
         :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
         :return: The data type representation.
         """
+        log_prefix = '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
         if self._cached_type is not None:
+            _logger.debug('%s: Cache hit', log_prefix)
             return self._cached_type
+
+        started_at = time.monotonic()
 
         # Remove the target definition from the lookup list in order to prevent
         # infinite recursion on self-referential definitions.
         lookup_definitions = list(filter(lambda d: d != self, lookup_definitions))
+
+        _logger.info('%s: Starting processing with %d lookup definitions located in root namespaces: %s',
+                     log_prefix, len(lookup_definitions),
+                     ', '.join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))))
         try:
             # We have to import this class at function level to break recursive dependency.
             # Maybe I have messed up the architecture? Should think about it later.
@@ -117,8 +130,14 @@ class DSDLDefinition:
                 _parser.parse(f.read(), builder)
 
             self._cached_type = builder.finalize()
+
+            _logger.info('%s: Processed in %.0f ms; category: %s, fixed port ID: %s',
+                         log_prefix,
+                         (time.monotonic() - started_at) * 1e3,
+                         type(self._cached_type).__name__,
+                         self._cached_type.fixed_port_id)
             return self._cached_type
-        except _error.FrontendError as ex:                      # pragma: no cover
+        except _error.FrontendError as ex:                              # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
         except Exception as ex:                                         # pragma: no cover
