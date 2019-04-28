@@ -143,7 +143,7 @@ def _unittest_simple() -> None:
         vendor.nested.Empty.255.255 new_empty_implicit
         vendor.nested.Empty.255.255 new_empty_explicit
         vendor.nested.Empty.255.254 old_empty
-        ---#---#---#---#---#---#---#---#---
+        -----------------------------------
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
         ''')
