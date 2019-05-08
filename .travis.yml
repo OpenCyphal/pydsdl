@@ -6,6 +6,9 @@ os:
 
 python:
   - '3.5.2'       # There have been compatibility issues with this patch version
+  - '3.5.3'
+  - '3.5.4'
+  - '3.5.5'
   - '3.5'
   - '3.6'
   - '3.7-dev'     # TODO: Replace with plain "3.7" when supported by Travis
@@ -20,4 +23,4 @@ script:
   - ./test.sh
   - coveralls  # Publish the coverage stats online.
   - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
-  - python ./demo.py dsdl-test/uavcan  # Explicit "python" is needed to use the current Python version
+  - ./demo.py dsdl-test/uavcan
