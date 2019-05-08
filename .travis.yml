@@ -5,10 +5,7 @@ os:
   - linux   # Travis does not support Python on OSX or Windows. Should we migrate to a different CI service?
 
 python:
-  - '3.5.2'       # There have been compatibility issues with this patch version
-  - '3.5.3'
-  - '3.5.4'
-  - '3.5.5'
+  - '3.5.3'       # Oldest supported version
   - '3.5'
   - '3.6'
   - '3.7-dev'     # TODO: Replace with plain "3.7" when supported by Travis

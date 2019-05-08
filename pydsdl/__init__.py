@@ -6,8 +6,30 @@
 import os as _os
 import sys as _sys
 
-if _sys.version_info[:2] < (3, 5):   # pragma: no cover
-    print('A newer version of Python is required', file=_sys.stderr)
+# The original intent was to support Python 3.5 and newer; however, we have discovered a bug in the static typing
+# library in Python 3.5.2 which makes the library quite unusable: when importing, the typing module would throw
+# "TypeError: This Callable type is already parameterized." from the expression module. The problem does not appear
+# in Python 3.5.3 or any newer versions; it is fixed in the upstream here: https://github.com/python/typing/pull/308.
+# This is how you can reproduce it in REPL; first, the correct behavior that can be observed in Python 3.5.3+:
+#   >>> import typing
+#   >>> T = typing.TypeVar('T')
+#   >>> G = typing.Callable[[], T]
+#   >>> G[int]
+#   typing.Callable[[], int]
+# And this is what you get in Python 3.5.2-:
+#   >>> import typing
+#   >>> T = typing.TypeVar('T')
+#   >>> G = typing.Callable[[], T]
+#   >>> G[int]
+#   Traceback (most recent call last):
+#     File "<stdin>", line 1, in <module>
+#     File "/usr/lib/python3.5/typing.py", line 815, in __getitem__
+#       raise TypeError("This Callable type is already parameterized.")
+#   TypeError: This Callable type is already parameterized.
+_min_supported_python_version = 3, 5, 3
+if _sys.version_info[:3] < _min_supported_python_version:   # pragma: no cover
+    print('This package requires a Python version', '.'.join(map(str, _min_supported_python_version)), 'or newer',
+          file=_sys.stderr)
     _sys.exit(1)
 
 __version__ = 0, 7, 3
