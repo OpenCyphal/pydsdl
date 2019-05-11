@@ -5,16 +5,18 @@ os:
   - linux   # Travis does not support Python on OSX or Windows. Should we migrate to a different CI service?
 
 python:
-  - 3.5
-  - 3.6
-  - 3.7-dev     # TODO: Replace with plain "3.7" when supported by Travis
-#  - 3.8-dev    # TODO: Compatibility issues with MyPy, see https://travis-ci.org/UAVCAN/pydsdl/jobs/519988157
+  - '3.5.3'       # Oldest supported version
+  - '3.5'
+  - '3.6'
+  - '3.7-dev'     # TODO: Replace with plain "3.7" when supported by Travis
+#  - '3.8-dev'    # TODO: Compatibility issues with MyPy, see https://travis-ci.org/UAVCAN/pydsdl/jobs/519988157
 
 before_script:
   - pip install -r requirements.txt
   - pip install coveralls  # Intentionally removed from requirements.txt because it's only useful in the CI environment
 
 script:
+  - python --version
   - ./test.sh
   - coveralls  # Publish the coverage stats online.
   - git clone https://github.com/UAVCAN/dsdl --branch=uavcan-v1.0 dsdl-test  # TODO: Switch to master once v1.0 is merged
