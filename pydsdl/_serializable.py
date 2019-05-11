@@ -1239,7 +1239,7 @@ def _unittest_composite_types() -> None:
                           Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
                           PaddingField(VoidType(2)),
                           Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
-                          ],
+                      ],
                       deprecated=False,
                       fixed_port_id=None,
                       source_file_path='')
