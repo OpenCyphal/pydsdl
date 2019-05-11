@@ -1229,6 +1229,7 @@ def _unittest_composite_types() -> None:
     assert u['A'].name == 'A'
     with raises(KeyError):
         assert u['c']
+    del u
 
     s = StructureType(name='a.A',
                       version=Version(0, 1),
@@ -1243,13 +1244,14 @@ def _unittest_composite_types() -> None:
                       deprecated=False,
                       fixed_port_id=None,
                       source_file_path='')
-    assert u['a'].name == 'a'
-    assert u['b'].name == 'b'
-    assert u['A'].name == 'A'
+    assert s['a'].name == 'a'
+    assert s['b'].name == 'b'
+    assert s['A'].name == 'A'
     with raises(KeyError):
-        assert u['c']
+        assert s['c']
     with raises(KeyError):
-        assert u['']        # Padding fields are not accessible
+        assert s['']        # Padding fields are not accessible
+    del s
 
     def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
