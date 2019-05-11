@@ -771,9 +771,10 @@ class CompositeType(SerializableType):
                  source_file_path:  str):
         super(CompositeType, self).__init__()
 
+        attributes = list(attributes)
+
         self._name = str(name).strip()
         self._version = version
-        self._attributes = list(attributes)
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
@@ -802,11 +803,14 @@ class CompositeType(SerializableType):
 
         # Attribute check
         used_names = set()      # type: typing.Set[str]
-        for a in self._attributes:
+        for a in attributes:    # We can't iterate over the dict by name because it eliminates non-unique names
             if a.name and a.name in used_names:
                 raise AttributeNameCollisionError('Multiple attributes under the same name: %r' % a.name)
             else:
                 used_names.add(a.name)
+
+        self._attributes_by_name = {a.name: a for a in attributes}
+        assert len(attributes) == len(self._attributes_by_name)
 
         # Port ID check
         port_id = self._fixed_port_id
@@ -823,7 +827,7 @@ class CompositeType(SerializableType):
         # A non-deprecated type cannot be dependent on deprecated types.
         # A deprecated type can be dependent on anything.
         if not self.deprecated:
-            for a in self._attributes:
+            for a in attributes:
                 t = a.data_type
                 if isinstance(t, CompositeType):
                     if t.deprecated:
@@ -876,7 +880,7 @@ class CompositeType(SerializableType):
 
     @property
     def attributes(self) -> typing.List[Attribute]:
-        return self._attributes[:]  # Return copy to prevent mutation
+        return list(self._attributes_by_name.values())  # Return copy to prevent mutation
 
     @property
     def fields(self) -> typing.List[Field]:
@@ -947,6 +951,13 @@ class CompositeType(SerializableType):
 
     def _compute_bit_length_set(self) -> BitLengthSet:
         raise NotImplementedError
+
+    def __getitem__(self, attribute_name: str) -> Attribute:
+        """
+        Allows the caller to retrieve an attribute by name.
+        Raises KeyError if there is no such attribute.
+        """
+        return self._attributes_by_name[attribute_name]
 
     def __str__(self) -> str:
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
@@ -1205,6 +1216,22 @@ def _unittest_composite_types() -> None:
 
     with raises(InvalidNameError):
         _check_name('uq1_32')
+
+    u = UnionType(name='a.A',
+                  version=Version(0, 1),
+                  attributes=[
+                      Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
+                      Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
+                      Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
+                  ],
+                  deprecated=False,
+                  fixed_port_id=None,
+                  source_file_path='')
+    assert u['a'].name == 'a'
+    assert u['b'].name == 'b'
+    assert u['A'].name == 'A'
+    with raises(KeyError):
+        assert u['c']
 
     def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
