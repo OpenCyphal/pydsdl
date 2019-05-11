@@ -774,7 +774,7 @@ class CompositeType(SerializableType):
         self._name = str(name).strip()
         self._version = version
         self._attributes = list(attributes)
-        self._attributes_by_name = {a.name: a for a in self._attributes}  # Ordering not preserved in older Pythons
+        self._attributes_by_name = {a.name: a for a in self._attributes if not isinstance(a, PaddingField)}
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
@@ -808,7 +808,6 @@ class CompositeType(SerializableType):
                 raise AttributeNameCollisionError('Multiple attributes under the same name: %r' % a.name)
             else:
                 used_names.add(a.name)
-        assert len(self._attributes) == len(self._attributes_by_name)
 
         # Port ID check
         port_id = self._fixed_port_id
@@ -952,7 +951,7 @@ class CompositeType(SerializableType):
 
     def __getitem__(self, attribute_name: str) -> Attribute:
         """
-        Allows the caller to retrieve an attribute by name.
+        Allows the caller to retrieve an attribute by name. Padding fields are not accessible via this interface.
         Raises KeyError if there is no such attribute.
         """
         return self._attributes_by_name[attribute_name]
@@ -1230,6 +1229,27 @@ def _unittest_composite_types() -> None:
     assert u['A'].name == 'A'
     with raises(KeyError):
         assert u['c']
+
+    s = StructureType(name='a.A',
+                      version=Version(0, 1),
+                      attributes=[
+                          PaddingField(VoidType(8)),
+                          Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
+                          PaddingField(VoidType(64)),
+                          Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
+                          PaddingField(VoidType(2)),
+                          Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
+                          ],
+                      deprecated=False,
+                      fixed_port_id=None,
+                      source_file_path='')
+    assert u['a'].name == 'a'
+    assert u['b'].name == 'b'
+    assert u['A'].name == 'A'
+    with raises(KeyError):
+        assert u['c']
+    with raises(KeyError):
+        assert u['']        # Padding fields are not accessible
 
     def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
