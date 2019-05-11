@@ -771,10 +771,10 @@ class CompositeType(SerializableType):
                  source_file_path:  str):
         super(CompositeType, self).__init__()
 
-        attributes = list(attributes)
-
         self._name = str(name).strip()
         self._version = version
+        self._attributes = list(attributes)
+        self._attributes_by_name = {a.name: a for a in self._attributes}  # Ordering not preserved in older Pythons
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
@@ -803,14 +803,12 @@ class CompositeType(SerializableType):
 
         # Attribute check
         used_names = set()      # type: typing.Set[str]
-        for a in attributes:    # We can't iterate over the dict by name because it eliminates non-unique names
+        for a in self._attributes:
             if a.name and a.name in used_names:
                 raise AttributeNameCollisionError('Multiple attributes under the same name: %r' % a.name)
             else:
                 used_names.add(a.name)
-
-        self._attributes_by_name = {a.name: a for a in attributes}
-        assert len(attributes) == len(self._attributes_by_name)
+        assert len(self._attributes) == len(self._attributes_by_name)
 
         # Port ID check
         port_id = self._fixed_port_id
@@ -827,7 +825,7 @@ class CompositeType(SerializableType):
         # A non-deprecated type cannot be dependent on deprecated types.
         # A deprecated type can be dependent on anything.
         if not self.deprecated:
-            for a in attributes:
+            for a in self._attributes:
                 t = a.data_type
                 if isinstance(t, CompositeType):
                     if t.deprecated:
@@ -880,7 +878,7 @@ class CompositeType(SerializableType):
 
     @property
     def attributes(self) -> typing.List[Attribute]:
-        return list(self._attributes_by_name.values())  # Return copy to prevent mutation
+        return self._attributes[:]  # Return copy to prevent mutation
 
     @property
     def fields(self) -> typing.List[Field]:
