@@ -203,3 +203,8 @@ def _unittest_my_test() -> None:    # Type annotations required
 ```
 
 For more information refer to the PyTest documentation.
+
+### Releasing
+
+Use the script `release_on_pypi.sh` to publish new releases on PyPI.
+Don't forget to tag each published release, too; the tag format is `<major>.<minor>.<patch>` without the `v` prefix.
