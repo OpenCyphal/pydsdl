@@ -30,6 +30,10 @@ class InvalidDirectiveError(_error.InvalidDefinitionError):
     pass
 
 
+class UnregulatedFixedPortIDError(_error.InvalidDefinitionError):
+    pass
+
+
 _logger = logging.getLogger(__name__)
 
 
@@ -92,7 +96,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 f = _port_id_ranges.is_valid_regulated_service_id if is_service_type else \
                     _port_id_ranges.is_valid_regulated_subject_id
                 if not f(port_id, out.root_namespace):
-                    raise _serializable.InvalidFixedPortIDError(
+                    raise UnregulatedFixedPortIDError(
                         'Regulated port ID %r for %s type %r is not valid. '
                         'Consider using allow_unregulated_fixed_port_id.' %
                         (port_id, 'service' if is_service_type else 'message', out.full_name))

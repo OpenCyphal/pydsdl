@@ -250,6 +250,7 @@ def _unittest_simple() -> None:
     assert str(p.fields[2]) == 'saturated bool[<=255] c'
 
 
+# noinspection PyProtectedMember,PyProtectedMember
 @_in_n_out
 def _unittest_error() -> None:
     from pytest import raises
@@ -352,10 +353,10 @@ def _unittest_error() -> None:
     with raises(_parser.DSDLSyntaxError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
 
-    with raises(_serializable.InvalidCastModeError):
+    with raises(_serializable._primitive.InvalidCastModeError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated bool foo')
 
-    with raises(_serializable.InvalidCastModeError):
+    with raises(_serializable._primitive.InvalidCastModeError):
         standalone('vendor/types/A.1.0.uavcan', 'truncated int8 foo')
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
@@ -452,11 +453,11 @@ def _unittest_error() -> None:
         assert False
 
     standalone('vendor/types/1.A.1.0.uavcan', '', allow_unregulated=True)
-    with raises(_serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+    with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '')
 
     standalone('vendor/types/1.A.1.0.uavcan', '---', allow_unregulated=True)
-    with raises(_serializable.InvalidFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
+    with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '---')
 
 
@@ -496,6 +497,7 @@ def _unittest_print() -> None:
     assert printed_items[1] == "{8}"
 
 
+# noinspection PyProtectedMember
 @_in_n_out
 def _unittest_assert() -> None:
     from pytest import raises
@@ -569,7 +571,7 @@ def _unittest_assert() -> None:
             []
         )
 
-    with raises(_serializable.InvalidConstantValueError):
+    with raises(_serializable._attribute.InvalidConstantValueError):
         _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true'), [])
 
     with raises(_error.InvalidDefinitionError, match='.*value.*'):
