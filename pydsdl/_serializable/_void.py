@@ -42,6 +42,8 @@ def _unittest_void() -> None:
     assert str(VoidType(13)) == 'void13'
     assert repr(VoidType(64)) == 'VoidType(bit_length=64)'
     assert VoidType(22).bit_length_set == {22}
+    assert VoidType(1) == VoidType(1)
+    assert VoidType(1) != VoidType(2)
 
     with raises(InvalidBitLengthError):
         VoidType(1)

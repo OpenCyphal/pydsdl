@@ -68,6 +68,8 @@ class SerializableType(_expression.Any):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SerializableType):
             same_type = isinstance(other, type(self)) and isinstance(self, type(other))
-            return same_type and str(self) == str(other)
+            # Ensure equality of the bit length sets, otherwise, different types like voids may compare equal.
+            same_bls = self.bit_length_set == other.bit_length_set
+            return same_type and same_bls and str(self) == str(other)
         else:
             return NotImplemented
