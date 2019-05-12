@@ -44,12 +44,13 @@ class CompositeType(SerializableType):
     NAME_COMPONENT_SEPARATOR = '.'
 
     def __init__(self,
-                 name:          str,
-                 version:       Version,
-                 attributes:    typing.Iterable[Attribute],
-                 deprecated:    bool,
-                 fixed_port_id: typing.Optional[int],
-                 source_file_path:  str):
+                 name:             str,
+                 version:          Version,
+                 attributes:       typing.Iterable[Attribute],
+                 deprecated:       bool,
+                 fixed_port_id:    typing.Optional[int],
+                 source_file_path: str,
+                 parent_service:   typing.Optional['ServiceType'] = None):
         super(CompositeType, self).__init__()
 
         self._name = str(name).strip()
@@ -59,6 +60,12 @@ class CompositeType(SerializableType):
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
+        self._parent_service = parent_service
+
+        if self._parent_service is not None:
+            assert self._name.endswith('.Request') or self._name.endswith('.Response')
+            if not isinstance(self._parent_service, ServiceType):  # pragma: no cover
+                raise ValueError('The parent service reference is invalid: %s' % type(parent_service).__name__)
 
         # Name check
         if not self._name:
@@ -185,6 +192,16 @@ class CompositeType(SerializableType):
         """Empty if this is a synthesized type, e.g. a service request or response section."""
         return self._source_file_path
 
+    @property
+    def parent_service(self) -> typing.Optional['ServiceType']:
+        """
+        Service types contain two implicit fields: request and response. Their types are instances of composite type,
+        too; they can be distinguished from regular composites by the fact that their property "parent_service" points
+        to the service type that contains them. For composites that are not parts of a service type this property will
+        evaluate to None.
+        """
+        return self._parent_service
+
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
@@ -264,7 +281,8 @@ class UnionType(CompositeType):
                  attributes:       typing.Iterable[Attribute],
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
-                 source_file_path: str):
+                 source_file_path: str,
+                 parent_service:   typing.Optional['ServiceType'] = None):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
@@ -272,7 +290,8 @@ class UnionType(CompositeType):
                                         attributes=attributes,
                                         deprecated=deprecated,
                                         fixed_port_id=fixed_port_id,
-                                        source_file_path=source_file_path)
+                                        source_file_path=source_file_path,
+                                        parent_service=parent_service)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
             raise MalformedUnionError('A tagged union cannot contain fewer than %d variants' %
@@ -351,7 +370,8 @@ class ServiceType(CompositeType):
                                                attributes=request_attributes,
                                                deprecated=deprecated,
                                                fixed_port_id=None,
-                                               source_file_path='')  # type: CompositeType
+                                               source_file_path='',
+                                               parent_service=self)  # type: CompositeType
 
         response_meta_type = UnionType if response_is_union else StructureType  # type: type
         self._response_type = response_meta_type(name=name + '.Response',
@@ -359,7 +379,8 @@ class ServiceType(CompositeType):
                                                  attributes=response_attributes,
                                                  deprecated=deprecated,
                                                  fixed_port_id=None,
-                                                 source_file_path='')  # type: CompositeType
+                                                 source_file_path='',
+                                                 parent_service=self)  # type: CompositeType
 
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
@@ -372,6 +393,8 @@ class ServiceType(CompositeType):
                                           deprecated=deprecated,
                                           fixed_port_id=fixed_port_id,
                                           source_file_path=source_file_path)
+        assert self.request_type.parent_service is self
+        assert self.response_type.parent_service is self
 
     @property
     def request_type(self) -> CompositeType:
