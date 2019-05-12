@@ -165,6 +165,10 @@ class CompositeType(SerializableType):
         return [a for a in self.attributes if isinstance(a, Field)]
 
     @property
+    def fields_except_padding(self) -> typing.List[Field]:
+        return [a for a in self.attributes if isinstance(a, Field) and not isinstance(a, PaddingField)]
+
+    @property
     def constants(self) -> typing.List[Constant]:
         return [a for a in self.attributes if isinstance(a, Constant)]
 
@@ -460,6 +464,7 @@ def _unittest_composite_types() -> None:
     assert u['a'].name == 'a'
     assert u['b'].name == 'b'
     assert u['A'].name == 'A'
+    assert u.fields == u.fields_except_padding
     with raises(KeyError):
         assert u['c']
     del u
@@ -480,6 +485,9 @@ def _unittest_composite_types() -> None:
     assert s['a'].name == 'a'
     assert s['b'].name == 'b'
     assert s['A'].name == 'A'
+    assert len(s.constants) == 1
+    assert len(s.fields) == 5
+    assert len(s.fields_except_padding) == 2
     with raises(KeyError):
         assert s['c']
     with raises(KeyError):
