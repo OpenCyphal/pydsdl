@@ -32,7 +32,7 @@ if _sys.version_info[:3] < _min_supported_python_version:   # pragma: no cover
           file=_sys.stderr)
     _sys.exit(1)
 
-__version__ = 0, 9, 0
+__version__ = 0, 9, 1
 __license__ = 'MIT'
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.

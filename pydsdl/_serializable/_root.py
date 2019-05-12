@@ -68,8 +68,10 @@ class SerializableType(_expression.Any):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SerializableType):
             same_type = isinstance(other, type(self)) and isinstance(self, type(other))
-            # Ensure equality of the bit length sets, otherwise, different types like voids may compare equal.
-            same_bls = self.bit_length_set == other.bit_length_set
+            try:    # Ensure equality of the bit length sets, otherwise, different types like voids may compare equal.
+                same_bls = self.bit_length_set == other.bit_length_set
+            except TypeError:   # If the type is non-serializable, assume equality.
+                same_bls = same_type
             return same_type and same_bls and str(self) == str(other)
         else:
             return NotImplemented

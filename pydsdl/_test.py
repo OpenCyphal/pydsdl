@@ -162,6 +162,8 @@ def _unittest_simple() -> None:
     assert p.deprecated
     assert p.version == (0, 1)
     assert not p.constants
+    assert p == p
+    assert p != empty_new
 
     assert len(p.fields) == 2
     assert p.fields[0].name == 'request'
