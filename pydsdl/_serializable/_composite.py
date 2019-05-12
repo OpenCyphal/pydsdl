@@ -292,6 +292,7 @@ class UnionType(CompositeType):
         """
         Returns the best-matching unsigned integer type of the implicit union tag field.
         This is convenient for code generation.
+        WARNING: the set of valid tag values is a subset of that of the returned type.
         """
         return self._tag_field_type
 

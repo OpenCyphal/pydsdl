@@ -132,6 +132,7 @@ class VariableLengthArrayType(ArrayType):
         """
         Returns the best-matching unsigned integer type of the implicit array length field.
         This is convenient for code generation.
+        WARNING: the set of valid length values is a subset of that of the returned type.
         """
         return self._length_field_type
 
