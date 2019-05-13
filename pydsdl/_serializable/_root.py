@@ -63,7 +63,11 @@ class SerializableType(_expression.Any):
         raise NotImplementedError
 
     def __hash__(self) -> int:
-        return hash(str(self))
+        try:
+            bls = self.bit_length_set
+        except TypeError:   # If the type is non-serializable.
+            bls = BitLengthSet()
+        return hash(str(self) + str(bls))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SerializableType):

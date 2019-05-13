@@ -490,6 +490,7 @@ def _unittest_composite_types() -> None:
     assert u.fields == u.fields_except_padding
     with raises(KeyError):
         assert u['c']
+    assert hash(u) == hash(u)
     del u
 
     s = StructureType(name='a.A',
@@ -515,6 +516,7 @@ def _unittest_composite_types() -> None:
         assert s['c']
     with raises(KeyError):
         assert s['']        # Padding fields are not accessible
+    assert hash(s) == hash(s)
     del s
 
     def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:

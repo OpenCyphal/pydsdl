@@ -218,6 +218,16 @@ def _unittest_simple() -> None:
     assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
+    p2 = _parse_definition(abc, [
+        service,
+        empty_new,
+        empty_old,
+        constants,
+    ])
+    assert hash(p2) == hash(p2)
+    assert hash(p2) != hash(p)
+    assert hash(p) == hash(p)
+
     union = _define(
         'another/Union.5.9.uavcan',
         dedent('''
