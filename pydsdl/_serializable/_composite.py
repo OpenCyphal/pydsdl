@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import abc
 import typing
 import itertools
 from .. import _expression
@@ -202,6 +203,7 @@ class CompositeType(SerializableType):
         """
         return self._parent_service
 
+    @abc.abstractmethod
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
@@ -248,6 +250,7 @@ class CompositeType(SerializableType):
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
+    @abc.abstractmethod
     def _compute_bit_length_set(self) -> BitLengthSet:
         raise NotImplementedError
 
@@ -418,7 +421,7 @@ def _unittest_composite_types() -> None:
     from ._array import FixedLengthArrayType, VariableLengthArrayType
 
     def try_name(name: str) -> CompositeType:
-        return CompositeType(name=name,
+        return StructureType(name=name,
                              version=Version(0, 1),
                              attributes=[],
                              deprecated=False,

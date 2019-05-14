@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import abc
 import typing
 from .. import _expression
 from .. import _error
@@ -48,6 +49,7 @@ class SerializableType(_expression.Any):
 
         return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
 
+    @abc.abstractmethod
     def _compute_bit_length_set(self) -> BitLengthSet:
         """
         This is an expensive operation, so the result is cached in the base class. Derived classes should not
@@ -55,6 +57,7 @@ class SerializableType(_expression.Any):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         """
         Must return a DSDL spec-compatible textual representation of the type.

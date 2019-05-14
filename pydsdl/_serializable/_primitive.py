@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import abc
 import enum
 import math
 import typing
@@ -77,6 +78,7 @@ class PrimitiveType(SerializableType):
     def _compute_bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
+    @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
@@ -102,9 +104,11 @@ class ArithmeticType(PrimitiveType):
         super(ArithmeticType, self).__init__(bit_length, cast_mode)
 
     @property
+    @abc.abstractmethod
     def inclusive_value_range(self) -> ValueRange:   # pragma: no cover
         raise NotImplementedError
 
+    @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 
@@ -116,9 +120,11 @@ class IntegerType(ArithmeticType):
         super(IntegerType, self).__init__(bit_length, cast_mode)
 
     @property
+    @abc.abstractmethod
     def inclusive_value_range(self) -> ValueRange:   # pragma: no cover
         raise NotImplementedError
 
+    @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 

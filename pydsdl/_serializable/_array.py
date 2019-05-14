@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import abc
 import typing
 from .._bit_length_set import BitLengthSet
 from ._root import SerializableType, TypeParameterError
@@ -39,9 +40,11 @@ class ArrayType(SerializableType):
         """
         return False
 
+    @abc.abstractmethod
     def _compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
         raise NotImplementedError
 
+    @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError
 

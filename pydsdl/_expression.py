@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import abc
 import typing
 import operator
 import functools
@@ -33,7 +34,7 @@ class UndefinedAttributeError(InvalidOperandError):
         super(UndefinedAttributeError, self).__init__('Invalid attribute name')
 
 
-class Any:
+class Any(abc.ABC):
     """
     This abstract class represents an arbitrary intrinsic DSDL expression value.
     """
@@ -41,12 +42,15 @@ class Any:
     # It contains the name of the data type implemented by the class.
     TYPE_NAME = None    # type: str
 
+    @abc.abstractmethod
     def __hash__(self) -> int:
         raise NotImplementedError  # pragma: no cover
 
+    @abc.abstractmethod
     def __eq__(self, other: object) -> bool:
         raise NotImplementedError  # pragma: no cover
 
+    @abc.abstractmethod
     def __str__(self) -> str:
         """Must return a DSDL spec-compatible textual representation of the contained value suitable for printing."""
         raise NotImplementedError  # pragma: no cover
@@ -115,6 +119,7 @@ class Any:
 # noinspection PyAbstractClass
 class Primitive(Any):
     @property
+    @abc.abstractmethod
     def native_value(self) -> typing.Any:
         raise NotImplementedError  # pragma: no cover
 
@@ -336,9 +341,11 @@ class String(Primitive):
 # noinspection PyAbstractClass
 class Container(Any):
     @property
+    @abc.abstractmethod
     def element_type(self) -> typing.Type[Any]:
         raise NotImplementedError  # pragma: no cover
 
+    @abc.abstractmethod
     def __iter__(self) -> typing.Iterator[typing.Any]:
         raise NotImplementedError  # pragma: no cover
 
@@ -373,6 +380,7 @@ class Set(Container):
             # This also weeds out covariant sets, although our barbie-size type system is unaware of that.
             raise InvalidOperandError('Heterogeneous sets are not permitted')
 
+        # noinspection PyTypeChecker
         self._element_type = list(element_types)[0]  # type: typing.Type[Any]
         self._value = frozenset(list_of_elements)    # type: typing.FrozenSet[Any]
 
