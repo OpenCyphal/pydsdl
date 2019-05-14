@@ -5,7 +5,7 @@
 
 import re
 import string
-from ._root import TypeParameterError
+from ._serializable import TypeParameterError
 
 
 class InvalidNameError(TypeParameterError):

@@ -3,7 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
-from ._root import SerializableType
+from ._serializable import SerializableType
 from ._primitive import PrimitiveType, BooleanType, FloatType, ValueRange
 from ._primitive import ArithmeticType, IntegerType, SignedIntegerType, UnsignedIntegerType
 from ._void import VoidType

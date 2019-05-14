@@ -4,7 +4,7 @@
 #
 
 from .._bit_length_set import BitLengthSet
-from ._root import SerializableType
+from ._serializable import SerializableType
 from ._primitive import InvalidBitLengthError
 
 

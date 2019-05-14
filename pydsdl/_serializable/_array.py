@@ -6,7 +6,7 @@
 import abc
 import typing
 from .._bit_length_set import BitLengthSet
-from ._root import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError
 from ._primitive import UnsignedIntegerType, PrimitiveType
 
 

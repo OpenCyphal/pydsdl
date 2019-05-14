@@ -9,7 +9,7 @@ import itertools
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
-from ._root import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError
 from ._attribute import Attribute, Field, PaddingField, Constant
 from ._name import check_name, InvalidNameError
 from ._void import VoidType

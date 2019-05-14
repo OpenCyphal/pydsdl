@@ -4,7 +4,7 @@
 #
 
 from .. import _expression
-from ._root import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError
 from ._primitive import UnsignedIntegerType, PrimitiveType, FloatType, ArithmeticType, IntegerType, BooleanType
 from ._void import VoidType
 from ._name import check_name, InvalidNameError

@@ -9,7 +9,7 @@ import math
 import typing
 import fractions
 from .._bit_length_set import BitLengthSet
-from ._root import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError
 
 
 ValueRange = typing.NamedTuple('ValueRange', [('min', fractions.Fraction), ('max', fractions.Fraction)])
