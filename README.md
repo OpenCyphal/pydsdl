@@ -177,6 +177,8 @@ Do not import specific entities; instead, import only the package itself and the
 as shown below.
 If you really need to import a specific entity, consider prefixing it with an underscore to prevent
 scope leakage, unless you really want it to be externally visible.
+Exception applies to well-encapsulated submodules which are not part of the library API
+(i.e., prefixed with an underscore).
 
 ```python
 from . import _serializable               # Good
