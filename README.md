@@ -159,7 +159,7 @@ representation of the contained value.
 
 Despite the fact that the library itself is dependency-free,
 some additional packages are needed for development and testing.
-They are listed in `requirements.txt`.
+They are listed in `requirements-dev.txt`.
 
 External runtime dependencies are not allowed in this project --
 if you can't bundle it with the library, you can't use it.
