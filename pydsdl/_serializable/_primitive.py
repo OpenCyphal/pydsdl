@@ -199,15 +199,16 @@ def _unittest_primitive() -> None:
 
     assert str(SignedIntegerType(15, PrimitiveType.CastMode.SATURATED)) == 'saturated int15'
     assert SignedIntegerType(64, PrimitiveType.CastMode.SATURATED).bit_length_set == {64}
-    assert SignedIntegerType(8, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-128, 127)
+    assert SignedIntegerType(8, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-128, 127)  # type: ignore
 
     assert str(UnsignedIntegerType(15, PrimitiveType.CastMode.TRUNCATED)) == 'truncated uint15'
     assert UnsignedIntegerType(53, PrimitiveType.CastMode.SATURATED).bit_length_set == {53}
-    assert UnsignedIntegerType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (0, 0xFFFFFFFF)
+    assert UnsignedIntegerType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (0,   # type: ignore
+                                                                                               0xFFFFFFFF)
 
     assert str(FloatType(64, PrimitiveType.CastMode.SATURATED)) == 'saturated float64'
     assert FloatType(32, PrimitiveType.CastMode.SATURATED).bit_length_set == 32
-    assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-65504, +65504)
+    assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-65504, +65504)  # type: ignore
 
     assert FloatType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == \
         (approx(-3.4028234664e+38), approx(+3.4028234664e+38))
