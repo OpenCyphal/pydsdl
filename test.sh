@@ -16,7 +16,7 @@ then
 fi
 
 # Unit tests
-if coverage run --source pydsdl -m pytest --capture=no -vv pydsdl
+if coverage run --source pydsdl -m pytest
 then
     coverage report
 else
