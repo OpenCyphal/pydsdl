@@ -10,13 +10,13 @@ then
 fi
 
 # Code style checking
-if ! pycodestyle --show-source pydsdl
+if ! pycodestyle pydsdl
 then
     status=1
 fi
 
 # Unit tests
-if coverage run --source pydsdl -m pytest
+if coverage run -m pytest
 then
     coverage report
 else
