@@ -75,7 +75,8 @@ class CompositeType(SerializableType):
         if self.NAME_COMPONENT_SEPARATOR not in self._name:
             raise InvalidNameError('Root namespace is not specified')
 
-        if len(self._name) > self.MAX_NAME_LENGTH:
+        # Do not check name length for synthesized types.
+        if len(self._name) > self.MAX_NAME_LENGTH and parent_service is None:
             raise InvalidNameError('Name is too long: %r is longer than %d characters' %
                                    (self._name, self.MAX_NAME_LENGTH))
 
@@ -484,6 +485,16 @@ def _unittest_composite_types() -> None:
     assert try_name('root.nested.T').full_namespace == 'root.nested'
     assert try_name('root.nested.T').root_namespace == 'root'
     assert try_name('root.nested.T').short_name == 'T'
+
+    print(ServiceType(name='a' * 48 + '.T',     # No exception raised
+                      version=Version(0, 1),
+                      request_attributes=[],
+                      response_attributes=[],
+                      request_is_union=False,
+                      response_is_union=False,
+                      deprecated=False,
+                      fixed_port_id=None,
+                      source_file_path=''))
 
     with raises(MalformedUnionError, match='.*variants.*'):
         UnionType(name='a.A',
