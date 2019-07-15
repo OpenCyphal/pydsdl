@@ -164,8 +164,9 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
         if not found:
-            raise UndefinedDataTypeError('Data type %r version %d.%d could not be found' %
-                                         (full_name, version.major, version.minor))
+            raise UndefinedDataTypeError(
+                'Data type %s.%d.%d could not be found in the following root namespaces: %s' %
+                (full_name, version.major, version.minor, set(x.root_namespace for x in self._lookup_definitions)))
         if len(found) > 1:  # pragma: no cover
             raise _error.InternalError('Conflicting definitions: %r' % found)
 
