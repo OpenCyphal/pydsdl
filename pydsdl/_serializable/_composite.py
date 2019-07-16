@@ -195,7 +195,7 @@ class CompositeType(SerializableType):
         return self._source_file_path
 
     @property
-    def compact_data_type_id(self) -> int:
+    def data_type_hash(self) -> int:
         """
         WARNING: THIS API ENTITY IS UNSTABLE AND IS NOT PART OF THE UAVCAN SPECIFICATION v1.0.
         See the context here: https://forum.uavcan.org/t/alternative-transport-protocols/324
@@ -221,6 +221,12 @@ class CompositeType(SerializableType):
             | self.version.major
         assert 0 <= out < 2 ** 64
         return out
+
+    @property
+    def compact_data_type_id(self) -> int:  # pragma: no cover
+        import warnings
+        warnings.warn('Please use data_type_hash instead', category=DeprecationWarning)
+        return self.data_type_hash
 
     @property
     def parent_service(self) -> typing.Optional['ServiceType']:
@@ -526,7 +532,7 @@ def _unittest_composite_types() -> None:
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
-    assert u.compact_data_type_id == 0x666666667bc4992a     # Computed by hand
+    assert u.data_type_hash == 0x666666667bc4992a     # Computed by hand
     assert u['a'].name == 'a'
     assert u['b'].name == 'b'
     assert u['A'].name == 'A'

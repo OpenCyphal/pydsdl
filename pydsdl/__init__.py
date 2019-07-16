@@ -32,7 +32,7 @@ if _sys.version_info[:3] < _min_supported_python_version:   # pragma: no cover
           file=_sys.stderr)
     _sys.exit(1)
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 __version_info__ = tuple(map(int, __version__.split('.')))
 __license__ = 'MIT'
 __author__ = 'UAVCAN Development Team'
