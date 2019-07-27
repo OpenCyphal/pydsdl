@@ -1,0 +1,46 @@
+environment:
+  matrix:
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      PYTHON: "3.5"
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      PYTHON: "3.7"
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      PYTHON: "3.6"
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      PYTHON: "C:\\Python37-x64"
+      PYTHON_ARCH: "64"
+
+stack: python %PYTHON%
+
+build: off
+
+install:
+  # MS Windows config.
+  - cmd: 'SET PATH=%PYTHON%;%PATH%'
+  - cmd: 'SET PATH=C:\\Python37-x64\\Scripts;%PATH%'
+  - cmd: 'echo %PATH%'
+
+  # Shared config for all platforms.
+  - python --version
+  - git submodule update --init --recursive
+  - pip install -r requirements-dev.txt
+  - pip install pyyaml coveralls          # Removed from requirements.txt because it's only useful on the CI.
+
+test_script:
+  # GNU/Linux test.
+  - sh: ./test.sh
+  - sh: coveralls  # Publish the coverage stats online.
+
+  # MS Windows test. Code coverage not tracked because we do that on GNU/Linux.
+  - cmd: python -m pytest
+
+  # Shared test for all platforms.
+  # TODO: Switch to master once v1.0 is merged
+  - git clone https://github.com/UAVCAN/public_regulated_data_types --branch=uavcan-v1.0 dsdl-test
+  - python demo.py dsdl-test/uavcan
+
+after_test:
+  - coveralls

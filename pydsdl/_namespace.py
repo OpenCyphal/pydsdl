@@ -383,7 +383,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     os.mkdir(os.path.join(root_ns_dir, 'nested'))
 
     def touchy(relative_path: str) -> None:
-        p = os.path.join(root_ns_dir, relative_path)
+        p = os.path.join(root_ns_dir, relative_path.replace('/', os.path.sep))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, 'w') as f:
             f.write('# TEST TEXT')
@@ -403,11 +403,11 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert str(lut['foo.Qwerty']) == repr(lut['foo.Qwerty'])
     assert str(lut['foo.Qwerty']) == \
         "DSDLDefinition(full_name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, " \
-        "file_path='%s')" % lut['foo.Qwerty'].file_path
+        "file_path=%r)" % lut['foo.Qwerty'].file_path
 
     assert str(lut['foo.nested.Foo']) == \
         "DSDLDefinition(full_name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, " \
-        "file_path='%s')" % lut['foo.nested.Foo'].file_path
+        "file_path=%r)" % lut['foo.nested.Foo'].file_path
 
     t = lut['foo.Qwerty']
     assert t.file_path == os.path.join(root_ns_dir, '123.Qwerty.123.234.uavcan')

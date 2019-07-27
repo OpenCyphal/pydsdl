@@ -32,10 +32,11 @@ def _parse_definition(definition:         _dsdl_definition.DSDLDefinition,
 
 
 def _define(rel_path: str, text: str) -> _dsdl_definition.DSDLDefinition:
+    rel_path = rel_path.replace('/', os.sep)    # Windows compatibility
     assert _DIRECTORY
     path = os.path.join(_DIRECTORY.name, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf8') as f:
         f.write(text)
 
     root_namespace_path = os.path.join(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep)[0])
@@ -64,7 +65,7 @@ def _unittest_define() -> None:
     assert d.full_name == 'uavcan.test.Message'
     assert d.version == (1, 2)
     assert d.fixed_port_id == 65000
-    assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/test/65000.Message.1.2.uavcan')
+    assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan', 'test', '65000.Message.1.2.uavcan')
     assert open(d.file_path).read() == '# empty'
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
@@ -72,7 +73,7 @@ def _unittest_define() -> None:
     assert d.full_name == 'uavcan.Service'
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
-    assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan/Service.255.254.uavcan')
+    assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan', 'Service.255.254.uavcan')
     assert open(d.file_path).read() == '# empty 2'
 
 
@@ -95,7 +96,7 @@ def _unittest_simple() -> None:
     print('Parsed:', p)
     assert isinstance(p, _serializable.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
-    assert p.source_file_path.endswith('vendor/nested/29000.Abc.1.2.uavcan')
+    assert p.source_file_path.endswith(os.path.join('vendor', 'nested', '29000.Abc.1.2.uavcan'))
     assert p.source_file_path == abc.file_path
     assert p.fixed_port_id == 29000
     assert p.deprecated
@@ -459,7 +460,7 @@ def _unittest_error() -> None:
                    # Blank
                    '''))
     except _error.FrontendError as ex:
-        assert ex.path and ex.path.endswith('vendor/types/A.1.0.uavcan')
+        assert ex.path and ex.path.endswith(os.path.join('vendor', 'types', 'A.1.0.uavcan'))
         assert ex.line and ex.line == 4
     else:  # pragma: no cover
         assert False
@@ -752,17 +753,20 @@ def _unittest_parse_namespace() -> None:
             os.path.join(directory.name, 'zubax'),
         ])
 
-    os.unlink(os.path.join(directory.name, 'zubax/colliding/iceberg/300.Ice.30.0.uavcan'))
-    _define(
-        'zubax/COLLIDING/300.Iceberg.30.0.uavcan',
-        dedent("""
-        ---
-        """)
-    )
-    with raises(_namespace.DataTypeNameCollisionError, match='.*letter case.*'):
-        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
-            os.path.join(directory.name, 'zubax'),
-        ])
+    try:
+        os.unlink(os.path.join(directory.name, 'zubax/colliding/iceberg/300.Ice.30.0.uavcan'))
+        _define(
+            'zubax/COLLIDING/300.Iceberg.30.0.uavcan',
+            dedent("""
+            ---
+            """)
+        )
+        with raises(_namespace.DataTypeNameCollisionError, match='.*letter case.*'):
+            _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
+                os.path.join(directory.name, 'zubax'),
+            ])
+    except _namespace.FixedPortIDCollisionError:  # pragma: no cover
+        pass  # We're running on a platform where paths are not case-sensitive.
 
 
 def _unittest_parse_namespace_versioning() -> None:
@@ -1222,7 +1226,7 @@ def _unittest_dsdl_parser_expressions() -> None:
                 @assert (PI ** E > 22.4) && (PI ** E < 22.5)
                 @assert 'moments of eternity'     != "strangers stealing someone else's dreams"  # I've seen it all
                 @assert 'hunting for the mystery' != 'running for your life in times like these' # I've seen it all
-                @assert "I remember the time once it a life" != 'oh baby'  # got you here in my head, here in my head
+                @assert "I remember the time once in a life" != 'oh baby'  # got you here in my head, here in my head
                 @assert false == ('oh' == 'maybe')
                 @assert true
                 @assert 1 == 2 - 1
