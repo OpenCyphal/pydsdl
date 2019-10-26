@@ -19,6 +19,5 @@ script:
   - ./test.sh
   - coveralls  # Publish the coverage stats online.
 
-  # TODO: Switch to master once v1.0 is merged
-  - git clone https://github.com/UAVCAN/public_regulated_data_types --branch=uavcan-v1.0 dsdl-test
+  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
   - ./demo.py dsdl-test/uavcan
