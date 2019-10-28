@@ -60,8 +60,8 @@ _DISALLOWED_NAME_PATTERNS = [
     r'prn',
     r'aux',
     r'nul',
-    r'com\d?',
-    r'lpt\d?',
+    r'com\d',
+    r'lpt\d',
     r'_.*_',
 ]
 
