@@ -4,6 +4,7 @@
 #
 
 import abc
+import math
 import typing
 from .._bit_length_set import BitLengthSet
 from ._serializable import SerializableType, TypeParameterError
@@ -123,7 +124,8 @@ class VariableLengthArrayType(ArrayType):
                  capacity: int):
         super(VariableLengthArrayType, self).__init__(element_type, capacity)
         # Construct once to allow reference equality checks
-        self._length_field_type = UnsignedIntegerType(self.capacity.bit_length(), PrimitiveType.CastMode.TRUNCATED)
+        length_field_length = 2 ** math.ceil(math.log2(max(8, self.capacity.bit_length())))
+        self._length_field_type = UnsignedIntegerType(length_field_length, PrimitiveType.CastMode.TRUNCATED)
 
     @property
     def string_like(self) -> bool:
@@ -172,8 +174,8 @@ def _unittest_variable_array() -> None:
     assert not VariableLengthArrayType(si64, 1).string_like
 
     # Mind the length prefix!
-    assert VariableLengthArrayType(tu8, 3).bit_length_set == {2, 10, 18, 26}
-    assert VariableLengthArrayType(tu8, 1).bit_length_set == {1, 9}
+    assert VariableLengthArrayType(tu8, 3).bit_length_set == {8, 16, 24, 32}
+    assert VariableLengthArrayType(tu8, 1).bit_length_set == {8, 16}
     assert max(VariableLengthArrayType(tu8, 255).bit_length_set) == 2048
 
     assert VariableLengthArrayType(tu8, 200).capacity == 200
@@ -186,27 +188,8 @@ def _unittest_variable_array() -> None:
         'VariableLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
         'capacity=128)'
 
-    # The following was computed manually; it is easy to validate:
-    # we have zero, one, or two elements of 8 bits each; plus 2 bit wide tag; therefore:
-    # {2 + 0, 2 + 8, 2 + 16}
     small = VariableLengthArrayType(tu8, 2)
-    assert small.bit_length_set == {2, 10, 18}
+    assert small.bit_length_set == {8, 16, 24}
 
-    # This one gets a little tricky, so pull out a piece of paper an a pencil.
-    # So the nested type, as defined above, has the following set: {2, 10, 18}.
-    # We can have up to two elements of that type, so what we get can be expressed graphically as follows:
-    #    A   B | +
-    # ---------+------
-    #    2   2 |  4
-    #   10   2 | 12
-    #   18   2 | 20
-    #    2  10 | 12
-    #   10  10 | 20
-    #   18  10 | 28
-    #    2  18 | 20
-    #   10  18 | 28
-    #   18  18 | 36
-    #
-    # If we were to remove duplicates, we end up with: {4, 12, 20, 28, 36}
     outer = FixedLengthArrayType(small, 2)
-    assert outer.bit_length_set == {4, 12, 20, 28, 36}
+    assert outer.bit_length_set == {16, 24, 32, 40, 48}
