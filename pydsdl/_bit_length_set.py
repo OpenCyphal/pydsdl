@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import math
 import typing
 import itertools
 
@@ -212,7 +213,8 @@ class BitLengthSet:
             for s in ms:
                 out.unite_with(s)
             # Add the union tag:
-            out.increment((len(ms) - 1).bit_length())
+            tag_bit_length = 2 ** math.ceil(math.log2(max(8, (len(ms) - 1).bit_length())))
+            out.increment(tag_bit_length)
 
         return out
 

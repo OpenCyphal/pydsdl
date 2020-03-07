@@ -585,7 +585,7 @@ def _unittest_composite_types() -> None:
     assert try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {17}
+    ]).bit_length_set == {24}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
@@ -596,7 +596,7 @@ def _unittest_composite_types() -> None:
     assert try_union_fields([
         outer,
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {17, 25, 33, 41, 49}
+    ]).bit_length_set == {24, 32, 40, 48, 56}
 
     def try_struct_fields(field_types: typing.List[SerializableType]) -> StructureType:
         atr = []

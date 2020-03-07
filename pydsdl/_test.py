@@ -183,7 +183,7 @@ def _unittest_simple() -> None:
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
-    assert req.bit_length_set == 2   # Remember this is a union
+    assert req.bit_length_set == 8   # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
@@ -255,8 +255,8 @@ def _unittest_simple() -> None:
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
-    assert min(p.bit_length_set) == 2
-    assert max(p.bit_length_set) == 2 + 8 + 255
+    assert min(p.bit_length_set) == 8
+    assert max(p.bit_length_set) == 8 + 8 + 255
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
@@ -601,7 +601,7 @@ def _unittest_assert() -> None:
             @union
             float32 a
             uint64 b
-            @assert _offset_ == {33, 65}
+            @assert _offset_ == {40, 72}
             ''')),
         []
     )
@@ -616,7 +616,7 @@ def _unittest_assert() -> None:
             uint8 B = 1
             uint64 b
             uint8 C = 2
-            @assert _offset_ == {33, 65}
+            @assert _offset_ == {40, 72}
             uint8 D = 3
             ''')),
         []
@@ -631,7 +631,7 @@ def _unittest_assert() -> None:
                 @assert _offset_.min == 33
                 float32 a
                 uint64 b
-                @assert _offset_ == {33, 65}
+                @assert _offset_ == {40, 72}
                 ''')),
             []
         )
