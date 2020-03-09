@@ -587,6 +587,20 @@ def _unittest_composite_types() -> None:
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ]).bit_length_set == {24}
 
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ] * 1000
+    ).bit_length_set == {16 + 16}
+
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ] * 1000000
+    ).bit_length_set == {32 + 16}
+
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     small = VariableLengthArrayType(tu8, 2)

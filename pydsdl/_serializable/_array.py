@@ -193,3 +193,8 @@ def _unittest_variable_array() -> None:
 
     outer = FixedLengthArrayType(small, 2)
     assert outer.bit_length_set == {16, 24, 32, 40, 48}
+
+    assert VariableLengthArrayType(tu8, 100).length_field_type.bit_length == 8
+    assert VariableLengthArrayType(tu8, 10000).length_field_type.bit_length == 16
+    assert VariableLengthArrayType(tu8, 1000000).length_field_type.bit_length == 32
+    assert VariableLengthArrayType(tu8, 10000000000).length_field_type.bit_length == 64
