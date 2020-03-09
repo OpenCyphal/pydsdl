@@ -4,6 +4,7 @@
 #
 
 import abc
+import math
 import typing
 import itertools
 from .. import _expression
@@ -341,7 +342,8 @@ class UnionType(CompositeType):
 
         # Construct once to allow reference equality checks
         assert (self.number_of_variants - 1) > 0
-        tag_bit_length = (self.number_of_variants - 1).bit_length()
+        unaligned_tag_bit_length = (self.number_of_variants - 1).bit_length()
+        tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
         self._tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
 
     @property
@@ -583,7 +585,21 @@ def _unittest_composite_types() -> None:
     assert try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {17}
+    ]).bit_length_set == {24}
+
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ] * 1000
+    ).bit_length_set == {16 + 16}
+
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ] * 1000000
+    ).bit_length_set == {32 + 16}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
@@ -594,7 +610,7 @@ def _unittest_composite_types() -> None:
     assert try_union_fields([
         outer,
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {5, 13, 17, 21, 29, 37}
+    ]).bit_length_set == {24, 32, 40, 48, 56}
 
     def try_struct_fields(field_types: typing.List[SerializableType]) -> StructureType:
         atr = []
@@ -618,9 +634,9 @@ def _unittest_composite_types() -> None:
     assert try_struct_fields([
         outer,
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {4 + 16, 12 + 16, 20 + 16, 28 + 16, 36 + 16}
+    ]).bit_length_set == {16 + 16, 24 + 16, 32 + 16, 40 + 16, 48 + 16}
 
-    assert try_struct_fields([outer]).bit_length_set == {4, 12, 20, 28, 36}
+    assert try_struct_fields([outer]).bit_length_set == {16, 24, 32, 40, 48}
 
 
 def _unittest_field_iterators() -> None:
@@ -662,21 +678,21 @@ def _unittest_field_iterators() -> None:
         ('b', {10}),
         ('c', {11}),
         ('d', {
-            11 + 2 + 32 * 0,
-            11 + 2 + 32 * 1,
-            11 + 2 + 32 * 2,
+            11 + 8 + 32 * 0,
+            11 + 8 + 32 * 1,
+            11 + 8 + 32 * 2,
         }),
         ('', {
-            11 + 2 + 32 * 0 + 32 * 7,
-            11 + 2 + 32 * 1 + 32 * 7,
-            11 + 2 + 32 * 2 + 32 * 7,
+            11 + 8 + 32 * 0 + 32 * 7,
+            11 + 8 + 32 * 1 + 32 * 7,
+            11 + 8 + 32 * 2 + 32 * 7,
         }),
     ])
 
     a_bls_options = [
-        11 + 2 + 32 * 0 + 32 * 7 + 3,
-        11 + 2 + 32 * 1 + 32 * 7 + 3,
-        11 + 2 + 32 * 2 + 32 * 7 + 3,
+        11 + 8 + 32 * 0 + 32 * 7 + 3,
+        11 + 8 + 32 * 1 + 32 * 7 + 3,
+        11 + 8 + 32 * 2 + 32 * 7 + 3,
     ]
     assert a.bit_length_set == BitLengthSet(a_bls_options)
 
@@ -686,20 +702,20 @@ def _unittest_field_iterators() -> None:
         ('b', {1 + 10, 16 + 10}),
         ('c', {1 + 11, 16 + 11}),
         ('d', {
-            1 + 11 + 2 + 32 * 0,
-            1 + 11 + 2 + 32 * 1,
-            1 + 11 + 2 + 32 * 2,
-            16 + 11 + 2 + 32 * 0,
-            16 + 11 + 2 + 32 * 1,
-            16 + 11 + 2 + 32 * 2,
+            1 + 11 + 8 + 32 * 0,
+            1 + 11 + 8 + 32 * 1,
+            1 + 11 + 8 + 32 * 2,
+            16 + 11 + 8 + 32 * 0,
+            16 + 11 + 8 + 32 * 1,
+            16 + 11 + 8 + 32 * 2,
         }),
         ('', {
-            1 + 11 + 2 + 32 * 0 + 32 * 7,
-            1 + 11 + 2 + 32 * 1 + 32 * 7,
-            1 + 11 + 2 + 32 * 2 + 32 * 7,
-            16 + 11 + 2 + 32 * 0 + 32 * 7,
-            16 + 11 + 2 + 32 * 1 + 32 * 7,
-            16 + 11 + 2 + 32 * 2 + 32 * 7,
+            1 + 11 + 8 + 32 * 0 + 32 * 7,
+            1 + 11 + 8 + 32 * 1 + 32 * 7,
+            1 + 11 + 8 + 32 * 2 + 32 * 7,
+            16 + 11 + 8 + 32 * 0 + 32 * 7,
+            16 + 11 + 8 + 32 * 1 + 32 * 7,
+            16 + 11 + 8 + 32 * 2 + 32 * 7,
         }),
     ], BitLengthSet({1, 16}))
 
@@ -718,35 +734,35 @@ def _unittest_field_iterators() -> None:
         }),
         ('x', {  # The lone "+2" is for the variable-length array's implicit length field
             # First length option of z
-            a_bls_options[0] + 2 + a_bls_options[0] * 0,  # suka
-            a_bls_options[0] + 2 + a_bls_options[1] * 0,
-            a_bls_options[0] + 2 + a_bls_options[2] * 0,
-            a_bls_options[0] + 2 + a_bls_options[0] * 1,
-            a_bls_options[0] + 2 + a_bls_options[1] * 1,
-            a_bls_options[0] + 2 + a_bls_options[2] * 1,
-            a_bls_options[0] + 2 + a_bls_options[0] * 2,
-            a_bls_options[0] + 2 + a_bls_options[1] * 2,
-            a_bls_options[0] + 2 + a_bls_options[2] * 2,
+            a_bls_options[0] + 8 + a_bls_options[0] * 0,  # suka
+            a_bls_options[0] + 8 + a_bls_options[1] * 0,
+            a_bls_options[0] + 8 + a_bls_options[2] * 0,
+            a_bls_options[0] + 8 + a_bls_options[0] * 1,
+            a_bls_options[0] + 8 + a_bls_options[1] * 1,
+            a_bls_options[0] + 8 + a_bls_options[2] * 1,
+            a_bls_options[0] + 8 + a_bls_options[0] * 2,
+            a_bls_options[0] + 8 + a_bls_options[1] * 2,
+            a_bls_options[0] + 8 + a_bls_options[2] * 2,
             # Second length option of z
-            a_bls_options[1] + 2 + a_bls_options[0] * 0,
-            a_bls_options[1] + 2 + a_bls_options[1] * 0,
-            a_bls_options[1] + 2 + a_bls_options[2] * 0,
-            a_bls_options[1] + 2 + a_bls_options[0] * 1,
-            a_bls_options[1] + 2 + a_bls_options[1] * 1,
-            a_bls_options[1] + 2 + a_bls_options[2] * 1,
-            a_bls_options[1] + 2 + a_bls_options[0] * 2,
-            a_bls_options[1] + 2 + a_bls_options[1] * 2,
-            a_bls_options[1] + 2 + a_bls_options[2] * 2,
+            a_bls_options[1] + 8 + a_bls_options[0] * 0,
+            a_bls_options[1] + 8 + a_bls_options[1] * 0,
+            a_bls_options[1] + 8 + a_bls_options[2] * 0,
+            a_bls_options[1] + 8 + a_bls_options[0] * 1,
+            a_bls_options[1] + 8 + a_bls_options[1] * 1,
+            a_bls_options[1] + 8 + a_bls_options[2] * 1,
+            a_bls_options[1] + 8 + a_bls_options[0] * 2,
+            a_bls_options[1] + 8 + a_bls_options[1] * 2,
+            a_bls_options[1] + 8 + a_bls_options[2] * 2,
             # Third length option of z
-            a_bls_options[2] + 2 + a_bls_options[0] * 0,
-            a_bls_options[2] + 2 + a_bls_options[1] * 0,
-            a_bls_options[2] + 2 + a_bls_options[2] * 0,
-            a_bls_options[2] + 2 + a_bls_options[0] * 1,
-            a_bls_options[2] + 2 + a_bls_options[1] * 1,
-            a_bls_options[2] + 2 + a_bls_options[2] * 1,
-            a_bls_options[2] + 2 + a_bls_options[0] * 2,
-            a_bls_options[2] + 2 + a_bls_options[1] * 2,
-            a_bls_options[2] + 2 + a_bls_options[2] * 2,
+            a_bls_options[2] + 8 + a_bls_options[0] * 0,
+            a_bls_options[2] + 8 + a_bls_options[1] * 0,
+            a_bls_options[2] + 8 + a_bls_options[2] * 0,
+            a_bls_options[2] + 8 + a_bls_options[0] * 1,
+            a_bls_options[2] + 8 + a_bls_options[1] * 1,
+            a_bls_options[2] + 8 + a_bls_options[2] * 1,
+            a_bls_options[2] + 8 + a_bls_options[0] * 2,
+            a_bls_options[2] + 8 + a_bls_options[1] * 2,
+            a_bls_options[2] + 8 + a_bls_options[2] * 2,
         }),
     ])
 
@@ -756,7 +772,7 @@ def _unittest_field_iterators() -> None:
         b_offset.increment(f.data_type.bit_length_set)
     print('b_offset:', b_offset)
     assert b_offset == b.bit_length_set
-    assert b_offset.is_aligned_at_byte()
+    assert not b_offset.is_aligned_at_byte()
     assert not b_offset.is_aligned_at(32)
 
     c = make_type(UnionType, [
@@ -765,18 +781,18 @@ def _unittest_field_iterators() -> None:
     ])
 
     validate_iterator(c, [
-        ('foo', {1}),       # The offset is the same because it's a union
-        ('bar', {1}),
+        ('foo', {8}),       # The offset is the same because it's a union
+        ('bar', {8}),
     ])
 
     validate_iterator(c, [
-        ('foo', {8 + 1}),
-        ('bar', {8 + 1}),
+        ('foo', {8 + 8}),
+        ('bar', {8 + 8}),
     ], BitLengthSet(8))
 
     validate_iterator(c, [
-        ('foo', {0 + 1, 4 + 1, 8 + 1}),
-        ('bar', {0 + 1, 4 + 1, 8 + 1}),
+        ('foo', {0 + 8, 4 + 8, 8 + 8}),
+        ('bar', {0 + 8, 4 + 8, 8 + 8}),
     ], BitLengthSet({0, 4, 8}))
 
     with raises(TypeError, match='.*request or response.*'):

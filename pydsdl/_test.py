@@ -101,8 +101,8 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id == 29000
     assert p.deprecated
     assert p.version == (1, 2)
-    assert min(p.bit_length_set) == 14
-    assert max(p.bit_length_set) == 14 + 64 * 32
+    assert min(p.bit_length_set) == 16
+    assert max(p.bit_length_set) == 16 + 64 * 32
     assert len(p.attributes) == 3
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
@@ -183,7 +183,7 @@ def _unittest_simple() -> None:
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
-    assert req.bit_length_set == 2   # Remember this is a union
+    assert req.bit_length_set == 8   # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
@@ -206,8 +206,8 @@ def _unittest_simple() -> None:
     assert res.deprecated
     assert not res.has_fixed_port_id
     assert res.version == (0, 1)
-    assert min(res.bit_length_set) == 14
-    assert max(res.bit_length_set) == 14 + 64 * 32
+    assert min(res.bit_length_set) == 16
+    assert max(res.bit_length_set) == 16 + 64 * 32
 
     t = res.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
@@ -255,8 +255,8 @@ def _unittest_simple() -> None:
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
-    assert min(p.bit_length_set) == 2
-    assert max(p.bit_length_set) == 2 + 8 + 255
+    assert min(p.bit_length_set) == 8
+    assert max(p.bit_length_set) == 8 + 8 + 255
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
@@ -522,27 +522,26 @@ def _unittest_assert() -> None:
             @assert _offset_ == {0}
             @assert _offset_.min == _offset_.max
             Array.1.0[2] bar
-            @assert _offset_ == {4, 12, 20, 28, 36}
-            @assert _offset_.min == 4
-            @assert _offset_.max == 36
-            @assert _offset_ % 4 == {0}
-            @assert _offset_ % 8 == {4}
-            @assert _offset_ % 10 == {4, 2, 0, 8, 6}
-            @assert _offset_ * 2 == {8, 24, 40, 56, 72}
-            @assert 2 * _offset_ == {8, 24, 40, 56, 72}
-            @assert _offset_ / 4 == {1, 3, 5, 7, 9}
-            @assert _offset_ - 4 == {0, 8, 16, 24, 32}
-            @assert _offset_ + 4 == {8, 16, 24, 32, 40}
+            @assert _offset_ == {16, 24, 32, 40, 48}
+            @assert _offset_.min == 16
+            @assert _offset_.max == 48
+            @assert _offset_ % 8 == {0}
+            @assert _offset_ % 10 == {6, 4, 2, 0, 8}
+            @assert _offset_ * 2 == {32, 48, 64, 80, 96}
+            @assert 2 * _offset_ == {32, 48, 64, 80, 96}
+            @assert _offset_ / 4 == {4, 6, 8, 10, 12}
+            @assert _offset_ - 4 == {12, 20, 28, 36, 44}
+            @assert _offset_ + 4 == {20, 28, 36, 44, 52}
             uint64 big
-            @assert _offset_ - 64 == {4, 12, 20, 28, 36}
-            @assert _offset_.min == 68
-            @assert _offset_.max == 100  # 36 + 64
-            @assert _offset_.max <= 100
-            @assert _offset_.max < 101
+            @assert _offset_ - 64 == {16, 24, 32, 40, 48}
+            @assert _offset_.min == 80
+            @assert _offset_.max == 112
+            @assert _offset_.max <= 112
+            @assert _offset_.max < 113
             @assert _offset_ == _offset_
             @assert truncated uint64._bit_length_ == {64}
             @assert uint64._bit_length_ == {64}
-            @assert Array.1.0._bit_length_.max == 2 + 8 + 8
+            @assert Array.1.0._bit_length_.max == 8 + 8 + 8
             ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
@@ -602,7 +601,7 @@ def _unittest_assert() -> None:
             @union
             float32 a
             uint64 b
-            @assert _offset_ == {33, 65}
+            @assert _offset_ == {40, 72}
             ''')),
         []
     )
@@ -617,7 +616,7 @@ def _unittest_assert() -> None:
             uint8 B = 1
             uint64 b
             uint8 C = 2
-            @assert _offset_ == {33, 65}
+            @assert _offset_ == {40, 72}
             uint8 D = 3
             ''')),
         []
@@ -632,7 +631,7 @@ def _unittest_assert() -> None:
                 @assert _offset_.min == 33
                 float32 a
                 uint64 b
-                @assert _offset_ == {33, 65}
+                @assert _offset_ == {40, 72}
                 ''')),
             []
         )
@@ -689,7 +688,6 @@ def _unittest_parse_namespace() -> None:
     _define(
         'zubax/29001.Message.1.0.uavcan',
         dedent("""
-        void6
         zubax.First.1.0[<=2] a
         @assert _offset_.min == 8
         @assert _offset_.max == 4104
