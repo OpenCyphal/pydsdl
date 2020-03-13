@@ -191,7 +191,7 @@ class BitLengthSet:
             or BitLengthSet(0)  # Empty output not permitted
 
     @staticmethod
-    def for_tagged_union(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
+    def for_union(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
             -> 'BitLengthSet':
         """
         Computes the bit length set for a tagged union type given the bit length sets of each of its fields (variants).
@@ -212,9 +212,6 @@ class BitLengthSet:
         else:
             for s in ms:
                 out.unite_with(s)
-            # Add the union tag:
-            tag_bit_length = 2 ** math.ceil(math.log2(max(8, (len(ms) - 1).bit_length())))
-            out.increment(tag_bit_length)
 
         return out
 

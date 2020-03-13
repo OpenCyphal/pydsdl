@@ -84,6 +84,7 @@ celerybeat-schedule
 # Environments
 .env
 .venv
+.pyenv
 env/
 venv/
 ENV/
@@ -106,6 +107,7 @@ venv.bak/
 # IDE
 .idea/
 .xml
+.vscode
 
 # Project-specific testing environment
 .dsdl-test/
