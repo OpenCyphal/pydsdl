@@ -111,3 +111,10 @@ venv.bak/
 
 # Project-specific testing environment
 .dsdl-test/
+
+# OS crap
+.DS_Store
+
+# cProfile
+/prof
+

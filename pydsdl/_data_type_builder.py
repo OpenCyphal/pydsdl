@@ -60,7 +60,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         if len(self._structs) == 1:     # Message type
             struct, = self._structs     # type: _data_schema_builder.DataSchemaBuilder,
             if struct.union:
-                out = _serializable.UnionType(
+                out = _serializable.TaggedUnionType(
                     name=self._definition.full_name,
                     version=self._definition.version,
                     attributes=struct.attributes,

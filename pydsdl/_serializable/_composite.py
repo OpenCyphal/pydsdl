@@ -311,52 +311,47 @@ class CompositeType(SerializableType):
              self.fixed_port_id)
 
 
-class UnionType(SerializableType):
+class UnionType(CompositeType):
     MIN_NUMBER_OF_VARIANTS = 2
 
-    def __init__(self, attributes: typing.Iterable[Attribute]):
-        super().__init__()
-        if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
-            raise MalformedUnionError('A tagged union cannot contain fewer than %d variants' %
-                                      self.MIN_NUMBER_OF_VARIANTS)
-
-        self._attributes = list(attributes)
-        self._attributes_by_name = {a.name: a for a in self._attributes if not isinstance(a, PaddingField)}
-
+    def __init__(self,
+                 name:             str,
+                 version:          Version,
+                 attributes:       typing.Iterable[Attribute],
+                 deprecated:       bool,
+                 fixed_port_id:    typing.Optional[int],
+                 source_file_path: str,
+                 parent_service:   typing.Optional['ServiceType'] = None):
+        # Proxy all parameters directly to the base type - I wish we could do that
+        # with kwargs while preserving the type information
+        super(UnionType, self).__init__(name=name,
+                                        version=version,
+                                        attributes=attributes,
+                                        deprecated=deprecated,
+                                        fixed_port_id=fixed_port_id,
+                                        source_file_path=source_file_path,
+                                        parent_service=parent_service)
         for a in attributes:
             if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
                 raise MalformedUnionError('Padding fields not allowed in unions')
+
+        if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
+            raise MalformedUnionError('A union cannot contain fewer than %d variants' %
+                                      self.MIN_NUMBER_OF_VARIANTS)
 
     @property
     def number_of_variants(self) -> int:
         return len(self.fields)
 
-    @property
-    def attributes(self) -> typing.List[Attribute]:
-        return self._attributes[:]  # Return copy to prevent mutation
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        base_offset = BitLengthSet(base_offset or {0})
+        for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
+            yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
-    @property
-    def fields(self) -> typing.List[Field]:
-        return [a for a in self.attributes if isinstance(a, Field)]
-    
     def _compute_bit_length_set(self) -> BitLengthSet:
         return BitLengthSet.for_union(map(lambda f: f.data_type.bit_length_set, self.fields))
 
-    def __getitem__(self, attribute_name: str) -> Attribute:
-        """
-        Allows the caller to retrieve an attribute by name. Padding fields are not accessible via this interface.
-        Raises KeyError if there is no such attribute.
-        """
-        return self._attributes_by_name[attribute_name]
-
-    def __str__(self) -> str:
-        # The problem with making UnionType a SerializableType is it's not Serializable.
-        return 'union'
-
-    def __repr__(self) -> str:
-        return '%s(fields=%r)' % \
-            (self.__class__.__name__,
-             self.fields)
 
 class StructureType(CompositeType):
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
@@ -382,7 +377,6 @@ class StructureType(CompositeType):
 
 
 class TaggedUnionType(StructureType):
-    MIN_NUMBER_OF_VARIANTS = 2
 
     def __init__(self,
                  name:             str,
@@ -392,7 +386,21 @@ class TaggedUnionType(StructureType):
                  fixed_port_id:    typing.Optional[int],
                  source_file_path: str,
                  parent_service:   typing.Optional['ServiceType'] = None):
-        union_serializable = UnionType(attributes)
+        fields = []   # type: typing.List[Field]
+        non_fields = []  # type: typing.List[Attribute]
+        for a in attributes:
+            if isinstance(a, Field):
+                fields.append(a)
+            else:
+                non_fields.append(a)
+
+        union_serializable = UnionType(name='%s.union' % name,
+                                       version=version,
+                                       attributes=fields,
+                                       deprecated=deprecated,
+                                       fixed_port_id=fixed_port_id,
+                                       source_file_path=source_file_path)
+        self._union_type = union_serializable
         union_attr = Field(union_serializable, 'union')
 
         number_of_variants = union_serializable.number_of_variants
@@ -400,19 +408,15 @@ class TaggedUnionType(StructureType):
         tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
         tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
 
-        tag_field_attr = Attribute(tag_field_type, 'tag')
+        tag_field_attr = Field(tag_field_type, 'tag')
 
         super(TaggedUnionType, self).__init__(name=name,
                                               version=version,
-                                              attributes=[tag_field_attr, union_attr],
+                                              attributes=non_fields + [tag_field_attr, union_attr],
                                               deprecated=deprecated,
                                               fixed_port_id=fixed_port_id,
                                               source_file_path=source_file_path,
                                               parent_service=parent_service)
-
-        for a in attributes:
-            if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
-                raise MalformedUnionError('Padding fields not allowed in unions')
 
         # Construct once to allow reference equality checks
         assert (number_of_variants - 1) > 0
@@ -435,19 +439,16 @@ class TaggedUnionType(StructureType):
 
     @property
     def union_type(self) -> UnionType:
-        return typing.cast(UnionType, self['union'])
+        return self._union_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         base_offset = BitLengthSet(base_offset or {0})
         base_offset.increment(self.tag_field_type.bit_length)
-        for f in self.union_type.fields:  # Same offset for every field, because it's a variant, not a struct
-            yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
+        return self.union_type.iterate_fields_with_offsets(base_offset)
 
     def _compute_bit_length_set(self) -> BitLengthSet:
-        bs = self.union_type._compute_bit_length_set()
-        bs.increment(self.tag_bit_length)
-        return bs
+        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self._union_type.fields))
 
 
 class ServiceType(CompositeType):
@@ -461,7 +462,7 @@ class ServiceType(CompositeType):
                  deprecated:          bool,
                  fixed_port_id:       typing.Optional[int],
                  source_file_path:    str):
-        request_meta_type = UnionType if request_is_union else StructureType  # type: type
+        request_meta_type = TaggedUnionType if request_is_union else StructureType  # type: type
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_attributes,
@@ -470,7 +471,7 @@ class ServiceType(CompositeType):
                                                source_file_path='',
                                                parent_service=self)  # type: CompositeType
 
-        response_meta_type = UnionType if response_is_union else StructureType  # type: type
+        response_meta_type = TaggedUnionType if response_is_union else StructureType  # type: type
         self._response_type = response_meta_type(name=name + '.Response',
                                                  version=version,
                                                  attributes=response_attributes,
@@ -592,12 +593,12 @@ def _unittest_composite_types() -> None:
                         fixed_port_id=None,
                         source_file_path='')
     assert u.data_type_hash == 0x666666667bc4992a     # Computed by hand
-    assert u['a'].name == 'a'
-    assert u['b'].name == 'b'
+    assert u.union_type['a'].name == 'a'
+    assert u.union_type['b'].name == 'b'
     assert u['A'].name == 'A'
     assert u.fields == u.fields_except_padding
     with raises(KeyError):
-        assert u['c']
+        assert u.union_type['c']
     assert hash(u) == hash(u)
     del u
 

@@ -170,7 +170,7 @@ def _unittest_simple() -> None:
     assert p.fields[0].name == 'request'
     assert p.fields[1].name == 'response'
     req, res = [x.data_type for x in p.fields]
-    assert isinstance(req, _serializable.UnionType)
+    assert isinstance(req, _serializable.TaggedUnionType)
     assert isinstance(res, _serializable.StructureType)
     assert req.full_name == 'another.Service.Request'
     assert res.full_name == 'another.Service.Response'
@@ -178,25 +178,36 @@ def _unittest_simple() -> None:
     assert res is p.response_type
 
     assert len(req.constants) == 0
-    assert len(req.fields) == 3
-    assert req.number_of_variants == 3
+    assert len(req.fields) == 2
+    assert req.union_type.number_of_variants == 3
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
     assert req.bit_length_set == 8   # Remember this is a union
-    assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
+    assert [x.name for x in req.fields] == ['tag', 'union']
+    assert [x.name for x in req.union_type.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
+    assert isinstance(t, _serializable.UnsignedIntegerType)
+
+    t = req.fields[1].data_type
+    assert isinstance(t, _serializable.CompositeType)
+    assert t.full_name == 'another.Service.Request.union'
+    assert t.version == (0, 1)
+
+    union_type = t
+
+    t = union_type.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected implicitly
 
-    t = req.fields[1].data_type
+    t = union_type.fields[1].data_type
     assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 255)          # Selected explicitly
 
-    t = req.fields[2].data_type
+    t = union_type.fields[2].data_type
     assert isinstance(t, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Empty'
     assert t.version == (255, 254)          # Selected explicitly
@@ -250,17 +261,18 @@ def _unittest_simple() -> None:
     assert p.fixed_port_id is None
     assert not p.has_fixed_port_id
     assert not p.deprecated
-    assert isinstance(p, _serializable.UnionType)
-    assert p.number_of_variants == 3
+    assert isinstance(p, _serializable.TaggedUnionType)
+    assert p.union_type.number_of_variants == 3
     assert len(p.constants) == 1
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
     assert min(p.bit_length_set) == 8
     assert max(p.bit_length_set) == 8 + 8 + 255
-    assert len(p.fields) == 3
-    assert str(p.fields[0]) == 'saturated uint8 a'
-    assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
-    assert str(p.fields[2]) == 'saturated bool[<=255] c'
+    assert len(p.fields) == 2
+    assert len(p.union_type.fields) == 3
+    assert str(p.union_type.fields[0]) == 'saturated uint8 a'
+    assert str(p.union_type.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
+    assert str(p.union_type.fields[2]) == 'saturated bool[<=255] c'
 
 
 # noinspection PyProtectedMember,PyProtectedMember
@@ -286,7 +298,7 @@ def _unittest_error() -> None:
     with raises(_error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
         standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain fewer than.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*union cannot contain fewer than.*'):
         standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',

@@ -70,6 +70,7 @@ from ._serializable import ArrayType as ArrayType
 from ._serializable import FixedLengthArrayType as FixedLengthArrayType
 from ._serializable import VariableLengthArrayType as VariableLengthArrayType
 from ._serializable import CompositeType as CompositeType
+from ._serializable import TaggedUnionType as TaggedUnionType
 from ._serializable import UnionType as UnionType
 from ._serializable import StructureType as StructureType
 from ._serializable import ServiceType as ServiceType
