@@ -579,7 +579,7 @@ def _unittest_composite_types() -> None:
                    source_file_path='')
 
     with raises(TypeError, match='(?i).*Union types are not directly serializable.*'):
-        uu.bit_length_set
+        uu.bit_length_set  # pylint: disable=W0104
 
     del uu
 
