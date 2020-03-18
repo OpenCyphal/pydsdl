@@ -19,14 +19,14 @@ class InvalidTypeError(TypeParameterError):
 
 
 class Attribute:    # TODO: should extend expression.Any to support advanced introspection/reflection.
-    def __init__(self, data_type: SerializableType, name: str):
+    def __init__(self, data_type: SerializableType, name: str, enforce_naming_rules: bool = True):
         self._data_type = data_type
         self._name = str(name)
 
         if isinstance(data_type, VoidType):
             if self._name:
                 raise InvalidNameError('Void-typed fields can be used only for padding and cannot be named')
-        else:
+        elif enforce_naming_rules:
             check_name(self._name)
 
     @property

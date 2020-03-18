@@ -191,8 +191,14 @@ class BitLengthSet:
             or BitLengthSet(0)  # Empty output not permitted
 
     @staticmethod
-    def _for_union(tagged: bool, member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
+    def for_tagged_union(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
             -> 'BitLengthSet':
+        """
+        Computes the bit length set for a tagged union type given the bit length sets of each of its fields (variants).
+        Unions are easy to handle because when serialized, a union is essentially just a single field prefixed with
+        a fixed-length integer tag. So we just build a full set of combinations and then add the tag length
+        to each element.
+        """
         ms = list(member_bit_length_sets)
         del member_bit_length_sets
 
@@ -204,34 +210,9 @@ class BitLengthSet:
         else:
             for s in ms:
                 out.unite_with(s)
-            if tagged:
-                unaligned_tag_bit_length = (len(ms) - 1).bit_length()
-                out.increment(2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length))))
+            unaligned_tag_bit_length = (len(ms) - 1).bit_length()
+            out.increment(2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length))))
         return out
-
-    @staticmethod
-    def for_union(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
-            -> 'BitLengthSet':
-        """
-        Computes the bit length set for a union type given the bit length sets of each of its fields (variants).
-        Unions are easy to handle because when serialized, a union is essentially just a single field. So we just build
-        a full set of combinations and then add the tag length to each element. Observe that unions are not defined for
-        less than 2 elements; however, this function tries to be generic by properly handling those cases as well, even
-        though they are not permitted by the specification. For zero fields, the function yields zero {0}; for one
-        field, the function yields the BLS of the field itself.
-        """
-        return BitLengthSet._for_union(False, member_bit_length_sets)
-
-    @staticmethod
-    def for_tagged_union(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
-            -> 'BitLengthSet':
-        """
-        Computes the bit length set for a tagged union type given the bit length sets of each of its fields (variants).
-        Unions are easy to handle because when serialized, a union is essentially just a single field prefixed with
-        a fixed-length integer tag. So we just build a full set of combinations and then add the tag length
-        to each element.
-        """
-        return BitLengthSet._for_union(True, member_bit_length_sets)
 
     def __iter__(self) -> typing.Iterator[int]:
         return iter(self._value)

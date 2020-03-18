@@ -5,7 +5,7 @@
 
 import re
 import string
-import typing
+import typing  # pylint: disable=W0611
 from ._serializable import TypeParameterError
 
 

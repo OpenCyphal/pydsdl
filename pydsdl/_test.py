@@ -184,7 +184,7 @@ def _unittest_simple() -> None:
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
     assert req.bit_length_set == 8   # Remember this is a union
-    assert [x.name for x in req.fields] == ['tag', 'union']
+    assert [x.name for x in req.fields] == ['_tag_', '_union_']
     assert [x.name for x in req.union_type.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type

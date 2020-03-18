@@ -350,7 +350,7 @@ class UnionType(CompositeType):
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
     def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_union(map(lambda f: f.data_type.bit_length_set, self.fields))
+        raise TypeError('Union types are not directly serializable. Use TaggedUnion')
 
 
 class StructureType(CompositeType):
@@ -400,15 +400,16 @@ class TaggedUnionType(StructureType):
                                        deprecated=deprecated,
                                        fixed_port_id=fixed_port_id,
                                        source_file_path=source_file_path)
-        self._union_type = union_serializable
-        union_attr = Field(union_serializable, 'union')
+        union_attr = Field(union_serializable, '_union_', enforce_naming_rules=False)
 
+        # Construct once to allow reference equality checks
         number_of_variants = union_serializable.number_of_variants
+        assert (number_of_variants - 1) > 0
         unaligned_tag_bit_length = (number_of_variants - 1).bit_length()
         tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
         tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
 
-        tag_field_attr = Field(tag_field_type, 'tag')
+        tag_field_attr = Field(tag_field_type, '_tag_', enforce_naming_rules=False)
 
         super(TaggedUnionType, self).__init__(name=name,
                                               version=version,
@@ -418,11 +419,8 @@ class TaggedUnionType(StructureType):
                                               source_file_path=source_file_path,
                                               parent_service=parent_service)
 
-        # Construct once to allow reference equality checks
-        assert (number_of_variants - 1) > 0
-        unaligned_tag_bit_length = (number_of_variants - 1).bit_length()
-        self._tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))  # type: int
-        self._tag_field_type = UnsignedIntegerType(self.tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
+        self._union_type = union_serializable
+        self._tag_field_type = tag_field_type
 
     @property
     def tag_field_type(self) -> UnsignedIntegerType:
@@ -431,14 +429,14 @@ class TaggedUnionType(StructureType):
         This is convenient for code generation.
         WARNING: the set of valid tag values is a subset of that of the returned type.
         """
-        return typing.cast(UnsignedIntegerType, self['tag'].data_type)
-
-    @property
-    def tag_bit_length(self) -> int:
-        return self._tag_bit_length
+        return self._tag_field_type
 
     @property
     def union_type(self) -> UnionType:
+        """
+        Returns the union type itself. A tagged union consists of two fields: `tag_field_type` and the
+        union of possible types.
+        """
         return self._union_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
@@ -570,6 +568,21 @@ def _unittest_composite_types() -> None:
                         fixed_port_id=None,
                         source_file_path='')
 
+    uu = UnionType(name='ns.foo',
+                   version=Version(0, 1),
+                   attributes=[
+                       Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
+                       Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
+                   ],
+                   deprecated=False,
+                   fixed_port_id=None,
+                   source_file_path='')
+
+    with raises(TypeError, match='(?i).*Union types are not directly serializable.*'):
+        uu.bit_length_set
+
+    del uu
+
     with raises(MalformedUnionError, match='(?i).*padding.*'):
         TaggedUnionType(name='a.A',
                         version=Version(0, 1),
@@ -600,6 +613,9 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert u.union_type['c']
     assert hash(u) == hash(u)
+    assert isinstance(u['_union_'].data_type, UnionType)
+    assert isinstance(u['_tag_'].data_type, UnsignedIntegerType)
+    assert 8 == u['_tag_'].data_type.bit_length
     del u
 
     s = StructureType(name='a.A',
