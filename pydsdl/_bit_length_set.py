@@ -217,8 +217,8 @@ class BitLengthSet:
         Unions are easy to handle because when serialized, a union is essentially just a single field. So we just build
         a full set of combinations and then add the tag length to each element. Observe that unions are not defined for
         less than 2 elements; however, this function tries to be generic by properly handling those cases as well, even
-        though they are not permitted by the specification. For zero fields, the function yields zero {0}; for one field,
-        the function yields the BLS of the field itself.
+        though they are not permitted by the specification. For zero fields, the function yields zero {0}; for one
+        field, the function yields the BLS of the field itself.
         """
         return BitLengthSet._for_union(False, member_bit_length_sets)
 

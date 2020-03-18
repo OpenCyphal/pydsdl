@@ -69,7 +69,7 @@ _DISALLOWED_NAME_PATTERNS = [
     re.compile(r'com\d$'),
     re.compile(r'lpt\d$'),
     re.compile(r'_.*_$')
-]  # type: typing.List[typing.Union[str, typing.Pattern]]
+]  # type: typing.List[typing.Union[str, typing.Pattern[str]]]
 
 
 def _unittest_check_name() -> None:
