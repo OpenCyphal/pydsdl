@@ -21,6 +21,7 @@ from ._array import FixedLengthArrayType as FixedLengthArrayType
 from ._array import VariableLengthArrayType as VariableLengthArrayType
 
 from ._composite import CompositeType as CompositeType
+from ._composite import TaggedUnionType as TaggedUnionType
 from ._composite import UnionType as UnionType
 from ._composite import StructureType as StructureType
 from ._composite import ServiceType as ServiceType

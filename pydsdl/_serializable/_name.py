@@ -5,6 +5,7 @@
 
 import re
 import string
+import typing  # pylint: disable=W0611
 from ._serializable import TypeParameterError
 
 
@@ -16,6 +17,8 @@ def check_name(name: str) -> None:
     if not name:
         raise InvalidNameError('Name or namespace component cannot be empty')
 
+    name = name.lower()
+
     if name[0] not in _VALID_FIRST_CHARACTERS_OF_NAME:
         raise InvalidNameError('Name or namespace component cannot start with %r' % name[0])
 
@@ -24,7 +27,10 @@ def check_name(name: str) -> None:
             raise InvalidNameError('Name or namespace component cannot contain %r' % char)
 
     for pat in _DISALLOWED_NAME_PATTERNS:
-        if re.match(pat + '$', name, flags=re.IGNORECASE):
+        if isinstance(pat, str):
+            if pat == name:
+                raise InvalidNameError('Disallowed name: %r matches the following string: %s' % (name, pat))
+        elif pat.match(name):
             raise InvalidNameError('Disallowed name: %r matches the following pattern: %s' % (name, pat))
 
 
@@ -34,36 +40,36 @@ _VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + strin
 # Disallowed name patterns apply to any part of any name, e.g., an attribute name, a namespace component,
 # type name, etc. The pattern must produce an exact match to trigger a name error. All patterns are case-insensitive.
 _DISALLOWED_NAME_PATTERNS = [
-    r'truncated',
-    r'saturated',
-    r'true',
-    r'false',
-    r'bool',
-    r'void\d*',
-    r'u?int\d*',
-    r'u?q\d+_\d+',
-    r'float\d*',
-    r'optional',
-    r'aligned',
-    r'const',
-    r'struct',
-    r'super',
-    r'template',
-    r'enum',
-    r'self',
-    r'and',
-    r'or',
-    r'not',
-    r'auto',
-    r'type',
-    r'con',
-    r'prn',
-    r'aux',
-    r'nul',
-    r'com\d',
-    r'lpt\d',
-    r'_.*_',
-]
+    'truncated',
+    'saturated',
+    'true',
+    'false',
+    'bool',
+    re.compile(r'void\d*$'),
+    re.compile(r'u?int\d*$'),
+    re.compile(r'u?q\d+_\d+$'),
+    re.compile(r'float\d*$'),
+    'optional',
+    'aligned',
+    'const',
+    'struct',
+    'super',
+    'template',
+    'enum',
+    'self',
+    'and',
+    'or',
+    'not',
+    'auto',
+    'type',
+    'con',
+    'prn',
+    'aux',
+    'nul',
+    re.compile(r'com\d$'),
+    re.compile(r'lpt\d$'),
+    re.compile(r'_.*_$')
+]  # type: typing.List[typing.Union[str, typing.Pattern[str]]]
 
 
 def _unittest_check_name() -> None:

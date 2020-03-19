@@ -32,7 +32,7 @@ if _sys.version_info[:3] < _min_supported_python_version:   # pragma: no cover
           file=_sys.stderr)
     _sys.exit(1)
 
-__version__ = '1.2.0'
+__version__ = '1.3.0'
 __version_info__ = tuple(map(int, __version__.split('.')))
 __license__ = 'MIT'
 __author__ = 'UAVCAN Development Team'
@@ -70,6 +70,7 @@ from ._serializable import ArrayType as ArrayType
 from ._serializable import FixedLengthArrayType as FixedLengthArrayType
 from ._serializable import VariableLengthArrayType as VariableLengthArrayType
 from ._serializable import CompositeType as CompositeType
+from ._serializable import TaggedUnionType as TaggedUnionType
 from ._serializable import UnionType as UnionType
 from ._serializable import StructureType as StructureType
 from ._serializable import ServiceType as ServiceType
