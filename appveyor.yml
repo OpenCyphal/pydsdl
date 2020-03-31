@@ -4,10 +4,13 @@ environment:
       PYTHON: "3.5"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      PYTHON: "3.6"
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
       PYTHON: "3.7"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
-      PYTHON: "3.6"
+      PYTHON: "3.8"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
       PYTHON: "C:\\Python37-x64"
