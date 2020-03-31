@@ -1,6 +1,6 @@
 # The library is dependency-free. These are development-only dependencies (not required to use the library).
 
-pytest      ~= 4.5
-coverage    ~= 4.5
-mypy        == 0.730
+pytest      ~= 5.4
+coverage    ~= 5.0
+mypy        == 0.770
 pycodestyle >= 2.5
