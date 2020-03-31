@@ -64,7 +64,13 @@ class DSDLDefinition:
             try:
                 self._fixed_port_id = int(str_fixed_port_id)    # type: typing.Optional[int]
             except ValueError:
-                raise FileNameFormatError('Could not parse the fixed port ID', path=self._file_path) from None
+                raise FileNameFormatError(
+                    'Not a valid fixed port-ID: %r. '
+                    'Namespaces are defined as directories; putting the namespace name in the file name will not work. '
+                    'For example: "foo/Bar.1.0.uavcan" is OK (where "foo" is a directory); "foo.Bar.1.0.uavcan" is not.'
+                    % str_fixed_port_id,
+                    path=self._file_path,
+                ) from None
         else:
             self._fixed_port_id = None
 
