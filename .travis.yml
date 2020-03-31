@@ -1,5 +1,5 @@
 language: python
-dist: xenial
+dist: bionic
 
 os:
   - linux   # Travis-CI doesn't support Python on other platforms.
@@ -8,8 +8,8 @@ python:
   - '3.5.3'       # Oldest supported version
   - '3.5'
   - '3.6'
-  - '3.7-dev'     # TODO: Replace with plain "3.7" when supported by Travis
-#  - '3.8-dev'    # TODO: Compatibility issues with MyPy, see https://travis-ci.org/UAVCAN/pydsdl/jobs/519988157
+  - '3.7'
+  - '3.8'
 
 before_script:
   - pip install -r requirements-dev.txt

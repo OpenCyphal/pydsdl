@@ -122,17 +122,6 @@ class CompositeType(SerializableType):
                         raise DeprecatedDependencyError('A type cannot depend on deprecated types '
                                                         'unless it is also deprecated.')
 
-    def is_mutually_bit_compatible_with(self, other: 'CompositeType') -> bool:
-        """
-        Checks for bit compatibility between two data types.
-        The current implementation uses a relaxed simplified check that may yield a false-negative,
-        but never a false-positive; i.e., it may fail to detect an incompatibility, but it is guaranteed
-        to never report two data types as incompatible if they are compatible.
-        The implementation may be updated in the future to use a strict check as defined in the specification
-        while keeping the same API, so beware.
-        """
-        return self.bit_length_set == other.bit_length_set
-
     @property
     def full_name(self) -> str:
         """The full name, e.g., uavcan.node.Heartbeat"""
@@ -377,7 +366,6 @@ class StructureType(CompositeType):
 
 
 class TaggedUnionType(StructureType):
-
     def __init__(self,
                  name:             str,
                  version:          Version,

@@ -1,17 +1,20 @@
 environment:
   matrix:
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      PYTHON: "C:\\Python38-x64"
+      PYTHON_ARCH: "64"
+
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
       PYTHON: "3.5"
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      PYTHON: "3.6"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
       PYTHON: "3.7"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
-      PYTHON: "3.6"
-
-    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
-      PYTHON: "C:\\Python37-x64"
-      PYTHON_ARCH: "64"
+      PYTHON: "3.8"
 
 stack: python %PYTHON%
 
@@ -20,7 +23,7 @@ build: off
 install:
   # MS Windows config.
   - cmd: 'SET PATH=%PYTHON%;%PATH%'
-  - cmd: 'SET PATH=C:\\Python37-x64\\Scripts;%PATH%'
+  - cmd: 'SET PATH=C:\\Python38-x64\\Scripts;%PATH%'
   - cmd: 'echo %PATH%'
 
   # Shared config for all platforms.

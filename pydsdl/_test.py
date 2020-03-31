@@ -747,6 +747,9 @@ def _unittest_parse_namespace() -> None:
             print_handler
         )
 
+    with raises(TypeError):  # Invalid usage: expected a list of paths, not a single path.
+        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), '/my/path')
+
     assert print_output is not None
     assert '300.Spartans' in print_output[0]
     assert print_output[1] == 8
@@ -834,24 +837,6 @@ def _unittest_parse_namespace_versioning() -> None:
         @union
         uint16 small
         int32 just_right
-        float64[<=1] woah
-        ---
-        """)
-    )
-
-    with raises(_namespace.MinorVersionsNotBitCompatibleError):
-        _namespace.read_namespace(
-            os.path.join(directory.name, 'ns'),
-            []
-        )
-
-    _define(
-        'ns/Spartans.30.2.uavcan',
-        dedent("""
-        @deprecated
-        @union
-        uint16 small
-        int32 just_right
         float64[1] woah
         """)
     )
@@ -881,23 +866,6 @@ def _unittest_parse_namespace_versioning() -> None:
     )
     print(parsed)
     assert len(parsed) == 2
-
-    _define(
-        'ns/Spartans.30.1.uavcan',
-        dedent("""
-        @deprecated
-        @union
-        uint16 small
-        float32 just_right
-        float64[<=1] woah
-        """)
-    )
-
-    with raises(_namespace.MinorVersionsNotBitCompatibleError):
-        _namespace.read_namespace(
-            os.path.join(directory.name, 'ns'),
-            []
-        )
 
     _define(
         'ns/Spartans.30.1.uavcan',
