@@ -8,16 +8,12 @@
 [![Forum](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
 
 PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler frontend implemented in Python.
-
-PyDSDL supports all DSDL features defined in the UAVCAN specification,
-and performs all mandatory static definition validity checks.
-Additionally, it checks for bit compatibility for data type definitions under the same major version.
-
+It supports all DSDL features defined in the UAVCAN specification.
 A brief usage example is provided in the file `demo.py`.
 
 ## Installation
 
-PyDSDL requires Python 3.5 or newer.
+PyDSDL is compatible with any current version of Python.
 No third-party dependencies need to be installed to use the library.
 
 Install from PIP: `pip install pydsdl`.
@@ -172,7 +168,7 @@ the line length limit is 120 characters (not 79).
 
 All functions and methods must be type-annotated. This is enforced statically with MyPy.
 
-Ensure compatibility with Python 3.5 and all newer versions.
+Ensure compatibility with all versions of Python that have not yet reached the end-of-life.
 
 Do not import specific entities; instead, import only the package itself and then use verbose references,
 as shown below.

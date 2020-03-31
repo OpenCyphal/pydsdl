@@ -43,13 +43,6 @@ class FixedPortIDCollisionError(_error.InvalidDefinitionError):
     pass
 
 
-class MinorVersionsNotBitCompatibleError(_error.InvalidDefinitionError):
-    """
-    Raised when definitions under the same major version are not bit-compatible.
-    """
-    pass
-
-
 class MultipleDefinitionsUnderSameVersionError(_error.InvalidDefinitionError):
     """
     For example:
@@ -288,20 +281,6 @@ def _ensure_minor_version_compatibility(types: typing.List[_serializable.Composi
                             path=a.source_file_path
                         )
 
-                    # Must be bit-compatible
-                    if isinstance(a, _serializable.ServiceType):
-                        assert isinstance(b, _serializable.ServiceType)
-                        ok = a.request_type.is_mutually_bit_compatible_with(b.request_type) and \
-                            a.response_type.is_mutually_bit_compatible_with(b.response_type)
-                    else:
-                        ok = a.bit_length_set == b.bit_length_set
-
-                    if not ok:
-                        raise MinorVersionsNotBitCompatibleError(
-                            'This definition is not bit-compatible with %r' % b.source_file_path,
-                            path=a.source_file_path
-                        )
-
                     # Must use either the same RPID, or the older one should not have an RPID
                     if a.has_fixed_port_id == b.has_fixed_port_id:
                         if a.fixed_port_id != b.fixed_port_id:
@@ -347,7 +326,7 @@ def _construct_dsdl_definitions_from_namespace(root_namespace_path: str) \
     The definitions are sorted by name lexicographically, then by major version (greatest version first),
     then by minor version (same ordering as the major version).
     """
-    def on_walk_error(os_ex: OSError) -> None:
+    def on_walk_error(os_ex: Exception) -> None:
         raise os_ex     # pragma: no cover
 
     walker = os.walk(root_namespace_path,
