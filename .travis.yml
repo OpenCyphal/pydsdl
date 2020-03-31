@@ -9,7 +9,7 @@ python:
   - '3.5'
   - '3.6'
   - '3.7'
-  - '3.8-dev'
+  - '3.8'
 
 before_script:
   - pip install -r requirements-dev.txt

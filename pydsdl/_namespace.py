@@ -109,6 +109,8 @@ def read_namespace(root_namespace_directory:        str,
     :raises: FrontendError, OSError (if directories do not exist or inaccessible)
     """
     # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates.
+    if isinstance(lookup_directories, (str, bytes)):  # Check for a common pitfall.
+        raise TypeError('Lookup directories shall be an iterable of strings, not ' + type(lookup_directories).__name__)
     lookup_directories = list(sorted(set(list(lookup_directories) + [root_namespace_directory])))
 
     # Normalize paths.
