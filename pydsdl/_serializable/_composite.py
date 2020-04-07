@@ -365,7 +365,7 @@ class StructureType(CompositeType):
         return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
 
 
-class TaggedUnionType(StructureType):
+class TaggedUnionType(CompositeType):
     def __init__(self,
                  name:             str,
                  version:          Version,

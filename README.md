@@ -74,7 +74,12 @@ All of them share the same common ancestor `SerializableType` and the naming pat
     - `FixedLengthArrayType` - e.g., `uint8[256]`
     - `VariableLengthArrayType` - e.g., `uint8[<256]`
   - `CompositeType` - see below.
+    - `UnionType` - contains union fields, not a top-level entity.
+      This type may only appear as a composite under `TaggedUnionType`.
     - `TaggedUnionType` - message types or nested structures.
+      Contains exactly two special fields: `_tag_` (accessible as `tag_field_type: UnsignedIntegerType`)
+      and `_union_` (accessible as `union_type: UnionType`).
+      The latter contains the user-defined DSDL fields.
     - `StructureType` - message types or nested structures.
     - `ServiceType` - service types, not serializable.
 
