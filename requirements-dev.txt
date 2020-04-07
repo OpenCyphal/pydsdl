@@ -4,3 +4,8 @@ pytest      ~= 5.4
 coverage    ~= 5.0
 mypy        == 0.770
 pycodestyle >= 2.5
+
+# Packaging and distribution.
+setuptools >= 46.0
+wheel      >= 0.34, < 2.0
+twine      ~= 3.1
