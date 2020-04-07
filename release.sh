@@ -17,9 +17,9 @@ function clean()
     rm -rf dist build *.egg-info &> /dev/null
 }
 
-[[ "`git rev-parse --abbrev-ref HEAD`" = 'master' ]]  || die "Can only release from the master branch."
-[[ -z "`git diff`" ]]                                 || die "Please commit all changes, then try again."
-[[ -z "`git log '@{u}..'`" ]]                         || die "Please push all commits, then try again."
+[[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]]  || die "Can only release from the master branch."
+[[ -z "$(git diff)" ]]                                 || die "Please commit all changes, then try again."
+[[ -z "$(git log '@{u}..')" ]]                         || die "Please push all commits, then try again."
 
 ./test.sh  || die "Test failed."
 
@@ -32,5 +32,5 @@ python3 -m twine upload dist/* || die "Twine upload has failed."
 clean  # May fail, we don't care.
 
 export PYTHONPATH=.
-version=`python3 -c 'import pydsdl; print(pydsdl.__version__)'`
-git tag -a ${version} -m ${version} && git push --tags || die "Could not tag the release. Please do it manually."
+version=$(python3 -c 'import pydsdl; print(pydsdl.__version__)')
+(git tag -a ${version} -m ${version} && git push --tags) || die "Could not tag the release. Please do it manually."
