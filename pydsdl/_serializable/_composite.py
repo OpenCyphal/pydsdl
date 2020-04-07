@@ -300,6 +300,29 @@ class CompositeType(SerializableType):
              self.fixed_port_id)
 
 
+class StructureType(CompositeType):
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        base_offset = BitLengthSet(base_offset or 0)
+
+        # The following variables do not serve the business logic, they are needed only for runtime cross-checking
+        _self_test_original_offset = BitLengthSet(0)
+        _self_test_field_bls_collection = []  # type: typing.List[BitLengthSet]
+
+        for f in self.fields:
+            yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
+            base_offset.increment(f.data_type.bit_length_set)
+
+            # This is only for ensuring that the logic is functioning as intended.
+            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
+            _self_test_original_offset.increment(f.data_type.bit_length_set)
+            _self_test_field_bls_collection.append(f.data_type.bit_length_set)
+            assert BitLengthSet.for_struct(_self_test_field_bls_collection) == _self_test_original_offset
+
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
+
+
 class UnionType(CompositeType):
     MIN_NUMBER_OF_VARIANTS = 2
 
@@ -340,29 +363,6 @@ class UnionType(CompositeType):
 
     def _compute_bit_length_set(self) -> BitLengthSet:
         raise TypeError('Union types are not directly serializable. Use TaggedUnion')
-
-
-class StructureType(CompositeType):
-    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
-            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
-        base_offset = BitLengthSet(base_offset or 0)
-
-        # The following variables do not serve the business logic, they are needed only for runtime cross-checking
-        _self_test_original_offset = BitLengthSet(0)
-        _self_test_field_bls_collection = []  # type: typing.List[BitLengthSet]
-
-        for f in self.fields:
-            yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
-            base_offset.increment(f.data_type.bit_length_set)
-
-            # This is only for ensuring that the logic is functioning as intended.
-            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
-            _self_test_original_offset.increment(f.data_type.bit_length_set)
-            _self_test_field_bls_collection.append(f.data_type.bit_length_set)
-            assert BitLengthSet.for_struct(_self_test_field_bls_collection) == _self_test_original_offset
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
 
 
 class TaggedUnionType(CompositeType):
