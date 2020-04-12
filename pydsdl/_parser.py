@@ -101,13 +101,7 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     """
     @functools.wraps(fun)
     def wrapper(self: '_ParseTreeProcessor', node: _Node, children: _Children) -> typing.Any:
-        result = '<TRANSFORMATION FAILED>'  # type: typing.Any
-        try:
-            result = fun(self, node, children)
-            return result
-        finally:
-            _logger.debug('Transformation: %s(%s) --> %r (source text: %r)',
-                          node.expr_name, _print_node(children), result, node.text)
+        return fun(self, node, children)
 
     return wrapper
 
@@ -307,7 +301,6 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
             if not isinstance(new_atom, _expression.Any):
                 raise _error.InternalError('Identifier %r resolved as %r, expected expression' %
                                            (atom, type(new_atom)))  # pragma: no cover
-            _logger.debug('Identifier resolution: %r --> %s', atom, new_atom.TYPE_NAME)
             atom = new_atom
             del new_atom
 
