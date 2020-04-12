@@ -23,7 +23,7 @@ function clean()
 
 ./test.sh  || die "Test failed."
 
-python3 -m pip uninstall pydsdl &> /dev/null  # Extra precautions.
+python3 -m pip uninstall pydsdl -y &> /dev/null  # Extra precautions.
 
 clean || die "Clean failed. It is required to prevent unnecessary files from being included in the release package."
 
