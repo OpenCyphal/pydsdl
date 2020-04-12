@@ -320,26 +320,43 @@ class UnionType(CompositeType):
                                         fixed_port_id=fixed_port_id,
                                         source_file_path=source_file_path,
                                         parent_service=parent_service)
+
+        if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
+            raise MalformedUnionError('A tagged union cannot contain fewer than %d variants' %
+                                      self.MIN_NUMBER_OF_VARIANTS)
+
         for a in attributes:
             if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
                 raise MalformedUnionError('Padding fields not allowed in unions')
 
-        if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
-            raise MalformedUnionError('A union cannot contain fewer than %d variants' %
-                                      self.MIN_NUMBER_OF_VARIANTS)
+        # Construct once to allow reference equality checks
+        assert (self.number_of_variants - 1) > 0
+        unaligned_tag_bit_length = (self.number_of_variants - 1).bit_length()
+        tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
+        self._tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
 
     @property
     def number_of_variants(self) -> int:
         return len(self.fields)
 
+    @property
+    def tag_field_type(self) -> UnsignedIntegerType:
+        """
+        Returns the best-matching unsigned integer type of the implicit union tag field.
+        This is convenient for code generation.
+        WARNING: the set of valid tag values is a subset of that of the returned type.
+        """
+        return self._tag_field_type
+
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         base_offset = BitLengthSet(base_offset or {0})
+        base_offset.increment(self.tag_field_type.bit_length)
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
     def _compute_bit_length_set(self) -> BitLengthSet:
-        raise TypeError('Union types are not directly serializable. Use TaggedUnion')
+        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self.fields))
 
 
 class StructureType(CompositeType):
@@ -365,78 +382,6 @@ class StructureType(CompositeType):
         return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
 
 
-class TaggedUnionType(StructureType):
-    def __init__(self,
-                 name:             str,
-                 version:          Version,
-                 attributes:       typing.Iterable[Attribute],
-                 deprecated:       bool,
-                 fixed_port_id:    typing.Optional[int],
-                 source_file_path: str,
-                 parent_service:   typing.Optional['ServiceType'] = None):
-        fields = []   # type: typing.List[Field]
-        non_fields = []  # type: typing.List[Attribute]
-        for a in attributes:
-            if isinstance(a, Field):
-                fields.append(a)
-            else:
-                non_fields.append(a)
-
-        union_serializable = UnionType(name='%s.union' % name,
-                                       version=version,
-                                       attributes=fields,
-                                       deprecated=deprecated,
-                                       fixed_port_id=fixed_port_id,
-                                       source_file_path=source_file_path)
-        union_attr = Field(union_serializable, '_union_', enforce_naming_rules=False)
-
-        # Construct once to allow reference equality checks
-        number_of_variants = union_serializable.number_of_variants
-        assert (number_of_variants - 1) > 0
-        unaligned_tag_bit_length = (number_of_variants - 1).bit_length()
-        tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
-        tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
-
-        tag_field_attr = Field(tag_field_type, '_tag_', enforce_naming_rules=False)
-
-        super(TaggedUnionType, self).__init__(name=name,
-                                              version=version,
-                                              attributes=non_fields + [tag_field_attr, union_attr],
-                                              deprecated=deprecated,
-                                              fixed_port_id=fixed_port_id,
-                                              source_file_path=source_file_path,
-                                              parent_service=parent_service)
-
-        self._union_type = union_serializable
-        self._tag_field_type = tag_field_type
-
-    @property
-    def tag_field_type(self) -> UnsignedIntegerType:
-        """
-        Returns the best-matching unsigned integer type of the implicit union tag field.
-        This is convenient for code generation.
-        WARNING: the set of valid tag values is a subset of that of the returned type.
-        """
-        return self._tag_field_type
-
-    @property
-    def union_type(self) -> UnionType:
-        """
-        Returns the union type itself. A tagged union consists of two fields: `tag_field_type` and the
-        union of possible types.
-        """
-        return self._union_type
-
-    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
-            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
-        base_offset = BitLengthSet(base_offset or {0})
-        base_offset.increment(self.tag_field_type.bit_length)
-        return self.union_type.iterate_fields_with_offsets(base_offset)
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self._union_type.fields))
-
-
 class ServiceType(CompositeType):
     def __init__(self,
                  name:                str,
@@ -448,7 +393,7 @@ class ServiceType(CompositeType):
                  deprecated:          bool,
                  fixed_port_id:       typing.Optional[int],
                  source_file_path:    str):
-        request_meta_type = TaggedUnionType if request_is_union else StructureType  # type: type
+        request_meta_type = UnionType if request_is_union else StructureType  # type: type
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_attributes,
@@ -457,7 +402,7 @@ class ServiceType(CompositeType):
                                                source_file_path='',
                                                parent_service=self)  # type: CompositeType
 
-        response_meta_type = TaggedUnionType if response_is_union else StructureType  # type: type
+        response_meta_type = UnionType if response_is_union else StructureType  # type: type
         self._response_type = response_meta_type(name=name + '.Response',
                                                  version=version,
                                                  attributes=response_attributes,
@@ -549,61 +494,43 @@ def _unittest_composite_types() -> None:
                       source_file_path=''))
 
     with raises(MalformedUnionError, match='.*variants.*'):
-        TaggedUnionType(name='a.A',
-                        version=Version(0, 1),
-                        attributes=[],
-                        deprecated=False,
-                        fixed_port_id=None,
-                        source_file_path='')
-
-    uu = UnionType(name='ns.foo',
-                   version=Version(0, 1),
-                   attributes=[
-                       Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
-                       Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
-                   ],
-                   deprecated=False,
-                   fixed_port_id=None,
-                   source_file_path='')
-
-    with raises(TypeError, match='(?i).*Union types are not directly serializable.*'):
-        uu.bit_length_set  # pylint: disable=W0104
-
-    del uu
+        UnionType(name='a.A',
+                  version=Version(0, 1),
+                  attributes=[],
+                  deprecated=False,
+                  fixed_port_id=None,
+                  source_file_path='')
 
     with raises(MalformedUnionError, match='(?i).*padding.*'):
-        TaggedUnionType(name='a.A',
-                        version=Version(0, 1),
-                        attributes=[
-                            Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
-                            Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
-                            PaddingField(VoidType(16)),
-                        ],
-                        deprecated=False,
-                        fixed_port_id=None,
-                        source_file_path='')
+        UnionType(name='a.A',
+                  version=Version(0, 1),
+                  attributes=[
+                      Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
+                      Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
+                      PaddingField(VoidType(16)),
+                  ],
+                  deprecated=False,
+                  fixed_port_id=None,
+                  source_file_path='')
 
-    u = TaggedUnionType(name='uavcan.node.Heartbeat',
-                        version=Version(42, 123),
-                        attributes=[
-                            Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
-                            Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
-                            Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
-                        ],
-                        deprecated=False,
-                        fixed_port_id=None,
-                        source_file_path='')
+    u = UnionType(name='uavcan.node.Heartbeat',
+                  version=Version(42, 123),
+                  attributes=[
+                      Field(UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED), 'a'),
+                      Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
+                      Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
+                  ],
+                  deprecated=False,
+                  fixed_port_id=None,
+                  source_file_path='')
     assert u.data_type_hash == 0x666666667bc4992a     # Computed by hand
-    assert u.union_type['a'].name == 'a'
-    assert u.union_type['b'].name == 'b'
+    assert u['a'].name == 'a'
+    assert u['b'].name == 'b'
     assert u['A'].name == 'A'
     assert u.fields == u.fields_except_padding
     with raises(KeyError):
-        assert u.union_type['c']
+        assert u['c']
     assert hash(u) == hash(u)
-    assert isinstance(u['_union_'].data_type, UnionType)
-    assert isinstance(u['_tag_'].data_type, UnsignedIntegerType)
-    assert 8 == u['_tag_'].data_type.bit_length
     del u
 
     s = StructureType(name='a.A',
@@ -632,17 +559,17 @@ def _unittest_composite_types() -> None:
     assert hash(s) == hash(s)
     del s
 
-    def try_union_fields(field_types: typing.List[SerializableType]) -> TaggedUnionType:
+    def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
         for i, t in enumerate(field_types):
             atr.append(Field(t, '_%d' % i))
 
-        return TaggedUnionType(name='a.A',
-                               version=Version(0, 1),
-                               attributes=atr,
-                               deprecated=False,
-                               fixed_port_id=None,
-                               source_file_path='')
+        return UnionType(name='a.A',
+                         version=Version(0, 1),
+                         attributes=atr,
+                         deprecated=False,
+                         fixed_port_id=None,
+                         source_file_path='')
 
     assert try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
@@ -837,7 +764,7 @@ def _unittest_field_iterators() -> None:
     assert not b_offset.is_aligned_at_byte()
     assert not b_offset.is_aligned_at(32)
 
-    c = make_type(TaggedUnionType, [
+    c = make_type(UnionType, [
         Field(a, 'foo'),
         Field(b, 'bar'),
     ])

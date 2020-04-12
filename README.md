@@ -74,7 +74,7 @@ All of them share the same common ancestor `SerializableType` and the naming pat
     - `FixedLengthArrayType` - e.g., `uint8[256]`
     - `VariableLengthArrayType` - e.g., `uint8[<256]`
   - `CompositeType` - see below.
-    - `TaggedUnionType` - message types or nested structures.
+    - `UnionType` - message types or nested structures.
     - `StructureType` - message types or nested structures.
     - `ServiceType` - service types, not serializable.
 
