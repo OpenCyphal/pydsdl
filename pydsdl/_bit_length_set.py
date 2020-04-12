@@ -197,7 +197,9 @@ class BitLengthSet:
         Computes the bit length set for a tagged union type given the bit length sets of each of its fields (variants).
         Unions are easy to handle because when serialized, a union is essentially just a single field prefixed with
         a fixed-length integer tag. So we just build a full set of combinations and then add the tag length
-        to each element.
+        to each element. Observe that unions are not defined for less than 2 elements; however, this function tries
+        to be generic by properly handling those cases as well, even though they are not permitted by the specification.
+        For zero fields, the function yields zero {0}; for one field, the function yields the BLS of the field itself.
         """
         ms = list(member_bit_length_sets)
         del member_bit_length_sets
@@ -210,8 +212,10 @@ class BitLengthSet:
         else:
             for s in ms:
                 out.unite_with(s)
-            unaligned_tag_bit_length = (len(ms) - 1).bit_length()
-            out.increment(2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length))))
+            # Add the union tag:
+            tag_bit_length = 2 ** math.ceil(math.log2(max(8, (len(ms) - 1).bit_length())))
+            out.increment(tag_bit_length)
+
         return out
 
     def __iter__(self) -> typing.Iterator[int]:
