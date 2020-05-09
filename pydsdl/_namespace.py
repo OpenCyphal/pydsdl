@@ -112,12 +112,10 @@ def read_namespace(root_namespace_directory:        str,
     # We'd like this to be an iterable list of strings but we handle the common practice of passing in a single path.
     if lookup_directories is None:
         lookup_directories_path_list = []  # type: typing.Iterable[str]
+    elif isinstance(lookup_directories, (str, bytes)):
+        lookup_directories_path_list = [lookup_directories]
     else:
-        try:
-            _ = iter(lookup_directories)
-            lookup_directories_path_list = lookup_directories
-        except TypeError:
-            lookup_directories_path_list = [typing.cast(str, lookup_directories)]
+       lookup_directories_path_list = lookup_directories
 
     for a in lookup_directories_path_list:
         if not isinstance(a, str):  # non-string paths
