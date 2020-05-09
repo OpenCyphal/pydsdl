@@ -735,8 +735,11 @@ def _unittest_parse_namespace() -> None:
             print_handler
         )
 
-    with raises(TypeError):  # Invalid usage: expected a list of paths, not a single path.
-        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), '/my/path')
+    with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
+        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), b'/my/path')  # type: ignore
+
+    with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
+        _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [b'/my/path'])  # type: ignore
 
     assert print_output is not None
     assert '300.Spartans' in print_output[0]

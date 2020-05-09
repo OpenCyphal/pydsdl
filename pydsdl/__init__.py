@@ -26,7 +26,7 @@ import sys as _sys
 #     File "/usr/lib/python3.5/typing.py", line 815, in __getitem__
 #       raise TypeError("This Callable type is already parameterized.")
 #   TypeError: This Callable type is already parameterized.
-_min_supported_python_version = 3, 5, 3
+_min_supported_python_version = 3, 5, 4
 if _sys.version_info[:3] < _min_supported_python_version:   # pragma: no cover
     print('This package requires a Python version', '.'.join(map(str, _min_supported_python_version)), 'or newer',
           file=_sys.stderr)
