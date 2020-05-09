@@ -121,7 +121,7 @@ def read_namespace(root_namespace_directory:        str,
 
     for a in lookup_directories_path_list:
         if not isinstance(a, str):  # non-string paths
-            raise TypeError('Lookup directories shall be an iterable of strings, Found in list: ' + type(a).__name__)
+            raise TypeError('Lookup directories shall be an iterable of strings. Found in list: ' + type(a).__name__)
         _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
     lookup_directories_sorted_path_list = list(
