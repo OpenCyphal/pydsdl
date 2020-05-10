@@ -115,7 +115,7 @@ def read_namespace(root_namespace_directory:        str,
     elif isinstance(lookup_directories, (str, bytes)):
         lookup_directories_path_list = [lookup_directories]
     else:
-       lookup_directories_path_list = lookup_directories
+        lookup_directories_path_list = lookup_directories
 
     for a in lookup_directories_path_list:
         if not isinstance(a, str):  # non-string paths
