@@ -129,10 +129,9 @@ def read_namespace(root_namespace_directory:        str,
     root_namespace_directory = os.path.abspath(root_namespace_directory)
     lookup_directories_sorted_path_list = list(
         map(lambda d: str(os.path.abspath(d)), lookup_directories_sorted_path_list))
-    if _logger.level >= logging.DEBUG:
-        _logger.debug('Lookup directories are listed below:')
-        for a in lookup_directories_sorted_path_list:
-            _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
+    _logger.debug('Lookup directories are listed below:')
+    for a in lookup_directories_sorted_path_list:
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
     # Check the namespaces.
     _ensure_no_nested_root_namespaces(lookup_directories_sorted_path_list)

@@ -721,6 +721,12 @@ def _unittest_parse_namespace() -> None:
     assert 'zubax.Message' in [x.full_name for x in parsed]
     assert 'zubax.nested.Spartans' in [x.full_name for x in parsed]
 
+    # try again with minimal arguments to read_namespace
+    parsed_minmal_args = _namespace.read_namespace(
+        os.path.join(directory.name, 'zubax')
+    )
+    assert len(parsed_minmal_args) == 3
+
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
         dedent("""
@@ -756,6 +762,12 @@ def _unittest_parse_namespace() -> None:
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
             os.path.join(directory.name, 'zubax'),
         ])
+    
+    # Do again to test single lookup-directory override
+    with raises(_namespace.DataTypeNameCollisionError):
+        _namespace.read_namespace(os.path.join(directory.name, 'zubax'),
+            os.path.join(directory.name, 'zubax'),
+        )
 
     try:
         os.unlink(os.path.join(directory.name, 'zubax/colliding/iceberg/300.Ice.30.0.uavcan'))
