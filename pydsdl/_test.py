@@ -762,7 +762,7 @@ def _unittest_parse_namespace() -> None:
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [
             os.path.join(directory.name, 'zubax'),
         ])
-    
+
     # Do again to test single lookup-directory override
     with raises(_namespace.DataTypeNameCollisionError):
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'),
