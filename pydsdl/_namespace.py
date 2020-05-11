@@ -76,7 +76,7 @@ PrintOutputHandler = typing.Callable[[str, int, str], None]
 
 
 def read_namespace(root_namespace_directory:        str,
-                   lookup_directories:              typing.Iterable[str],
+                   lookup_directories:              typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
                    print_output_handler:            typing.Optional[PrintOutputHandler] = None,
                    allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[_serializable.CompositeType]:
@@ -109,20 +109,33 @@ def read_namespace(root_namespace_directory:        str,
     :raises: FrontendError, OSError (if directories do not exist or inaccessible)
     """
     # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates.
-    if isinstance(lookup_directories, (str, bytes)):  # Check for a common pitfall.
-        raise TypeError('Lookup directories shall be an iterable of strings, not ' + type(lookup_directories).__name__)
-    lookup_directories = list(sorted(set(list(lookup_directories) + [root_namespace_directory])))
+    # We'd like this to be an iterable list of strings but we handle the common practice of passing in a single path.
+    if lookup_directories is None:
+        lookup_directories_path_list = []  # type: typing.Iterable[str]
+    elif isinstance(lookup_directories, (str, bytes)):
+        lookup_directories_path_list = [lookup_directories]
+    else:
+        lookup_directories_path_list = lookup_directories
+
+    for a in lookup_directories_path_list:
+        if not isinstance(a, str):  # non-string paths
+            raise TypeError('Lookup directories shall be an iterable of strings. Found in list: ' + type(a).__name__)
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
+
+    lookup_directories_sorted_path_list = list(
+        sorted(set(list(lookup_directories_path_list) + [root_namespace_directory])))
 
     # Normalize paths.
     root_namespace_directory = os.path.abspath(root_namespace_directory)
-    lookup_directories = list(map(lambda d: str(os.path.abspath(d)), lookup_directories))
+    lookup_directories_sorted_path_list = list(
+        map(lambda d: str(os.path.abspath(d)), lookup_directories_sorted_path_list))
     _logger.debug('Lookup directories are listed below:')
-    for a in lookup_directories:
+    for a in lookup_directories_sorted_path_list:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
     # Check the namespaces.
-    _ensure_no_nested_root_namespaces(lookup_directories)
-    _ensure_no_namespace_name_collisions(lookup_directories)
+    _ensure_no_nested_root_namespaces(lookup_directories_sorted_path_list)
+    _ensure_no_namespace_name_collisions(lookup_directories_sorted_path_list)
 
     # Construct DSDL definitions from the target and the lookup dirs.
     target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
@@ -131,7 +144,7 @@ def read_namespace(root_namespace_directory:        str,
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     lookup_dsdl_definitions = []    # type: typing.List[_dsdl_definition.DSDLDefinition]
-    for ld in lookup_directories:
+    for ld in lookup_directories_sorted_path_list:
         lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
     # Check for collisions against the lookup definitions also.
