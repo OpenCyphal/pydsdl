@@ -766,8 +766,7 @@ def _unittest_parse_namespace() -> None:
     # Do again to test single lookup-directory override
     with raises(_namespace.DataTypeNameCollisionError):
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'),
-            os.path.join(directory.name, 'zubax'),
-        )
+                                  os.path.join(directory.name, 'zubax'))
 
     try:
         os.unlink(os.path.join(directory.name, 'zubax/colliding/iceberg/300.Ice.30.0.uavcan'))
