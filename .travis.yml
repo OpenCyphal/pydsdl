@@ -13,11 +13,9 @@ python:
 
 before_script:
   - pip install -r requirements-dev.txt
-  - pip install coveralls  # Intentionally removed from requirements.txt because it's only useful in the CI environment
 
 script:
   - ./test.sh
-  - coveralls  # Publish the coverage stats online.
 
   - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
   - ./demo.py dsdl-test/uavcan

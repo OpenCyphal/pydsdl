@@ -15,6 +15,7 @@ environment:
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
       PYTHON: "3.8"
+      coverage: 1
 
 stack: python %PYTHON%
 
@@ -30,14 +31,12 @@ install:
   - python --version
   - git submodule update --init --recursive
   - pip install -r requirements-dev.txt
-  - pip install pyyaml coveralls          # Removed from requirements.txt because it's only useful on the CI.
 
 test_script:
   # GNU/Linux test.
   - sh: ./test.sh
-  - sh: coveralls  # Publish the coverage stats online.
 
-  # MS Windows test. Code coverage not tracked because we do that on GNU/Linux.
+  # MS Windows test.
   - cmd: python -m pytest
 
   # Shared test for all platforms.
@@ -45,4 +44,8 @@ test_script:
   - python demo.py dsdl-test/uavcan
 
 after_test:
-  - coveralls
+  # Publish the coverage. The deps are not listed in the requirements file because they are only useful in the CI.
+  - sh: "if ((coverage)); then
+             pip install pyyaml coveralls;
+             coveralls;
+         fi"
