@@ -402,20 +402,6 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 #
 # Internal helper functions.
 #
-def _print_node(n: typing.Any) -> str:
-    """Simple printing helper; the default printing method from Parsimonious is no good."""
-    if isinstance(n, _Node):
-        return '%s=%r%s' % (
-            n.expr.name or '<anonymous>',
-            n.text,
-            _print_node(n.children) if n.children else ''
-        )
-    elif isinstance(n, (list, tuple)):
-        return '[%s]' % ', '.join(map(_print_node, n))
-    else:
-        return repr(n)
-
-
 def _unwrap_array_capacity(ex: _expression.Any) -> int:
     assert isinstance(ex, _expression.Any)
     if isinstance(ex, _expression.Rational):
