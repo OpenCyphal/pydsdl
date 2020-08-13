@@ -105,7 +105,9 @@ venv.bak/
 .mypy_cache/
 
 # IDE
-.idea/
+**/.idea/*
+!**/.idea/dictionaries
+!**/.idea/dictionaries/*
 .xml
 .vscode
 
