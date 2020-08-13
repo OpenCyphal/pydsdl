@@ -210,11 +210,11 @@ def _unittest_primitive() -> None:
     assert FloatType(32, PrimitiveType.CastMode.SATURATED).bit_length_set == 32
     assert FloatType(16, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (-65504, +65504)  # type: ignore
 
-    assert FloatType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == \
-        (approx(-3.4028234664e+38), approx(+3.4028234664e+38))  # type: ignore
+    rng = approx(-3.4028234664e+38), approx(+3.4028234664e+38)
+    assert FloatType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == rng  # type: ignore
 
-    assert FloatType(64, PrimitiveType.CastMode.SATURATED).inclusive_value_range == \
-        (approx(-1.7976931348623157e+308), approx(+1.7976931348623157e+308))  # type: ignore
+    rng = approx(-1.7976931348623157e+308), approx(+1.7976931348623157e+308)
+    assert FloatType(64, PrimitiveType.CastMode.SATURATED).inclusive_value_range == rng  # type: ignore
 
     with raises(InvalidBitLengthError):
         FloatType(8, PrimitiveType.CastMode.TRUNCATED)
