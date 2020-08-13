@@ -183,6 +183,7 @@
       <w>uavcan</w>
       <w>udpros</w>
       <w>uname</w>
+      <w>undefine</w>
       <w>undisable</w>
       <w>undoc</w>
       <w>unhashable</w>
@@ -198,6 +199,7 @@
       <w>weakref</w>
       <w>wireshark</w>
       <w>xbee</w>
+      <w>zubax</w>
     </words>
   </dictionary>
 </component>

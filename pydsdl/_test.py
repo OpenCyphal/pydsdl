@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -60,12 +60,12 @@ def _in_n_out(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
 @_in_n_out
 def _unittest_define() -> None:
     # I DON'T ALWAYS WRITE UNIT TESTS
-    d = _define('uavcan/test/65000.Message.1.2.uavcan', '# empty')
+    d = _define('uavcan/test/5000.Message.1.2.uavcan', '# empty')
     assert _DIRECTORY is not None
     assert d.full_name == 'uavcan.test.Message'
     assert d.version == (1, 2)
-    assert d.fixed_port_id == 65000
-    assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan', 'test', '65000.Message.1.2.uavcan')
+    assert d.fixed_port_id == 5000
+    assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan', 'test', '5000.Message.1.2.uavcan')
     assert open(d.file_path).read() == '# empty'
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
@@ -80,7 +80,7 @@ def _unittest_define() -> None:
 @_in_n_out
 def _unittest_simple() -> None:
     abc = _define(
-        'vendor/nested/29000.Abc.1.2.uavcan',
+        'vendor/nested/7000.Abc.1.2.uavcan',
         dedent('''
         @deprecated
         uint8 CHARACTER = '#'
@@ -88,7 +88,7 @@ def _unittest_simple() -> None:
         saturated int64[<33] b
         ''')
     )
-    assert abc.fixed_port_id == 29000
+    assert abc.fixed_port_id == 7000
     assert abc.full_name == 'vendor.nested.Abc'
     assert abc.version == (1, 2)
 
@@ -96,9 +96,9 @@ def _unittest_simple() -> None:
     print('Parsed:', p)
     assert isinstance(p, _serializable.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
-    assert p.source_file_path.endswith(os.path.join('vendor', 'nested', '29000.Abc.1.2.uavcan'))
+    assert p.source_file_path.endswith(os.path.join('vendor', 'nested', '7000.Abc.1.2.uavcan'))
     assert p.source_file_path == abc.file_path
-    assert p.fixed_port_id == 29000
+    assert p.fixed_port_id == 7000
     assert p.deprecated
     assert p.version == (1, 2)
     assert min(p.bit_length_set) == 16
@@ -272,7 +272,7 @@ def _unittest_error() -> None:
         return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
     with raises(_error.InvalidDefinitionError, match='(?i).*port ID.*'):
-        standalone('vendor/10000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
+        standalone('vendor/1000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*port ID.*'):
         standalone('vendor/10.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
@@ -686,7 +686,7 @@ def _unittest_parse_namespace() -> None:
     )
 
     _define(
-        'zubax/29001.Message.1.0.uavcan',
+        'zubax/7001.Message.1.0.uavcan',
         dedent("""
         zubax.First.1.0[<=2] a
         @assert _offset_.min == 8
@@ -881,7 +881,7 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     _define(
-        'ns/28700.Spartans.30.2.uavcan',
+        'ns/6700.Spartans.30.2.uavcan',
         dedent("""
         @deprecated
         @union
@@ -904,7 +904,7 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _undefine_glob('ns/Spartans.30.0.uavcan')
     _define(
-        'ns/28700.Spartans.30.0.uavcan',
+        'ns/6700.Spartans.30.0.uavcan',
         dedent("""
         @deprecated
         @union
@@ -919,7 +919,7 @@ def _unittest_parse_namespace_versioning() -> None:
 
     _undefine_glob('ns/Spartans.30.1.uavcan')
     _define(
-        'ns/28700.Spartans.30.1.uavcan',
+        'ns/6700.Spartans.30.1.uavcan',
         dedent("""
         @deprecated
         @union
@@ -935,9 +935,9 @@ def _unittest_parse_namespace_versioning() -> None:
     )
     assert len(parsed) == 3
 
-    _undefine_glob('ns/28700.Spartans.30.1.uavcan')
+    _undefine_glob('ns/6700.Spartans.30.1.uavcan')
     _define(
-        'ns/28701.Spartans.30.1.uavcan',
+        'ns/6701.Spartans.30.1.uavcan',
         dedent("""
         @deprecated
         @union
@@ -951,9 +951,9 @@ def _unittest_parse_namespace_versioning() -> None:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Adding new major version under the same FPID
-    _undefine_glob('ns/28701.Spartans.30.1.uavcan')
+    _undefine_glob('ns/6701.Spartans.30.1.uavcan')
     _define(
-        'ns/28700.Spartans.31.0.uavcan',
+        'ns/6700.Spartans.31.0.uavcan',
         dedent("""
         @deprecated
         @union
@@ -967,9 +967,9 @@ def _unittest_parse_namespace_versioning() -> None:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
     # Major version zero allows us to re-use the same FPID under a different (non-zero) major version
-    _undefine_glob('ns/28700.Spartans.31.0.uavcan')
+    _undefine_glob('ns/6700.Spartans.31.0.uavcan')
     _define(
-        'ns/28700.Spartans.0.1.uavcan',
+        'ns/6700.Spartans.0.1.uavcan',
         dedent("""
         @deprecated
         @union
@@ -983,8 +983,8 @@ def _unittest_parse_namespace_versioning() -> None:
     _define('ns/Empty.1.0.uavcan', '')
     _define('ns/Empty.1.1.uavcan', '')
     _define('ns/Empty.2.0.uavcan', '')
-    _define('ns/28800.Empty.3.0.uavcan', '')
-    _define('ns/28801.Empty.4.0.uavcan', '')
+    _define('ns/6800.Empty.3.0.uavcan', '')
+    _define('ns/6801.Empty.4.0.uavcan', '')
 
     parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
     assert len(parsed) == 8

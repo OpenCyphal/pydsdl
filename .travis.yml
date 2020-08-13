@@ -15,5 +15,6 @@ before_script:
 script:
   - ./test.sh
 
-  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
-  - ./demo.py dsdl-test/uavcan
+# TODO: re-enable when releasing.
+#  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
+#  - ./demo.py dsdl-test/uavcan
