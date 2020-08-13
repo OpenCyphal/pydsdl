@@ -5,9 +5,6 @@ environment:
       PYTHON_ARCH: "64"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
-      PYTHON: "3.5"
-
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
       PYTHON: "3.6"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu

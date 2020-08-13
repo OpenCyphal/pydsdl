@@ -5,8 +5,6 @@ os:
   - linux   # Travis-CI doesn't support Python on other platforms.
 
 python:
-  - '3.5.3'       # Oldest supported version
-  - '3.5'
   - '3.6'
   - '3.7'
   - '3.8'
