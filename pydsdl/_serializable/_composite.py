@@ -157,11 +157,11 @@ class CompositeType(SerializableType):
 
     @property
     def final(self) -> bool:
-        return self._final
+        return False  # TODO
 
     @property
     def footprint(self) -> int:
-        return self._footprint
+        return -1   # TODO
 
     @property
     def attributes(self) -> typing.List[Attribute]:
