@@ -18,13 +18,6 @@ The library should, in theory, work on any platform and with any Python implemen
 
 
 
-
-## Library API
-
-The library API is very simple, all of its entities are visible in `__init__.py`.
-Use `help(entity)` to read the specific documentation per entity.
-Below you will find a brief overview of the main API elements.
-
 ### The main function `read_namespace`
 
 The application invokes the function `pydsdl.read_namespace()` with the path of the target root namespace
