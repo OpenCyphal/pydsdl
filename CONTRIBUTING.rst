@@ -12,7 +12,7 @@ Dependencies
 
 Despite the fact that the library itself is dependency-free,
 some additional packages are needed for development and testing.
-They are listed in `requirements-dev.txt`.
+They are listed in ``/requirements.txt``.
 
 External runtime dependencies are not allowed in this project --
 if you can't bundle it with the library, you can't use it.
