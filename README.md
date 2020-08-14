@@ -2,33 +2,22 @@
 
 [![Travis CI](https://travis-ci.org/UAVCAN/pydsdl.svg?branch=master)](https://travis-ci.org/UAVCAN/pydsdl)
 [![Build status](https://ci.appveyor.com/api/projects/status/lurx5gihhcl9wq1w/branch/master?svg=true)](https://ci.appveyor.com/project/Zubax/pydsdl/branch/master)
+[![Documentation Status](https://readthedocs.org/projects/pydsdl/badge/?version=latest)](https://pydsdl.readthedocs.io/en/latest/?badge=latest)
 [![Coverage Status](https://coveralls.io/repos/github/UAVCAN/pydsdl/badge.svg)](https://coveralls.io/github/UAVCAN/pydsdl)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pydsdl.svg)](https://pypi.org/project/pydsdl/)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/a0fdcbe8332a46399a2da90f97900e78)](https://www.codacy.com/app/UAVCAN/pydsdl)
 [![Forum](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
 
-PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler frontend implemented in Python.
-It supports all DSDL features defined in the UAVCAN specification.
-A brief usage example is provided in the file `demo.py`.
+PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler front-end implemented in Python.
+It accepts a DSDL namespace at the input and produces a well-annotated abstract syntax tree (AST) at the output,
+evaluating all constant expressions in the process.
+All DSDL features defined in the UAVCAN Specification are supported.
+The library should, in theory, work on any platform and with any Python implementation.
 
-## Installation
+**Read the docs at [pydsdl.readthedocs.io](https://pydsdl.readthedocs.io/).**
 
-PyDSDL is compatible with any current version of Python.
-No third-party dependencies need to be installed to use the library.
 
-Install from PIP: `pip install pydsdl`.
-Alternatively, import this repository into your codebase,
-add its root to the Python import lookup paths, and you're ready to roll.
 
-Make sure that it works by importing it: `import pydsdl`.
-
-### Bundled third-party software
-
-The library is bundled with the following third-party software libraries (by virtue of being bundled,
-they need not be installed by the user):
-
-- [Parsimonious](https://github.com/erikrose/parsimonious) by Erik Rose, MIT license.
-- [Six](https://github.com/benjaminp/six) by Benjamin Peterson, MIT license; needed for Parsimonious.
 
 ## Library API
 
@@ -149,61 +138,3 @@ representation of the contained value.
     - `String` - a Unicode string; has `native_value: str`.
   - `Container` - generic container; has `element_type: Type[Any]` and is iterable.
     - `Set` - a DSDL constant homogeneous set.
-
-## Development
-
-### Dependencies
-
-Despite the fact that the library itself is dependency-free,
-some additional packages are needed for development and testing.
-They are listed in `requirements-dev.txt`.
-
-External runtime dependencies are not allowed in this project --
-if you can't bundle it with the library, you can't use it.
-
-### Coding conventions
-
-Follow [PEP8](https://www.python.org/dev/peps/pep-0008/) with the following exception:
-the line length limit is 120 characters (not 79).
-
-All functions and methods must be type-annotated. This is enforced statically with MyPy.
-
-Ensure compatibility with all versions of Python that have not yet reached the end-of-life.
-
-Do not import specific entities; instead, import only the package itself and then use verbose references,
-as shown below.
-If you really need to import a specific entity, consider prefixing it with an underscore to prevent
-scope leakage, unless you really want it to be externally visible.
-Exception applies to well-encapsulated submodules which are not part of the library API
-(i.e., prefixed with an underscore).
-
-```python
-from . import _serializable               # Good
-from ._serializable import CompositeType  # Pls no
-```
-
-### Writing tests
-
-Aim to cover 100% of the code in the branch coverage mode.
-
-Write unit tests as functions without arguments prefixed with `_unittest_`.
-Test functions should be located as close as possible to the tested code,
-preferably at the end of the same Python module.
-
-Make assertions using the standard `assert` statement.
-For extra functionality, import `pytest` in your test function locally.
-**Never import pytest outside of your test functions** because it will break the library
-outside of test-enabled environments.
-
-```python
-def _unittest_my_test() -> None:    # Type annotations required
-    import pytest  # OK to import inside test functions only (rarely useful)
-    assert get_the_answer() == 42
-```
-
-For more information refer to the PyTest documentation.
-
-### Releasing
-
-Use the script `release.sh` to publish new releases on PyPI. Read the source for usage information.
-The script will tag the release automatically.

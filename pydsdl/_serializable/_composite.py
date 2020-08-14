@@ -156,6 +156,14 @@ class CompositeType(SerializableType):
         return self._deprecated
 
     @property
+    def final(self) -> bool:
+        return self._final
+
+    @property
+    def footprint(self) -> int:
+        return self._footprint
+
+    @property
     def attributes(self) -> typing.List[Attribute]:
         return self._attributes[:]  # Return copy to prevent mutation
 

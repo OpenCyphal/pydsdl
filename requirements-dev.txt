@@ -5,6 +5,11 @@ coverage    ~= 5.2
 mypy        == 0.782
 pycodestyle >= 2.6
 
+# Documentation.
+sphinx           == 3.2.1
+sphinx_rtd_theme == 0.5.0
+sphinx-computron <  2.0
+
 # Packaging and distribution.
 setuptools >= 46.0
 wheel      >= 0.34, < 2.0

@@ -20,6 +20,7 @@
       <w>candump</w>
       <w>canfd</w>
       <w>caplog</w>
+      <w>computron</w>
       <w>constraindness</w>
       <w>constructible</w>
       <w>creationflags</w>
@@ -66,6 +67,7 @@
       <w>icmp</w>
       <w>iface</w>
       <w>inaddr</w>
+      <w>intersphinx</w>
       <w>intravehicular</w>
       <w>iscsi</w>
       <w>isfinite</w>
@@ -80,6 +82,7 @@
       <w>memcpy</w>
       <w>memoryview</w>
       <w>meth</w>
+      <w>microarchitectures</w>
       <w>mismaintenance</w>
       <w>modprobe</w>
       <w>multiframe</w>
@@ -113,7 +116,9 @@
       <w>pycodestyle</w>
       <w>pydev</w>
       <w>pydsdl</w>
+      <w>pygments</w>
       <w>pylint</w>
+      <w>pytest</w>
       <w>pythonasynciodebug</w>
       <w>pythoncan</w>
       <w>pythonpath</w>
