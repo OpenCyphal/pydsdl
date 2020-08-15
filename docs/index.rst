@@ -20,7 +20,7 @@ Contents
 .. toctree::
 
    pages/installation
-   pages/usage
+   pages/pydsdl
    pages/dev
 
 

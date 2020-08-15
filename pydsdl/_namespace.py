@@ -45,10 +45,11 @@ class FixedPortIDCollisionError(_error.InvalidDefinitionError):
 
 class MultipleDefinitionsUnderSameVersionError(_error.InvalidDefinitionError):
     """
-    For example:
+    For example::
+
         Type.1.0.uavcan
-        28000.Type.1.0.uavcan
-        28001.Type.1.0.uavcan
+        2800.Type.1.0.uavcan
+        2801.Type.1.0.uavcan
     """
     pass
 
@@ -62,17 +63,13 @@ class VersionsOfDifferentKindError(_error.InvalidDefinitionError):
 
 class MinorVersionFixedPortIDError(_error.InvalidDefinitionError):
     """
-    Different fixed port ID under the same major version, or a fixed port ID was removed under the same
-    major version.
+    Different fixed port-ID under the same major version, or a fixed port ID was removed under the same major version.
     """
     pass
 
 
-# Invoked when the frontend encounters a print directive or needs to output a generic diagnostic. Arguments:
-#   - path to the source DSDL file
-#   - line number, one based
-#   - text to print
 PrintOutputHandler = typing.Callable[[str, int, str], None]
+"""Invoked when the frontend encounters a print directive or needs to output a generic diagnostic."""
 
 
 def read_namespace(root_namespace_directory:        str,
@@ -81,32 +78,36 @@ def read_namespace(root_namespace_directory:        str,
                    allow_unregulated_fixed_port_id: bool = False) -> \
         typing.List[_serializable.CompositeType]:
     """
-    Read all DSDL definitions from the specified root namespace directory. Returns a list of CompoundTypes sorted
-    lexicographically by full data type name, then by major version (newest version first), then by minor version
-    (newest version first). The guaranteed ordering allows the user to always find the newest version simply by
-    picking the first matching occurrence.
+    This function is the main entry point of the library.
+    It reads all DSDL definitions from the specified root namespace directory and produces the annotated AST.
 
-    :param root_namespace_directory:    The path of the root namespace directory that will be read.
-                                        For example, "dsdl/uavcan" to read the "uavcan" namespace.
+    :param root_namespace_directory: The path of the root namespace directory that will be read.
+        For example, "dsdl/uavcan" to read the "uavcan" namespace.
 
-    :param lookup_directories:          List of other namespace directories containing data type definitions that are
-                                        referred to from the target root namespace. For example, if you are reading a
-                                        vendor-specific namespace, the list of lookup directories should always include
-                                        a path to the standard root namespace "uavcan", otherwise the types defined in
-                                        the vendor-specific namespace won't be able to use data types from the standard
-                                        namespace.
+    :param lookup_directories: List of other namespace directories containing data type definitions that are
+        referred to from the target root namespace. For example, if you are reading a vendor-specific namespace,
+        the list of lookup directories should always include a path to the standard root namespace ``uavcan``,
+        otherwise the types defined in the vendor-specific namespace won't be able to use data types from the
+        standard namespace.
 
-    :param print_output_handler:            If provided, this callable will be invoked when a @print directive is
-                                            encountered or when the frontend needs to output a diagnostic.
-                                            If not provided, no output will be produced except for the log.
+    :param print_output_handler: If provided, this callable will be invoked when a ``@print`` directive
+        is encountered or when the frontend needs to emit a diagnostic;
+        the arguments are: path, line number (1-based), text.
+        If not provided, no output will be produced except for the standard Python logging subsystem
+        (but ``@print`` expressions will be evaluated anyway, and a failed evaluation will be a fatal error).
 
     :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
-                                            This is a dangerous feature that must not be used unless you understand the
-                                            risks. The background information is provided in the UAVCAN specification.
+        As demanded by the specification, the frontend rejects unregulated fixed port ID by default.
+        This is a dangerous feature that must not be used unless you understand the risks.
+        Please read https://uavcan.org/guide.
 
-    :return: A sorted list of CompositeType.
+    :return: A list of :class:`pydsdl.CompositeType` sorted lexicographically by full data type name,
+             then by major version (newest version first), then by minor version (newest version first).
+             The ordering guarantee allows the caller to always find the newest version simply by picking
+             the first matching occurrence.
 
-    :raises: FrontendError, OSError (if directories do not exist or inaccessible)
+    :raises: :class:`pydsdl.FrontendError`, :class:`OSError` if directories do not exist or inaccessible;
+        :class:`ValueError`/:class:`TypeError` if the arguments are invalid.
     """
     # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates.
     # We'd like this to be an iterable list of strings but we handle the common practice of passing in a single path.
