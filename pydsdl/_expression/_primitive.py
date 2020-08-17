@@ -99,6 +99,7 @@ class Rational(Primitive):
             raise _any.InvalidOperandError('Rational %s is not an integer' % self._value)
 
     def is_integer(self) -> bool:
+        """Whether the demonimator equals one."""
         return self._value.denominator == 1
 
     def __hash__(self) -> int:

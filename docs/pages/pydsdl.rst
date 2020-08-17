@@ -28,8 +28,8 @@ Type model
     :argv: Any
 
 
-Error model
-+++++++++++
+Exceptions
+++++++++++
 
 .. computron-injection::
     :filename: ../descendant_diagram.py

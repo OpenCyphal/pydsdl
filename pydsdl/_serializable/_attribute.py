@@ -35,6 +35,7 @@ class Attribute(_expression.Any):
 
     @property
     def name(self) -> str:
+        """For padding fields this is an empty string."""
         return self._name
 
     def __hash__(self) -> int:
@@ -47,6 +48,7 @@ class Attribute(_expression.Any):
             return NotImplemented
 
     def __str__(self) -> str:
+        """Returns the normalized DSDL representation of the attribute."""
         return ('%s %s' % (self.data_type, self.name)).strip()
 
     def __repr__(self) -> str:
@@ -122,18 +124,25 @@ class Constant(Attribute):
 
     @property
     def value(self) -> _expression.Any:
+        """
+        The result of evaluating the constant initialization expression.
+        The value is guaranteed to be compliant with the constant's own type -- it is checked at the evaluation time.
+        The compliance rules are defined in the Specification.
+        """
         return self._value
 
     def __hash__(self) -> int:
         return hash((self._data_type, self._name, self._value))
 
     def __eq__(self, other: object) -> bool:
+        """Constants are equal if their type, name, and value are equal."""
         if isinstance(other, Constant):
             return super(Constant, self).__eq__(other) and (self._value == other._value)
         else:
             return NotImplemented
 
     def __str__(self) -> str:
+        """Returns the normalized DSDL representation of the constant and its value."""
         return '%s %s = %s' % (self.data_type, self.name, self.value)
 
     def __repr__(self) -> str:

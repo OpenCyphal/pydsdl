@@ -63,6 +63,7 @@
       <w>hardbass</w>
       <w>hdlc</w>
       <w>hitl</w>
+      <w>homotypic</w>
       <w>hostmask</w>
       <w>hwgrep</w>
       <w>iana</w>
@@ -84,10 +85,13 @@
       <w>mebibytes</w>
       <w>memcpy</w>
       <w>memoryview</w>
+      <w>metaserializable</w>
       <w>meth</w>
       <w>microarchitectures</w>
       <w>mismaintenance</w>
       <w>modprobe</w>
+      <w>multicombination</w>
+      <w>multicombinations</w>
       <w>multiframe</w>
       <w>mypy</w>
       <w>mypypath</w>

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -16,10 +16,9 @@ class TypeParameterError(_error.InvalidDefinitionError):
 
 class SerializableType(_expression.Any):
     """
-    Type objects are immutable. Immutability enables lazy evaluation of properties and hashability.
-    Invoking __str__() on a data type returns its uniform normalized definition, e.g.:
-        - uavcan.node.Heartbeat.1.0[<=36]
-        - truncated float16[<=36]
+    Instances are immutable.
+    Invoking :meth:`__str__` on a data type returns its uniform normalized definition, e.g.,
+    ``uavcan.node.Heartbeat.1.0[<=36]``, ``truncated float16[<=36]``.
     """
 
     TYPE_NAME = 'metaserializable'
@@ -31,10 +30,9 @@ class SerializableType(_expression.Any):
     @property
     def bit_length_set(self) -> BitLengthSet:
         """
-        A set of all possible bit length values of serialized representations of the data type.
+        A set of all possible bit length values of the serialized representations of this type.
         Refer to the specification for the background. The returned set is guaranteed to be non-empty.
-
-        This is an expensive operation, so the result is cached in the base class.
+        See :class:`pydsdl.BitLengthSet`.
         """
         # Derived classes should not override this property themselves;
         # they must implement the method _compute_bit_length_set() instead.

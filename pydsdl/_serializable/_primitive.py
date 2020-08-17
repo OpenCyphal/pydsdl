@@ -49,17 +49,21 @@ class PrimitiveType(SerializableType):
 
     @property
     def bit_length(self) -> int:
-        """All primitives are of a fixed bit length, hence just one value is enough."""
+        """
+        This is a shortcut for ``next(iter(x.bit_length_set))``, because the bit length set of a primitive type
+        always contains exactly one element (i.e., primitive types are fixed-length).
+        """
         return self._bit_length
 
     @property
     def standard_bit_length(self) -> bool:
         """
-        "Standard length" means that values of such bit length are commonly used in modern computer microarchitectures,
-        such as uint8, float64, int32, and so on. Booleans are excluded.
-        More precisely, a primitive is said to be "standard length" when the following hold:
+        The term "standard length" here means that values of such bit length are commonly used in modern computer
+        microarchitectures, such as ``uint8``, ``float64``, ``int32``, and so on. Booleans are excluded.
+        More precisely, a primitive is said to be "standard length" when the following hold::
+
             bit_length >= 8
-            2**round(log2(bit_length)) == bit_length.
+            2**ceil(log2(bit_length)) == bit_length.
         """
         return self._standard_bit_length
 

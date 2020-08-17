@@ -14,14 +14,16 @@ evaluating all constant expressions in the process.
 All DSDL features defined in the UAVCAN Specification are supported.
 The library should, in theory, work on any platform and with any Python implementation.
 
-    import pydsdl
-    try:
-        composite_types: pydsdl.CompositeType = pydsdl.read_namespace(target_directory, lookup_directories)
-    except pydsdl.InvalidDefinitionError as ex:
-        print(f'{ex.path}:{ex.line}: Invalid DSDL: {ex.text}', file=sys.stderr)
-        exit(1)
-    else:
-        for t in composite_types:
-            print(t)  # Process the type -- generate code, analyze, etc.
-
 **Read the docs at [pydsdl.readthedocs.io](https://pydsdl.readthedocs.io/).**
+
+```python
+import pydsdl
+try:
+    types: pydsdl.CompositeType = pydsdl.read_namespace(target_directory, lookup_directories)
+except pydsdl.InvalidDefinitionError as ex:
+    print(f'{ex.path}:{ex.line}: Invalid DSDL: {ex.text}', file=sys.stderr)
+    exit(1)
+else:
+    for t in types:
+        print(t)  # Process the type -- generate code, analyze, etc.
+```

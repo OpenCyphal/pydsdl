@@ -23,6 +23,10 @@ class VoidType(SerializableType):
 
     @property
     def bit_length(self) -> int:
+        """
+        This is a shortcut for ``next(iter(x.bit_length_set))``, because the bit length set of a void type
+        always contains exactly one element (i.e., void types are fixed-length).
+        """
         return self._bit_length
 
     def _compute_bit_length_set(self) -> BitLengthSet:
