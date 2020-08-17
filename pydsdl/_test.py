@@ -676,6 +676,9 @@ def _unittest_parse_namespace() -> None:
         with open(path, 'w') as f:
             f.write(text)
 
+    # Empty namespace.
+    assert [] == _namespace.read_namespace(directory.name)
+
     _define(
         'zubax/First.1.0.uavcan',
         dedent("""
@@ -722,10 +725,10 @@ def _unittest_parse_namespace() -> None:
     assert 'zubax.nested.Spartans' in [x.full_name for x in parsed]
 
     # try again with minimal arguments to read_namespace
-    parsed_minmal_args = _namespace.read_namespace(
+    parsed_minimal_args = _namespace.read_namespace(
         os.path.join(directory.name, 'zubax')
     )
-    assert len(parsed_minmal_args) == 3
+    assert len(parsed_minimal_args) == 3
 
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
