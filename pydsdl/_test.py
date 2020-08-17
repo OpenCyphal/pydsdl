@@ -377,7 +377,7 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
 
-    with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*/vendor/types' instead of .*/vendor'.*"):
+    with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*vendor[/\\]+types' instead of .*vendor'.*"):
         standalone('vendor/types/A.1.0.uavcan', 'types.Nonexistent.1.0 field')
 
     with raises(_error.InvalidDefinitionError, match=r'(?i).*not defined for.*'):
