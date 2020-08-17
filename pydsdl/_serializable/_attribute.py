@@ -45,7 +45,7 @@ class Attribute(_expression.Any):
         if isinstance(other, Attribute):
             return (self._data_type == other._data_type) and (self._name == other.name)
         else:
-            return NotImplemented
+            return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         """Returns the normalized DSDL representation of the attribute."""
@@ -139,7 +139,7 @@ class Constant(Attribute):
         if isinstance(other, Constant):
             return super(Constant, self).__eq__(other) and (self._value == other._value)
         else:
-            return NotImplemented
+            return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         """Returns the normalized DSDL representation of the constant and its value."""
@@ -157,8 +157,18 @@ def _unittest_attribute() -> None:
     assert repr(Field(BooleanType(PrimitiveType.CastMode.SATURATED), 'flag')) == \
         'Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.SATURATED: 0>), name=\'flag\')'
 
-    assert str(PaddingField(VoidType(32))) == 'void32 '     # Mind the space!
+    assert str(PaddingField(VoidType(32))) == 'void32'
     assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
+
+    assert Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag') == \
+        Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag')
+    assert hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag')) == \
+        hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag'))
+
+    assert Field(UnsignedIntegerType(1, PrimitiveType.CastMode.TRUNCATED), 'flag') != \
+        Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag')
+    assert hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.TRUNCATED), 'flag')) != \
+        hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag'))
 
     with raises(TypeParameterError, match='.*void.*'):
         # noinspection PyTypeChecker
@@ -172,3 +182,8 @@ def _unittest_attribute() -> None:
     assert const.value == _expression.Rational(-123)
 
     assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=rational(-123))' % data_type
+
+    assert Constant(data_type, 'FOO_CONST', _expression.Rational(-123)) == const
+    assert Constant(data_type, 'FOO_CONST', _expression.Rational(-124)) != const
+    assert hash(Constant(data_type, 'FOO_CONST', _expression.Rational(-123))) == hash(const)
+    assert hash(Constant(data_type, 'FOO_CONST', _expression.Rational(-124))) != hash(const)
