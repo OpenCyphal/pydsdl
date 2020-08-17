@@ -19,7 +19,7 @@ The library should, in theory, work on any platform and with any Python implemen
 ```python
 import pydsdl
 try:
-    types: pydsdl.CompositeType = pydsdl.read_namespace(target_directory, lookup_directories)
+    types = pydsdl.read_namespace(target_directory, lookup_directories)
 except pydsdl.InvalidDefinitionError as ex:
     print(f'{ex.path}:{ex.line}: Invalid DSDL: {ex.text}', file=sys.stderr)
     exit(1)
