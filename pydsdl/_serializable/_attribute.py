@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -18,7 +18,7 @@ class InvalidTypeError(TypeParameterError):
     pass
 
 
-class Attribute:    # TODO: should extend expression.Any to support advanced introspection/reflection.
+class Attribute(_expression.Any):
     def __init__(self, data_type: SerializableType, name: str):
         self._data_type = data_type
         self._name = str(name)
@@ -35,10 +35,21 @@ class Attribute:    # TODO: should extend expression.Any to support advanced int
 
     @property
     def name(self) -> str:
+        """For padding fields this is an empty string."""
         return self._name
 
+    def __hash__(self) -> int:
+        return hash((self._data_type, self._name))
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Attribute):
+            return (self._data_type == other._data_type) and (self._name == other.name)
+        else:
+            return NotImplemented  # pragma: no cover
+
     def __str__(self) -> str:
-        return '%s %s' % (self.data_type, self.name)
+        """Returns the normalized DSDL representation of the attribute."""
+        return ('%s %s' % (self.data_type, self.name)).strip()
 
     def __repr__(self) -> str:
         return '%s(data_type=%r, name=%r)' % (self.__class__.__name__, self.data_type, self.name)
@@ -113,9 +124,25 @@ class Constant(Attribute):
 
     @property
     def value(self) -> _expression.Any:
+        """
+        The result of evaluating the constant initialization expression.
+        The value is guaranteed to be compliant with the constant's own type -- it is checked at the evaluation time.
+        The compliance rules are defined in the Specification.
+        """
         return self._value
 
+    def __hash__(self) -> int:
+        return hash((self._data_type, self._name, self._value))
+
+    def __eq__(self, other: object) -> bool:
+        """Constants are equal if their type, name, and value are equal."""
+        if isinstance(other, Constant):
+            return super(Constant, self).__eq__(other) and (self._value == other._value)
+        else:
+            return NotImplemented  # pragma: no cover
+
     def __str__(self) -> str:
+        """Returns the normalized DSDL representation of the constant and its value."""
         return '%s %s = %s' % (self.data_type, self.name, self.value)
 
     def __repr__(self) -> str:
@@ -130,8 +157,18 @@ def _unittest_attribute() -> None:
     assert repr(Field(BooleanType(PrimitiveType.CastMode.SATURATED), 'flag')) == \
         'Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.SATURATED: 0>), name=\'flag\')'
 
-    assert str(PaddingField(VoidType(32))) == 'void32 '     # Mind the space!
+    assert str(PaddingField(VoidType(32))) == 'void32'
     assert repr(PaddingField(VoidType(1))) == 'PaddingField(data_type=VoidType(bit_length=1), name=\'\')'
+
+    assert Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag') == \
+        Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag')
+    assert hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag')) == \
+        hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag'))
+
+    assert Field(UnsignedIntegerType(1, PrimitiveType.CastMode.TRUNCATED), 'flag') != \
+        Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag')
+    assert hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.TRUNCATED), 'flag')) != \
+        hash(Field(UnsignedIntegerType(1, PrimitiveType.CastMode.SATURATED), 'flag'))
 
     with raises(TypeParameterError, match='.*void.*'):
         # noinspection PyTypeChecker
@@ -145,3 +182,8 @@ def _unittest_attribute() -> None:
     assert const.value == _expression.Rational(-123)
 
     assert repr(const) == 'Constant(data_type=%r, name=\'FOO_CONST\', value=rational(-123))' % data_type
+
+    assert Constant(data_type, 'FOO_CONST', _expression.Rational(-123)) == const
+    assert Constant(data_type, 'FOO_CONST', _expression.Rational(-124)) != const
+    assert hash(Constant(data_type, 'FOO_CONST', _expression.Rational(-123))) == hash(const)
+    assert hash(Constant(data_type, 'FOO_CONST', _expression.Rational(-124))) != hash(const)

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -26,10 +26,16 @@ class UndefinedAttributeError(InvalidOperandError):
 class Any(abc.ABC):
     """
     This abstract class represents an arbitrary intrinsic DSDL expression value.
+    Both serializable types and expression types derive from this common ancestor.
+
+    Per the DSDL data model, a serializable type is also a value.
+    Serializable types have the suffix ``Type`` because their instances represent not DSDL values but DSDL types.
     """
-    # This attribute must be specified in the derived classes.
-    # It contains the name of the data type implemented by the class.
+
     TYPE_NAME = None    # type: str
+    """
+    The DSDL-name of the data type implemented by the class, as defined in Specification.
+    """
 
     @abc.abstractmethod
     def __hash__(self) -> int:
@@ -41,26 +47,22 @@ class Any(abc.ABC):
 
     @abc.abstractmethod
     def __str__(self) -> str:
-        """Must return a DSDL spec-compatible textual representation of the contained value suitable for printing."""
+        """Returns a DSDL spec-compatible textual representation of the contained value suitable for printing."""
         raise NotImplementedError  # pragma: no cover
 
     def __repr__(self) -> str:
         return self.TYPE_NAME + '(' + str(self) + ')'
 
-    #
     # Unary operators.
-    #
     def _logical_not(self) -> 'Boolean': raise UndefinedOperatorError
 
     def _positive(self) -> 'Any': raise UndefinedOperatorError
 
     def _negative(self) -> 'Any': raise UndefinedOperatorError
 
-    #
     # Binary operators.
     # The types of the operators defined here must match the specification.
     # Make sure to use least generic types in the derived classes - Python allows covariant return types.
-    #
     def _logical_or(self, right: 'Any')  -> 'Boolean': raise UndefinedOperatorError
     def _logical_and(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
 
@@ -97,11 +99,9 @@ class Any(abc.ABC):
     def _power(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
     def _power_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
 
-    #
     # Attribute access operator. It is a binary operator as well, but its semantics is slightly different.
     # Implementations must invoke super()._attribute() when they encounter an unknown attribute, to allow
     # the parent classes to handle the requested attribute as a fallback option.
-    #
     def _attribute(self, name: 'String') -> 'Any': raise UndefinedAttributeError
 
 

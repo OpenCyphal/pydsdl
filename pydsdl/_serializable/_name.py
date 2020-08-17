@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -14,6 +14,10 @@ class InvalidNameError(TypeParameterError):
 
 
 def check_name(name: str) -> None:
+    """
+    Ensure that the name complies with the requirements set out in the Specification;
+    raise :class:`InvalidNameError` if not.
+    """
     if not name:
         raise InvalidNameError('Name or namespace component cannot be empty')
 

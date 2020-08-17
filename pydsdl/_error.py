@@ -9,14 +9,9 @@ import urllib.parse
 
 class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is redundant and should not be used.
     """
-    This exception is raised in case if the front end discovers an error in the DSDL code, or if it encounters
-    an internal failure that can be associated with a particular construct in the DSDL definition.
-    This is the base class for all exceptions raised by the front-end's inner logic,
-    excepting its entry function which also can raise ValueError when provided with incorrect inputs.
-    Fields:
-        path    Source file path where the error has occurred. Optional, will be None if unknown.
-        line    Source file line number where the error has occurred. Optional, will be None if unknown.
-                The path is always known if the line number is set.
+    This is the root exception type for all custom exceptions defined in the library.
+    This type itself is not expected to be particularly useful to the library user;
+    please refer to the direct descendants instead.
     """
 
     def __init__(self,
@@ -31,8 +26,9 @@ class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is
                                       path: typing.Optional[str] = None,
                                       line: typing.Optional[int] = None) -> None:
         """
-        Entries that are already known will be left unchanged. This is useful when propagating exceptions through
-        recursive instances, e.g., when processing nested definitions.
+        Entries that are already known will be left unchanged.
+        This is useful when propagating exceptions through recursive instances,
+        e.g., when processing nested definitions.
         """
         if not self._path and path:
             self._path = path
@@ -42,10 +38,15 @@ class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is
 
     @property
     def path(self) -> typing.Optional[str]:
+        """Source file path where the error has occurred, if known."""
         return self._path
 
     @property
     def line(self) -> typing.Optional[int]:
+        """
+        Source file line number (first line numbered 1) where the error has occurred, if known.
+        The path is always known if the line number is set.
+        """
         return self._line
 
     @property
@@ -53,7 +54,12 @@ class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is
         return Exception.__str__(self)
 
     def __str__(self) -> str:
-        """Returns a nicely formatted error string in a GCC-like format (can be parsed by e.g. Eclipse error parser)"""
+        """
+        Nicely formats an error string in the typical error format ``[file:[line:]]description``.
+        Example::
+
+            uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
+        """
         if self.path and self.line:
             return '%s:%d: %s' % (self.path, self.line, self.text)
 
@@ -69,7 +75,7 @@ class FrontendError(Exception):       # PEP8 says that the "Exception" suffix is
 class InternalError(FrontendError):
     """
     This exception is used to report internal errors in the front end itself that prevented it from
-    processing the definitions.
+    processing the definitions. Every occurrence should be reported to the developers.
     """
     def __init__(self,
                  text: typing.Optional[str] = None,
@@ -92,7 +98,9 @@ class InternalError(FrontendError):
 
 class InvalidDefinitionError(FrontendError):
     """
-    This exception is used to point out mistakes and errors in DSDL definitions.
+    This exception type is used to point out mistakes and errors in DSDL definitions.
+    This type is inherited by a dozen of specialized exception types; however, the class hierarchy beneath
+    this type may be unstable and should not be relied upon by the application directly.
     """
     pass
 

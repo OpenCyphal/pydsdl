@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -31,13 +31,17 @@ class ArrayType(SerializableType):
 
     @property
     def capacity(self) -> int:
+        """
+        The (maximum) number of elements in the (variable-length) array.
+        """
         return self._capacity
 
     @property
     def string_like(self) -> bool:
         """
-        Returns True if the array might contain a text string, in which case it is termed to be "string-like".
-        A string-like array is a variable-length array of uint8.
+        True if the array might contain a text string, in which case it is termed to be "string-like".
+        A string-like array is a variable-length array of ``uint8``.
+        See https://github.com/UAVCAN/specification/issues/51.
         """
         return False
 
@@ -59,10 +63,14 @@ class FixedLengthArrayType(ArrayType):
     def enumerate_elements_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
         """
-        This is a convenience method for code generation. Its behavior mimics that of iterate_fields_with_offsets()
-        for structure types, except that we iterate indexes instead of fields since we don't have fields in arrays.
-        For each element in the fixed array we return its index and the offset represented as a bit length set
-        counting from the supplied base. If the base is not supplied, it is assumed to equal {0}.
+        This is a convenience method for code generation.
+        Its behavior mimics that of :meth:`pydsdl.StructureType.iterate_fields_with_offsets`,
+        except that we iterate over indexes instead of fields.
+
+        :param base_offset: The base offset to add to each element. If not supplied, assumed to be ``{0}``.
+
+        :returns: For an N-element array, an iterator over N elements, where each element is a tuple of the index
+            of the array element (zero-based) and its offset as a bit length set.
         """
         base_offset = BitLengthSet(base_offset or 0)
         _self_test_base_offset = BitLengthSet(0)
@@ -129,15 +137,15 @@ class VariableLengthArrayType(ArrayType):
 
     @property
     def string_like(self) -> bool:
+        """See the base class."""
         et = self.element_type      # Without this temporary MyPy yields a false positive type error
         return isinstance(et, UnsignedIntegerType) and (et.bit_length == 8)
 
     @property
     def length_field_type(self) -> UnsignedIntegerType:
         """
-        Returns the best-matching unsigned integer type of the implicit array length field.
-        This is convenient for code generation.
-        WARNING: the set of valid length values is a subset of that of the returned type.
+        The unsigned integer type of the implicit array length field.
+        Note that the set of valid length values is a subset of that of the returned type.
         """
         return self._length_field_type
 

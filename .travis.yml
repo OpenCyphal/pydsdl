@@ -5,17 +5,16 @@ os:
   - linux   # Travis-CI doesn't support Python on other platforms.
 
 python:
-  - '3.5.3'       # Oldest supported version
-  - '3.5'
   - '3.6'
   - '3.7'
   - '3.8'
 
 before_script:
-  - pip install -r requirements-dev.txt
+  - pip install -r requirements.txt
 
 script:
   - ./test.sh
 
-  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
-  - ./demo.py dsdl-test/uavcan
+# TODO: re-enable when releasing.
+#  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
+#  - ./demo.py dsdl-test/uavcan

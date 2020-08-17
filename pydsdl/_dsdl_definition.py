@@ -125,13 +125,12 @@ class DSDLDefinition:
                      log_prefix, len(lookup_definitions),
                      ', '.join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))))
         try:
-            # We have to import this class at function level to break recursive dependency.
-            # Maybe I have messed up the architecture? Should think about it later.
-            from ._data_type_builder import DataTypeBuilder
-            builder = DataTypeBuilder(definition=self,
-                                      lookup_definitions=lookup_definitions,
-                                      print_output_handler=print_output_handler,
-                                      allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id)
+            builder = _data_type_builder.DataTypeBuilder(
+                definition=self,
+                lookup_definitions=lookup_definitions,
+                print_output_handler=print_output_handler,
+                allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id
+            )
             with open(self.file_path) as f:
                 _parser.parse(f.read(), builder)
 
@@ -211,3 +210,8 @@ class DSDLDefinition:
             (self.full_name, self.version, self.fixed_port_id, self.file_path)
 
     __repr__ = __str__
+
+
+# Moved this import here to break recursive dependency.
+# Maybe I have messed up the architecture? Should think about it later.
+from . import _data_type_builder  # noqa: E402

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -16,6 +16,11 @@ class Primitive(_any.Any):
     @property
     @abc.abstractmethod
     def native_value(self) -> typing.Any:
+        """
+        Yields an appropriate Python-native representation of the contained value,
+        like :class:`fractions.Fraction`, :class:`str`, etc.
+        Specializations define covariant return types.
+        """
         raise NotImplementedError  # pragma: no cover
 
 
@@ -85,7 +90,8 @@ class Rational(Primitive):
     def as_native_integer(self) -> int:
         """
         Returns the inferior as a native integer,
-        unless it cannot be represented as such without the loss of precision; i.e., if denominator != 1.
+        unless it cannot be represented as such without the loss of precision; i.e., if denominator != 1,
+        in which case an invalid operand exception is thrown.
         """
         if self.is_integer():
             return self._value.numerator
@@ -93,6 +99,7 @@ class Rational(Primitive):
             raise _any.InvalidOperandError('Rational %s is not an integer' % self._value)
 
     def is_integer(self) -> bool:
+        """Whether the demonimator equals one."""
         return self._value.denominator == 1
 
     def __hash__(self) -> int:

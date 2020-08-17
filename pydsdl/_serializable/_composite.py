@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -41,6 +41,11 @@ class DeprecatedDependencyError(TypeParameterError):
 
 
 class CompositeType(SerializableType):
+    """
+    This is the most interesting type in the library because it represents an actual DSDL definition upon its
+    interpretation.
+    """
+
     MAX_NAME_LENGTH = 50
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
@@ -124,35 +129,37 @@ class CompositeType(SerializableType):
 
     @property
     def full_name(self) -> str:
-        """The full name, e.g., uavcan.node.Heartbeat"""
+        """The full name, e.g., ``uavcan.node.Heartbeat``."""
         return self._name
 
     @property
     def name_components(self) -> typing.List[str]:
-        """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
+        """Components of the full name as a list, e.g., ``['uavcan', 'node', 'Heartbeat']``."""
         return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
-        """The last component of the full name, e.g., Heartbeat of uavcan.node.Heartbeat"""
+        """The last component of the full name, e.g., ``Heartbeat`` of ``uavcan.node.Heartbeat``."""
         return self.name_components[-1]
 
     @property
     def full_namespace(self) -> str:
-        """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
+        """The full name without the short name, e.g., ``uavcan.node`` for ``uavcan.node.Heartbeat``."""
         return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
-        """The first component of the full name, e.g., uavcan of uavcan.node.Heartbeat"""
+        """The first component of the full name, e.g., ``uavcan`` of ``uavcan.node.Heartbeat``."""
         return self.name_components[0]
 
     @property
     def version(self) -> Version:
+        """The version numbers of the type, e.g., ``(1, 0)`` of ``uavcan.node.Heartbeat.1.0``."""
         return self._version
 
     @property
     def deprecated(self) -> bool:
+        """Whether the definition is marked ``@deprecated``."""
         return self._deprecated
 
     @property
@@ -181,7 +188,9 @@ class CompositeType(SerializableType):
 
     @property
     def source_file_path(self) -> str:
-        """Empty if this is a synthesized type, e.g. a service request or response section."""
+        """
+        For synthesized types such as service request/response sections, this property is defined as an empty string.
+        """
         return self._source_file_path
 
     @property
@@ -213,18 +222,10 @@ class CompositeType(SerializableType):
         return out
 
     @property
-    def compact_data_type_id(self) -> int:  # pragma: no cover
-        import warnings
-        warnings.warn('Please use data_type_hash instead', category=DeprecationWarning)
-        return self.data_type_hash
-
-    @property
     def parent_service(self) -> typing.Optional['ServiceType']:
         """
-        Service types contain two implicit fields: request and response. Their types are instances of composite type,
-        too; they can be distinguished from regular composites by the fact that their property "parent_service" points
-        to the service type that contains them. For composites that are not parts of a service type this property will
-        evaluate to None.
+        :class:`pydsdl.ServiceType` contains two special fields of this type: ``request`` and ``response``.
+        For them this property points to the parent service instance; otherwise it's None.
         """
         return self._parent_service
 
@@ -232,10 +233,10 @@ class CompositeType(SerializableType):
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
-        This method is intended for code generators. It iterates over every field (not attribute, i.e.,
-        constants are excluded) of the data type, yielding it together with its offset, where the offset is
-        represented as BitLengthSet. The offset of each field is added to the base offset, which may be specified
-        by the caller; if not specified, the base offset is assumed to be zero.
+        Iterates over every field (not attribute -- constants are excluded) of the data type,
+        yielding it together with its offset, where the offset is represented as :class:`pydsdl.BitLengthSet`.
+        The offset of each field is added to the base offset, which may be specified by the caller;
+        if not specified, the base offset is assumed to be ``{0}``.
 
         The objective of this method is to allow code generators to easily implement fully unrolled serialization and
         deserialization routines, where "unrolled" means that upon encountering another (nested) composite type, the
@@ -246,8 +247,8 @@ class CompositeType(SerializableType):
         thus being able to reliably statically determine whether each field of the type, including nested types
         at arbitrarily deep levels of nesting, is aligned relative to the origin of the serialized representation
         of the outermost type. As a result, the code generator will be able to avoid unnecessary reliance on slow
-        bit-level copy routines replacing them instead with much faster byte-level copy (like memcpy()) or even
-        plain memory aliasing, since it will be able to determine and prove the alignment of each field statically.
+        bit-level copy routines replacing them instead with much faster byte-level copy (like ``memcpy()``) or even
+        plain memory aliasing.
 
         When invoked on a tagged union type, the method yields the same offset for every field (since that's how
         tagged unions are serialized), where the offset equals the bit length of the implicit union tag (plus the
@@ -256,18 +257,16 @@ class CompositeType(SerializableType):
         Please refer to the usage examples to see how this feature can be used.
 
         :param base_offset: Assume the specified base offset; assume zero offset if the parameter is not provided.
-                            This parameter should be used when serializing nested composite data types.
 
-        :return: A generator of (Field, BitLengthSet). Each instance of BitLengthSet yielded by the generator is
-                 a dedicated copy, meaning that the consumer can mutate the returned instances arbitrarily without
-                 affecting future values. It is guaranteed that each yielded instance of BitLengthSet is non-empty.
+        :return: A generator of ``(Field, BitLengthSet)``.
+            Each instance of :class:`pydsdl.BitLengthSet` yielded by the generator is a dedicated copy,
+            meaning that the consumer can mutate the returned instances arbitrarily without affecting future values.
+            It is guaranteed that each yielded instance is non-empty.
         """
         raise NotImplementedError
 
     def _attribute(self, name: _expression.String) -> _expression.Any:
-        """
-        This is the handler for DSDL expressions like uavcan.node.Heartbeat.1.0.MODE_OPERATIONAL.
-        """
+        """This is the handler for DSDL expressions like ``uavcan.node.Heartbeat.1.0.MODE_OPERATIONAL``."""
         for c in self.constants:
             if c.name == name.native_value:
                 assert isinstance(c.value, _expression.Any)
@@ -281,12 +280,14 @@ class CompositeType(SerializableType):
 
     def __getitem__(self, attribute_name: str) -> Attribute:
         """
-        Allows the caller to retrieve an attribute by name. Padding fields are not accessible via this interface.
-        Raises KeyError if there is no such attribute.
+        Allows the caller to retrieve an attribute by name.
+        Padding fields are not accessible via this interface because they don't have names.
+        Raises :class:`KeyError` if there is no such attribute.
         """
         return self._attributes_by_name[attribute_name]
 
     def __str__(self) -> str:
+        """Returns a string like ``uavcan.node.Heartbeat.1.0``."""
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
 
     def __repr__(self) -> str:
@@ -301,6 +302,10 @@ class CompositeType(SerializableType):
 
 
 class UnionType(CompositeType):
+    """
+    A message type that is marked ``@union``.
+    """
+
     MIN_NUMBER_OF_VARIANTS = 2
 
     def __init__(self,
@@ -342,14 +347,14 @@ class UnionType(CompositeType):
     @property
     def tag_field_type(self) -> UnsignedIntegerType:
         """
-        Returns the best-matching unsigned integer type of the implicit union tag field.
-        This is convenient for code generation.
-        WARNING: the set of valid tag values is a subset of that of the returned type.
+        The unsigned integer type of the implicit union tag field.
+        Note that the set of valid tag values is a subset of that of the returned type.
         """
         return self._tag_field_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        """See the base class."""
         base_offset = BitLengthSet(base_offset or {0})
         base_offset.increment(self.tag_field_type.bit_length)
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
@@ -360,8 +365,13 @@ class UnionType(CompositeType):
 
 
 class StructureType(CompositeType):
+    """
+    A message type that is NOT marked ``@union``.
+    """
+
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        """See the base class."""
         base_offset = BitLengthSet(base_offset or 0)
 
         # The following variables do not serve the business logic, they are needed only for runtime cross-checking
@@ -383,6 +393,14 @@ class StructureType(CompositeType):
 
 
 class ServiceType(CompositeType):
+    """
+    A service (not message) type.
+    Unlike message types, it can't be serialized directly.
+
+    There are exactly two pseudo-fields: ``request`` and ``response``,
+    which contain the request and the response structure of the service type, respectively.
+    """
+
     def __init__(self,
                  name:                str,
                  version:             Version,
@@ -427,14 +445,17 @@ class ServiceType(CompositeType):
 
     @property
     def request_type(self) -> CompositeType:
+        """The type of the request schema."""
         return self._request_type
 
     @property
     def response_type(self) -> CompositeType:
+        """The type of the response schema."""
         return self._response_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        """Always raises a :class:`TypeError`."""
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
 
     def _compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover

@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-#
-# This is a helper script used for testing the parser against a specified namespace directory.
-# It just directly invokes the corresponding API, prints the output, and exits.
-#
+# A basic demo that just reads the given namespace and prints some output.
 
 import sys
 import time
@@ -21,32 +18,34 @@ def _print_handler(file: str, line: int, text: str) -> None:
 
 def _show_fields(indent_level: int,
                  field_prefix: str,
-                 t: pydsdl.CompositeType,
-                 base_offset: pydsdl.BitLengthSet) -> None:
-    # This function is intended to be a crude demonstration of how the static bit layout analysis can be leveraged
-    # to generate very efficient serialization and deserialization routines. With PyDSDL it is possible to determine
-    # whether any given field at an arbitrary level of nesting always meets a certain alignment goal. This information
-    # allows the code generator to choose the most efficient serialization/deserialization strategy. For example:
-    #
-    #   - If every field of a data structure is a standard-bit-length field (e.g., uint64) and its offset meets the
-    #     native alignment requirement, the whole structure can be serialized and deserialized by simple memcpy().
-    #     We call it "zero-cost serialization".
-    #
-    #   - Otherwise, if a field is standard-bit-length and its offset is always a multiple of eight bits, the field
-    #     itself can be serialized by memcpy(). This case differs from the above in that the whole structure may not
-    #     be zero-cost-serializable, but some or all of its fields still may be.
-    #
-    #  - Various other optimizations are possible depending on whether the bit length of a field is a multiple of
-    #    eight bits and/or whether its base offset is byte-aligned. Many optimization possibilities depend on a
-    #    particular programming language and platform, so they will not be reviewed here in detail. Interested readers
-    #    are advised to consult with existing implementations.
-    #
-    #  - In the worst case, if none of the possible optimizations are discoverable statically, the code generator will
-    #    resort to bit-level serialization, where a field is serialized/deserialized bit-by-bit. Such fields are
-    #    extremely uncommon, and a data type designer can easily ensure that their data type definitions are free from
-    #    such fields by using @assert expressions checking against _offset_. More info in the specification.
-    #
-    # The key part of static layout analysis is the class pydsdl.BitLengthSet; please read its documentation.
+                 t:            pydsdl.CompositeType,
+                 base_offset:  pydsdl.BitLengthSet) -> None:
+    """
+    This function is intended to be a crude demonstration of how the static bit layout analysis can be leveraged
+    to generate very efficient serialization and deserialization routines. With PyDSDL, it is possible to determine
+    whether any given field at an arbitrary level of nesting always meets a certain alignment goal. This information
+    allows the code generator to choose the most efficient serialization/deserialization strategy. For example:
+
+    - If every field of a data structure is a standard-bit-length field (e.g., uint64) and its offset meets the
+      native alignment requirement, the whole structure can be serialized and deserialized by a simple memcpy().
+      We call it "zero-cost serialization".
+
+    - Otherwise, if a field is standard-bit-length and its offset is always a multiple of eight bits, the field
+      itself can be serialized by memcpy(). This case differs from the above in that the whole structure may not
+      be zero-cost-serializable, but some or all of its fields still may be.
+
+    - Various other optimizations are possible depending on whether the bit length of a field is a multiple of
+      eight bits and/or whether its base offset is byte-aligned. Many optimization possibilities depend on a
+      particular programming language and platform, so they will not be reviewed here in detail. Interested readers
+      are advised to consult with existing implementations.
+
+    - In the worst case, if none of the possible optimizations are discoverable statically, the code generator will
+      resort to bit-level serialization, where a field is serialized/deserialized bit-by-bit. Such fields are
+      extremely uncommon, and a data type designer can easily ensure that their data type definitions are free from
+      such fields by using @assert expressions checking against _offset_. More info in the specification.
+
+    The key part of static layout analysis is the class BitLengthSet; please, read its documentation.
+    """
     indent = ' ' * indent_level * 4
     for field, offset in t.iterate_fields_with_offsets(base_offset):
         field_type = field.data_type
@@ -82,13 +81,13 @@ def _show_fields(indent_level: int,
 def _main():
     try:
         started_at = time.monotonic()
-        compound_types = pydsdl.read_namespace(target_directory, lookup_directories, _print_handler)
+        composite_types = pydsdl.read_namespace(target_directory, lookup_directories, _print_handler)
     except pydsdl.InvalidDefinitionError as ex:
         print(ex, file=sys.stderr)                      # The DSDL definition is invalid.
     except pydsdl.InternalError as ex:
         print('Internal error:', ex, file=sys.stderr)   # Oops! Please report.
     else:
-        for t in compound_types:
+        for t in composite_types:
             if isinstance(t, pydsdl.ServiceType):
                 print(t, 'request:')
                 _show_fields(1, 'request', t.request_type, pydsdl.BitLengthSet())
@@ -99,7 +98,7 @@ def _main():
                 _show_fields(1, '', t, pydsdl.BitLengthSet())
             print()
 
-        print('%d types parsed in %.1f seconds' % (len(compound_types), time.monotonic() - started_at))
+        print('%d types parsed in %.1f seconds' % (len(composite_types), time.monotonic() - started_at))
 
 
 _main()
