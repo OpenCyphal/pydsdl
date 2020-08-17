@@ -3,6 +3,7 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+import os
 import typing
 import logging
 from . import _serializable
@@ -164,9 +165,21 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
         if not found:
-            raise UndefinedDataTypeError(
-                'Data type %s.%d.%d could not be found in the following root namespaces: %s' %
-                (full_name, version.major, version.minor, set(x.root_namespace for x in self._lookup_definitions)))
+            # Play Sherlock to help the user with mistakes like https://forum.uavcan.org/t/dsdl-compilation-error/904/2
+            requested_ns = full_name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)[0]
+            lookup_nss = set(x.root_namespace for x in self._lookup_definitions)
+            subroot_ns = self._definition.name_components[1] if len(self._definition.name_components) > 2 else None
+            error_description = 'Data type %s.%d.%d could not be found in the following root namespaces: %s. ' % \
+                                (full_name, version.major, version.minor, lookup_nss)
+            if requested_ns not in lookup_nss and requested_ns == subroot_ns:
+                error_description += ' Did you mean to use the directory %r instead of %r?' % (
+                    os.path.join(self._definition.root_namespace_path, subroot_ns),
+                    self._definition.root_namespace_path,
+                )
+            else:
+                error_description += ' Please make sure that you specified the directories correctly.'
+            raise UndefinedDataTypeError(error_description)
+
         if len(found) > 1:  # pragma: no cover
             raise _error.InternalError('Conflicting definitions: %r' % found)
 

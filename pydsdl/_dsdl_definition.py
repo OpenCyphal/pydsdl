@@ -35,17 +35,19 @@ class DSDLDefinition:
                  root_namespace_path: str):
         # Normalizing the path and reading the definition text
         self._file_path = os.path.abspath(file_path)
-        root_namespace_path = os.path.abspath(root_namespace_path)
+        del file_path
+        self._root_namespace_path = os.path.abspath(root_namespace_path)
+        del root_namespace_path
         with open(self._file_path) as f:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(root_namespace_path)[-1]:
-            raise FileNameFormatError('Invalid namespace name', path=root_namespace_path)
+        if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(self._root_namespace_path)[-1]:
+            raise FileNameFormatError('Invalid namespace name', path=self._root_namespace_path)
 
         # Determining the relative path within the root namespace directory
-        relative_path = str(os.path.join(os.path.split(root_namespace_path)[-1],
-                                         os.path.relpath(self._file_path, root_namespace_path)))
+        relative_path = str(os.path.join(os.path.split(self._root_namespace_path)[-1],
+                                         os.path.relpath(self._file_path, self._root_namespace_path)))
 
         relative_directory, basename = [str(x) for x in os.path.split(relative_path)]   # type: str, str
 
@@ -194,6 +196,10 @@ class DSDLDefinition:
     @property
     def file_path(self) -> str:
         return self._file_path
+
+    @property
+    def root_namespace_path(self) -> str:
+        return self._root_namespace_path
 
     def __eq__(self, other: object) -> bool:
         """
