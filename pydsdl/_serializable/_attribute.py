@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -18,7 +18,7 @@ class InvalidTypeError(TypeParameterError):
     pass
 
 
-class Attribute:    # TODO: should extend expression.Any to support advanced introspection/reflection.
+class Attribute(_expression.Any):
     def __init__(self, data_type: SerializableType, name: str):
         self._data_type = data_type
         self._name = str(name)
@@ -37,8 +37,17 @@ class Attribute:    # TODO: should extend expression.Any to support advanced int
     def name(self) -> str:
         return self._name
 
+    def __hash__(self) -> int:
+        return hash((self._data_type, self._name))
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Attribute):
+            return (self._data_type == other._data_type) and (self._name == other.name)
+        else:
+            return NotImplemented
+
     def __str__(self) -> str:
-        return '%s %s' % (self.data_type, self.name)
+        return ('%s %s' % (self.data_type, self.name)).strip()
 
     def __repr__(self) -> str:
         return '%s(data_type=%r, name=%r)' % (self.__class__.__name__, self.data_type, self.name)
@@ -114,6 +123,15 @@ class Constant(Attribute):
     @property
     def value(self) -> _expression.Any:
         return self._value
+
+    def __hash__(self) -> int:
+        return hash((self._data_type, self._name, self._value))
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Constant):
+            return super(Constant, self).__eq__(other) and (self._value == other._value)
+        else:
+            return NotImplemented
 
     def __str__(self) -> str:
         return '%s %s = %s' % (self.data_type, self.name, self.value)

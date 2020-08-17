@@ -21,6 +21,7 @@ Contents
 
    pages/installation
    pages/pydsdl
+   pages/demo
    pages/dev
 
 

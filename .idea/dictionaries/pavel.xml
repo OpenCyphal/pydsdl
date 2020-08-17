@@ -20,6 +20,7 @@
       <w>candump</w>
       <w>canfd</w>
       <w>caplog</w>
+      <w>codacy</w>
       <w>computron</w>
       <w>constraindness</w>
       <w>constructible</w>
@@ -75,6 +76,7 @@
       <w>kibibyte</w>
       <w>kirienko</w>
       <w>koopman</w>
+      <w>levelname</w>
       <w>libcanard</w>
       <w>linkcode</w>
       <w>lnid</w>
@@ -133,6 +135,7 @@
       <w>raii</w>
       <w>rawsource</w>
       <w>readlines</w>
+      <w>readthedocs</w>
       <w>reasm</w>
       <w>reassembler</w>
       <w>reassemblers</w>

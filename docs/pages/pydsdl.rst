@@ -3,7 +3,8 @@
 PyDSDL usage
 ============
 
-The entirety of the library API is exposed at the top level ``pydsdl.*``.
+The entirety of the library API is exposed at the top level as ``pydsdl.*``.
+There are no usable submodules.
 
 .. contents:: Contents
    :local:
@@ -17,9 +18,6 @@ The main function
 
 Type model
 ++++++++++
-
-Both serializable types and expression types derive from the common ancestor :class:`pydsdl.Any`.
-Serializable types have the suffix ``Type`` because their instances represent not DSDL values but DSDL types.
 
 .. computron-injection::
     :filename: ../descendant_diagram.py

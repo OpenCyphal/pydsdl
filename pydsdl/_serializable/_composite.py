@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -41,6 +41,11 @@ class DeprecatedDependencyError(TypeParameterError):
 
 
 class CompositeType(SerializableType):
+    """
+    This is the most interesting type in the library because it represents an actual DSDL definition upon its
+    interpretation.
+    """
+
     MAX_NAME_LENGTH = 50
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
@@ -391,6 +396,12 @@ class StructureType(CompositeType):
 
 
 class ServiceType(CompositeType):
+    """
+    This type is a special case: unlike other types, it can't be serialized directly;
+    rather, it contains two pseudo-fields: :attr:`request` and :attr:`response`,
+    which contain the request and the response structure of the service type, respectively.
+    """
+
     def __init__(self,
                  name:                str,
                  version:             Version,

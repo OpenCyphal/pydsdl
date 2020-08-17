@@ -32,10 +32,12 @@ class SerializableType(_expression.Any):
     def bit_length_set(self) -> BitLengthSet:
         """
         A set of all possible bit length values of serialized representations of the data type.
-        Refer to the specification for the background. This method must never return an empty set.
-        This is an expensive operation, so the result is cached in the base class. Derived classes should not
-        override this property themselves; they must implement the method _compute_bit_length_set() instead.
+        Refer to the specification for the background. The returned set is guaranteed to be non-empty.
+
+        This is an expensive operation, so the result is cached in the base class.
         """
+        # Derived classes should not override this property themselves;
+        # they must implement the method _compute_bit_length_set() instead.
         if self._cached_bit_length_set is None:
             self._cached_bit_length_set = self._compute_bit_length_set()
         return self._cached_bit_length_set
@@ -52,17 +54,16 @@ class SerializableType(_expression.Any):
     @abc.abstractmethod
     def _compute_bit_length_set(self) -> BitLengthSet:
         """
-        This is an expensive operation, so the result is cached in the base class. Derived classes should not
-        override the bit_length_set property themselves; they must implement this method instead.
+        This is an expensive operation, so the result is cached in the base class.
+        Derived classes should not override the bit_length_set property themselves;
+        they must implement this method instead.
         """
         raise NotImplementedError
 
     @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
-        """
-        Must return a DSDL spec-compatible textual representation of the type.
-        The string representation is used for determining equivalency by the comparison operator __eq__().
-        """
+        # Implementations must return a DSDL spec-compatible textual representation of the type.
+        # The string representation is used for determining equivalency by the comparison operator __eq__().
         raise NotImplementedError
 
     def __hash__(self) -> int:

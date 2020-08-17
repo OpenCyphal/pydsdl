@@ -26,7 +26,10 @@ class UndefinedAttributeError(InvalidOperandError):
 class Any(abc.ABC):
     """
     This abstract class represents an arbitrary intrinsic DSDL expression value.
+    Both serializable types and expression types derive from this common ancestor.
+
     Per the DSDL data model, a serializable type is also a value.
+    Serializable types have the suffix ``Type`` because their instances represent not DSDL values but DSDL types.
     """
 
     TYPE_NAME = None    # type: str
