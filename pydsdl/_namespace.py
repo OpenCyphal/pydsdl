@@ -140,6 +140,9 @@ def read_namespace(root_namespace_directory:        str,
 
     # Construct DSDL definitions from the target and the lookup dirs.
     target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
+    if not target_dsdl_definitions:
+        _logger.info('The namespace at %r is empty', root_namespace_directory)
+        return []
     _logger.debug('Target DSDL definitions are listed below:')
     for x in target_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))

@@ -66,6 +66,7 @@ def _unittest_define() -> None:
     assert d.version == (1, 2)
     assert d.fixed_port_id == 5000
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan', 'test', '5000.Message.1.2.uavcan')
+    assert d.root_namespace_path == os.path.join(_DIRECTORY.name, 'uavcan')
     assert open(d.file_path).read() == '# empty'
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
@@ -74,6 +75,7 @@ def _unittest_define() -> None:
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
     assert d.file_path == os.path.join(_DIRECTORY.name, 'uavcan', 'Service.255.254.uavcan')
+    assert d.root_namespace_path == os.path.join(_DIRECTORY.name, 'uavcan')
     assert open(d.file_path).read() == '# empty 2'
 
 
@@ -374,6 +376,9 @@ def _unittest_error() -> None:
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
         standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
+
+    with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*vendor[/\\]+types' instead of .*vendor'.*"):
+        standalone('vendor/types/A.1.0.uavcan', 'types.Nonexistent.1.0 field')
 
     with raises(_error.InvalidDefinitionError, match=r'(?i).*not defined for.*'):
         standalone('vendor/types/A.1.0.uavcan',
@@ -676,6 +681,9 @@ def _unittest_parse_namespace() -> None:
         with open(path, 'w') as f:
             f.write(text)
 
+    # Empty namespace.
+    assert [] == _namespace.read_namespace(directory.name)
+
     _define(
         'zubax/First.1.0.uavcan',
         dedent("""
@@ -722,10 +730,10 @@ def _unittest_parse_namespace() -> None:
     assert 'zubax.nested.Spartans' in [x.full_name for x in parsed]
 
     # try again with minimal arguments to read_namespace
-    parsed_minmal_args = _namespace.read_namespace(
+    parsed_minimal_args = _namespace.read_namespace(
         os.path.join(directory.name, 'zubax')
     )
-    assert len(parsed_minmal_args) == 3
+    assert len(parsed_minimal_args) == 3
 
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
