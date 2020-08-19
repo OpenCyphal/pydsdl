@@ -148,7 +148,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 return c.value
 
         if name == '_offset_':
-            bls = self._structs[-1].bit_length_set
+            bls = self._structs[-1].offset
             assert len(bls) > 0 and all(map(lambda x: isinstance(x, int), bls))
             return _expression.Set(map(_expression.Rational, bls))
         else:

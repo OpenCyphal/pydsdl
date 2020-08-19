@@ -83,6 +83,9 @@ class FixedLengthArrayType(ArrayType):
             assert self.element_type.bit_length_set.elementwise_sum_k_multicombinations(index) == _self_test_base_offset
             _self_test_base_offset.increment(self.element_type.bit_length_set)
 
+    def _compute_footprint(self, default_multiplier: int) -> int:
+        return self.element_type._compute_footprint(default_multiplier) * self.capacity
+
     def _compute_bit_length_set(self) -> BitLengthSet:
         # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
@@ -148,6 +151,10 @@ class VariableLengthArrayType(ArrayType):
         Note that the set of valid length values is a subset of that of the returned type.
         """
         return self._length_field_type
+
+    def _compute_footprint(self, default_multiplier: int) -> int:
+        return typing.cast(SerializableType, self.length_field_type)._compute_footprint(default_multiplier) + \
+            self.element_type._compute_footprint(default_multiplier) * self.capacity
 
     def _compute_bit_length_set(self) -> BitLengthSet:
         # Please refer to the corresponding implementation for the fixed-length array.

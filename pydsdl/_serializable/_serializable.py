@@ -50,6 +50,14 @@ class SerializableType(_expression.Any):
         return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
 
     @abc.abstractmethod
+    def _compute_footprint(self, default_multiplier: int) -> int:
+        """
+        The amount of memory plus the reserve that is required to hold the serialized representation
+        in a forward-compatible way. See the definition of footprint for details.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def _compute_bit_length_set(self) -> BitLengthSet:
         """
         This is an expensive operation, so the result is cached in the base class.

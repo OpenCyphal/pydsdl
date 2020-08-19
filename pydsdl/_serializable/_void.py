@@ -29,6 +29,11 @@ class VoidType(SerializableType):
         """
         return self._bit_length
 
+    def _compute_footprint(self, default_multiplier: int) -> int:
+        if not default_multiplier >= 1:
+            raise ValueError('Invalid multiplier: ' + str(default_multiplier))
+        return self.bit_length * default_multiplier
+
     def _compute_bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 

@@ -62,7 +62,7 @@ class DataSchemaBuilder:
         self._is_union = True
 
     @property
-    def bit_length_set(self) -> _bit_length_set.BitLengthSet:     # oh mypy, why are you so stupid
+    def offset(self) -> _bit_length_set.BitLengthSet:     # oh mypy, why are you so stupid
         # We set this flag in order to detect invalid reliance on the bit length estimates for unions:
         # we process definitions sequentially, statement-by-statement, so we can't know if there are going to be
         # extra fields added after the bit length values are computed. If we are building a regular structure,
