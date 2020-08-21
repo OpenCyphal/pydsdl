@@ -166,25 +166,42 @@ class CompositeType(SerializableType):
         """
         Whether the definition is marked ``@final``.
         Finality implies that the delimiter header is not used.
-        Finality DOES NOT imply that the footprint equals the maximum bit length because a final type may contain
-        non-final nested types.
+        Finality DOES NOT imply zero margin because a final type may contain non-final nested types.
         """
         return self._final
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        bls = self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
+        if not self.final:
+            # Since the type is not final, we cannot make any guarantees about its bit length set or alignment.
+            # Therefore, we erase the old bit length set and create a new one that is merely a list of all possible
+            # bit lengths aligned at one byte.
+            # TODO INVERSE THE MARGIN LOGIC
+            dh = self.delimiter_header_type.bit_length
+            bls = BitLengthSet(range(max(bls) + 1)).pad_to_alignment(self.BITS_PER_BYTE) + dh
+            assert min(bls) == dh
+        return bls
 
     @property
     def delimiter_header_type(self) -> typing.Optional[UnsignedIntegerType]:
         """
         If the type is ``@final``, the delimiter header is not used and this property is None.
-        Otherwise, the delimiter header is an unsigned integer type of a standard bit length;
-        by default it's ``uint32``.
+        Otherwise, the delimiter header is an unsigned integer type of a standard bit length.
 
-        Non-final composites are serialized into opaque containers like ``uint8[<=footprint]``,
+        Non-final composites are serialized into opaque containers like
+        ``uint8[<=(bit_length_set + margin + 7) // 8]``,
         where the implicit length prefix is of this type.
-        It follows that at the end there may be up to seven bits of implicit padding.
+        Their bit length set is also computed as if it was an array as declared above,
+        in order to prevent the containing definitions from making assumptions about the offsets of the following fields
+        that might not survive the evolution of the type (e.g., version 1 may be 64 bits long, version 2 might be
+        56 bits long).
         """
         if not self.final:
-            return UnsignedIntegerType(self.DEFAULT_DELIMITER_HEADER_BIT_LENGTH,  # This may be made configurable later.
-                                       UnsignedIntegerType.CastMode.SATURATED)
+            bit_length = self.DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
+            # This is to prevent the delimiter header from breaking the alignment of the following composite.
+            bit_length = max(bit_length, self.alignment_requirement)
+            return UnsignedIntegerType(bit_length, UnsignedIntegerType.CastMode.SATURATED)
         return None
 
     @property
@@ -224,14 +241,25 @@ class CompositeType(SerializableType):
         return self._source_file_path
 
     @property
-    def footprint(self) -> int:
+    def margin(self) -> int:
         """
-        Compute the amount of memory, in bits, that needs to be reserved to store the serialized representation
-        of the type.
-        For any type this value is guaranteed to be not less than the maximum serialized bit length.
-        It may be greater to facilitate forward compatibility with evolvable composite data types.
+        The margin is the amount of surplus memory, in bits, that is required to hold the serialized representation
+        of a received DSDL object in a forward-compatible way, such that new appended fields that are not known
+        to the recipient, if any, are accommodated properly.
+
+        The total amount of memory that needs to be allocated to store the serialized representation of a received
+        DSDL object equals ``max(bit_length_set) + margin`` bits.
+
+        The margin (surplus memory) is not needed when constructing a new serialized representation locally because
+        the exact definition of each involved type is known.
         """
-        return self._compute_footprint(2)
+        return self._compute_margin_impl()
+
+    @property
+    def alignment_requirement(self) -> int:
+        # This is more general than required by the Specification, but it is done this way in case if we decided
+        # to support greater alignment requirements in the future.
+        return max([self.BITS_PER_BYTE] + [x.data_type.alignment_requirement for x in self.fields])
 
     @property
     def parent_service(self) -> typing.Optional['ServiceType']:
@@ -269,6 +297,7 @@ class CompositeType(SerializableType):
         Please refer to the usage examples to see how this feature can be used.
 
         :param base_offset: Assume the specified base offset; assume zero offset if the parameter is not provided.
+            The base offset shall satisfy the :attr:`alignment_requirement`, otherwise it's a :class:`ValueError`.
 
         :return: A generator of ``(Field, BitLengthSet)``.
             Each instance of :class:`pydsdl.BitLengthSet` yielded by the generator is a dedicated copy,
@@ -284,35 +313,38 @@ class CompositeType(SerializableType):
                 assert isinstance(c.value, _expression.Any)
                 return c.value
 
-        if name.native_value == '_footprint_':  # Experimental non-standard extension
-            return _expression.Rational(self.footprint)
+        if name.native_value == '_margin_':  # Experimental non-standard extension
+            return _expression.Rational(self.margin)
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
-    def _compute_footprint(self, default_multiplier: int) -> int:
-        multiplier = 1 if self.final else default_multiplier
-        result = sum(x.data_type._compute_footprint(multiplier) for x in self.fields)
+    def _compute_margin(self, zero: bool) -> int:
+        del zero  # The parameter loses relevance at the first nested composite, which always overwrites it.
+        return self._compute_margin_impl()
+
+    def _compute_margin_impl(self) -> int:
+        result = self._aggregate_margin(zero=self.final)
         if not self.final:
             result += self.delimiter_header_type.bit_length
+        result = (result + self.alignment_requirement - 1) // self.alignment_requirement
         assert result >= max(self.bit_length_set), 'Internal contract violation'
+        assert result % self.alignment_requirement == 0, 'Internal contract violation'
         return result
 
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        original = self._compute_unaligned_bit_length_set()
-        if self.final:
-            aligned = BitLengthSet({((x + 7) // 8) * 8 for x in original})
-            assert 0 <= min(aligned) - min(original) < 8
-            assert 0 <= max(aligned) - max(original) < 8
-        else:
-            dh = self.delimiter_header_type.bit_length
-            aligned = BitLengthSet({x * 8 for x in range((max(original) + 8) // 8 + 1)}) + dh
-            assert min(aligned) == dh
-            assert dh <= max(aligned) - max(original) < (dh + 8)
-        assert aligned.is_aligned_at_byte()
-        return aligned
+    @abc.abstractmethod
+    def _aggregate_bit_length_sets(self) -> BitLengthSet:
+        """
+        Compute the aggregate bit length set for the current composite disregarding the alignment requirements.
+        The aggregation policy is dependent on the kind of the type: either union or struct.
+        """
+        raise NotImplementedError
 
     @abc.abstractmethod
-    def _compute_unaligned_bit_length_set(self) -> BitLengthSet:
+    def _aggregate_margin(self, zero: bool) -> int:
+        """
+        Compute the aggregate margin for the current composite disregarding the alignment requirements.
+        The aggregation policy is dependent on the kind of the type: either union or struct.
+        """
         raise NotImplementedError
 
     def __getitem__(self, attribute_name: str) -> Attribute:
@@ -329,14 +361,16 @@ class CompositeType(SerializableType):
 
     def __repr__(self) -> str:
         return (
-            '%s(name=%r, version=%r, fields=%r, constants=%r, footprint=%r, final=%r, deprecated=%r, fixed_port_id=%r)'
+            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, margin=%r, final=%r, '
+            'deprecated=%r, fixed_port_id=%r)'
         ) % (
             self.__class__.__name__,
             self.full_name,
             self.version,
             self.fields,
             self.constants,
-            self.footprint,
+            self.alignment_requirement,
+            self.margin,
             self.final,
             self.deprecated,
             self.fixed_port_id,
@@ -378,11 +412,8 @@ class UnionType(CompositeType):
             if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
                 raise MalformedUnionError('Padding fields not allowed in unions')
 
-        # Construct once to allow reference equality checks
-        assert (self.number_of_variants - 1) > 0
-        unaligned_tag_bit_length = (self.number_of_variants - 1).bit_length()
-        tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
-        self._tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
+        self._tag_field_type = UnsignedIntegerType(self._compute_tag_bit_length([x.data_type for x in self.fields]),
+                                                   PrimitiveType.CastMode.TRUNCATED)
 
     @property
     def number_of_variants(self) -> int:
@@ -400,12 +431,57 @@ class UnionType(CompositeType):
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
         base_offset = BitLengthSet(base_offset or {0})
-        base_offset.increment(self.tag_field_type.bit_length)
+        if not base_offset.is_aligned_at(self.alignment_requirement):
+            raise ValueError('Alignment requirement %r not satisfied by %r' % (self.alignment_requirement, base_offset))
+        base_offset += self.tag_field_type.bit_length
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
-    def _compute_unaligned_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self.fields))
+    def _aggregate_bit_length_sets(self) -> BitLengthSet:
+        return self.aggregate_bit_length_sets([x.data_type for x in self.fields])
+
+    def _aggregate_margin(self, zero: bool) -> int:
+        return max(f.data_type._compute_margin(zero) for f in self.fields) + \
+            typing.cast(SerializableType, self.tag_field_type)._compute_margin(zero)
+
+    @staticmethod
+    def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
+        """
+        Computes the bit length set for a tagged union type given the type of each of its variants.
+        The final padding is not applied.
+
+        Unions are easy to handle because when serialized, a union is essentially just a single field prefixed with
+        a fixed-length integer tag. So we just build a full set of combinations and then add the tag length
+        to each element.
+
+        Observe that unions are not defined for less than 2 elements;
+        however, this function tries to be generic by properly handling those cases as well,
+        even though they are not permitted by the specification.
+        For zero fields, the function yields ``{0}``; for one field, the function yields the BLS of the field itself.
+        """
+        ms = [x.bit_length_set for x in field_types]
+        if len(ms) == 0:
+            return BitLengthSet(0)
+        if len(ms) == 1:
+            return BitLengthSet(ms[0])
+
+        out = BitLengthSet()
+        for s in ms:
+            out |= s
+        out += UnionType._compute_tag_bit_length(field_types)  # Add the union tag
+        return out
+
+    @staticmethod
+    def _compute_tag_bit_length(field_types: typing.Sequence[SerializableType]) -> int:
+        if len(field_types) > 1:
+            unaligned_tag_bit_length = (len(field_types) - 1).bit_length()
+            tag_bit_length = 2 ** math.ceil(math.log2(max(SerializableType.BITS_PER_BYTE, unaligned_tag_bit_length)))
+            # This is to prevent the tag from breaking the alignment of the following variant.
+            tag_bit_length = max([tag_bit_length] + [x.alignment_requirement for x in field_types])
+            assert tag_bit_length in {8, 16, 32, 64}
+            return tag_bit_length
+        else:
+            raise ValueError('Invalid number of variants: ' + repr(len(field_types)))
 
 
 class StructureType(CompositeType):
@@ -417,23 +493,27 @@ class StructureType(CompositeType):
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
         base_offset = BitLengthSet(base_offset or 0)
-
-        # The following variables do not serve the business logic, they are needed only for runtime cross-checking
-        _self_test_original_offset = BitLengthSet(0)
-        _self_test_field_bls_collection = []  # type: typing.List[BitLengthSet]
-
+        if not base_offset.is_aligned_at(self.alignment_requirement):
+            raise ValueError('Alignment requirement %r not satisfied by %r' % (self.alignment_requirement, base_offset))
+        # TODO prior
         for f in self.fields:
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
-            base_offset.increment(f.data_type.bit_length_set)
+            base_offset += f.data_type.bit_length_set
 
-            # This is only for ensuring that the logic is functioning as intended.
-            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
-            _self_test_original_offset.increment(f.data_type.bit_length_set)
-            _self_test_field_bls_collection.append(f.data_type.bit_length_set)
-            assert BitLengthSet.for_struct(_self_test_field_bls_collection) == _self_test_original_offset
+    def _aggregate_bit_length_sets(self) -> BitLengthSet:
+        return self.aggregate_bit_length_sets([f.data_type for f in self.fields])
 
-    def _compute_unaligned_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
+    def _aggregate_margin(self, zero: bool) -> int:
+        return sum(f.data_type._compute_margin(zero) for f in self.fields)
+
+    @staticmethod
+    def aggregate_bit_length_sets(fields: typing.Sequence[SerializableType]) -> BitLengthSet:
+        """
+        Computes the bit length set for a structure type given the type of each of its fields.
+        The final padding is not applied.
+        """
+        # TODO implement
+        pass
 
 
 class ServiceType(CompositeType):
@@ -514,8 +594,11 @@ class ServiceType(CompositeType):
         """Always raises a :class:`TypeError`."""
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
 
-    def _compute_unaligned_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
+    def _aggregate_bit_length_sets(self) -> BitLengthSet:  # pragma: no cover
         raise TypeError('Service types are not directly serializable. Use either request or response.')
+
+    def _aggregate_margin(self, zero: bool) -> int:    # pragma: no cover
+        raise TypeError('Service types do not have margin. Use either request or response.')
 
 
 def _unittest_composite_types() -> None:

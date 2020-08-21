@@ -72,11 +72,11 @@ class DataSchemaBuilder:
         # only the total offset (i.e., total size) is defined.
         self._bit_length_computed_at_least_once = True
 
-        field_bls_gen = map(lambda f: f.data_type.bit_length_set, self.fields)
+        field_types = [f.data_type for f in self.fields]
         if self.union:
-            out = _bit_length_set.BitLengthSet.for_tagged_union(field_bls_gen)
+            out = _serializable.UnionType.aggregate_bit_length_sets(field_types)
         else:
-            out = _bit_length_set.BitLengthSet.for_struct(field_bls_gen)
+            out = _serializable.StructureType.aggregate_bit_length_sets(field_types)
 
         assert isinstance(out, _bit_length_set.BitLengthSet) and len(out) > 0
         return out

@@ -48,6 +48,10 @@ class PrimitiveType(SerializableType):
             (self._bit_length >= self.BITS_IN_BYTE) and (2 ** round(math.log2(self._bit_length)) == self._bit_length)
 
     @property
+    def bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet(self.bit_length)
+
+    @property
     def bit_length(self) -> int:
         """
         This is a shortcut for ``next(iter(x.bit_length_set))``, because the bit length set of a primitive type
@@ -72,6 +76,10 @@ class PrimitiveType(SerializableType):
         return self._cast_mode
 
     @property
+    def alignment_requirement(self) -> int:
+        return 1
+
+    @property
     def _cast_mode_name(self) -> str:
         """For internal use only."""
         return {
@@ -79,13 +87,8 @@ class PrimitiveType(SerializableType):
             self.CastMode.TRUNCATED: 'truncated',
         }[self.cast_mode]
 
-    def _compute_footprint(self, default_multiplier: int) -> int:
-        if not default_multiplier >= 1:
-            raise ValueError('Invalid multiplier: ' + str(default_multiplier))
-        return self.bit_length * default_multiplier
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet(self.bit_length)
+    def _compute_margin(self, zero: bool) -> int:
+        return 0 if zero else self.bit_length
 
     @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover

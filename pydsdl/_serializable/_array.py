@@ -45,9 +45,14 @@ class ArrayType(SerializableType):
         """
         return False
 
-    @abc.abstractmethod
-    def _compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
-        raise NotImplementedError
+    @property
+    def alignment_requirement(self) -> int:
+        """
+        The alignment requirement of an array equals that of its element type.
+        The length of the serialized representation of any type is a multiple of its alignment requirement;
+        therefore, every element is always placed such that its alignment requirement is satisfied.
+        """
+        return self.element_type.alignment_requirement
 
     @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
@@ -60,6 +65,15 @@ class FixedLengthArrayType(ArrayType):
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
 
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
+        # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
+        # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
+        # performance measured on the standard data type set was about tenfold.
+        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).\
+            pad_to_alignment(self.alignment_requirement)
+
     def enumerate_elements_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
         """
@@ -68,30 +82,28 @@ class FixedLengthArrayType(ArrayType):
         except that we iterate over indexes instead of fields.
 
         :param base_offset: The base offset to add to each element. If not supplied, assumed to be ``{0}``.
+            The base offset shall satisfy the :attr:`alignment_requirement`, otherwise it's a :class:`ValueError`.
 
         :returns: For an N-element array, an iterator over N elements, where each element is a tuple of the index
             of the array element (zero-based) and its offset as a bit length set.
         """
         base_offset = BitLengthSet(base_offset or 0)
+        if not base_offset.is_aligned_at(self.alignment_requirement):
+            raise ValueError('Alignment requirement %r not satisfied by %r' % (self.alignment_requirement, base_offset))
         _self_test_base_offset = BitLengthSet(0)
         for index in range(self.capacity):
+            assert base_offset.is_aligned_at(self.element_type.alignment_requirement),\
+                'The bit length set of the element type computed incorrectly: length % alignment = 0 does not hold.'
             yield index, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
-            base_offset.increment(self.element_type.bit_length_set)
+            base_offset += self.element_type.bit_length_set
 
             # This is only for ensuring that the logic is functioning as intended.
             # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
             assert self.element_type.bit_length_set.elementwise_sum_k_multicombinations(index) == _self_test_base_offset
-            _self_test_base_offset.increment(self.element_type.bit_length_set)
+            _self_test_base_offset += self.element_type.bit_length_set
 
-    def _compute_footprint(self, default_multiplier: int) -> int:
-        return self.element_type._compute_footprint(default_multiplier) * self.capacity
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
-        # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
-        # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
-        # performance measured on the standard data type set was about tenfold.
-        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity)
+    def _compute_margin(self, zero: bool) -> int:
+        return self.element_type._compute_margin(zero) * self.capacity
 
     def __str__(self) -> str:
         return '%s[%d]' % (self.element_type, self.capacity)
@@ -134,15 +146,34 @@ class VariableLengthArrayType(ArrayType):
                  element_type: SerializableType,
                  capacity: int):
         super(VariableLengthArrayType, self).__init__(element_type, capacity)
-        # Construct once to allow reference equality checks
-        length_field_length = 2 ** math.ceil(math.log2(max(8, self.capacity.bit_length())))
+
+        # Construct the implicit array length prefix type.
+        length_field_length = 2 ** math.ceil(math.log2(max(self.BITS_PER_BYTE, self.capacity.bit_length())))
+
+        # If the length field is less than the alignment requirement (which, at the time of writing this,
+        # is not possible because the max alignment is 8 and the min length length is also 8),
+        # it would break the alignment of the array elements. Hence, we ensure that it is never smaller.
+        length_field_length = max(length_field_length, self.alignment_requirement)
+        assert length_field_length % self.element_type.alignment_requirement == 0
+
         self._length_field_type = UnsignedIntegerType(length_field_length, PrimitiveType.CastMode.TRUNCATED)
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        # Please refer to the corresponding implementation for the fixed-length array.
+        # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
+        # different sizes, from zero elements up to the maximum number of elements.
+        output = BitLengthSet()
+        for capacity in range(self.capacity + 1):
+            output |= self.element_type.bit_length_set.elementwise_sum_k_multicombinations(capacity)
+        output += self.length_field_type.bit_length
+        return output.pad_to_alignment(self.alignment_requirement)
 
     @property
     def string_like(self) -> bool:
         """See the base class."""
         et = self.element_type      # Without this temporary MyPy yields a false positive type error
-        return isinstance(et, UnsignedIntegerType) and (et.bit_length == 8)
+        return isinstance(et, UnsignedIntegerType) and (et.bit_length == self.BITS_PER_BYTE)
 
     @property
     def length_field_type(self) -> UnsignedIntegerType:
@@ -150,23 +181,12 @@ class VariableLengthArrayType(ArrayType):
         The unsigned integer type of the implicit array length field.
         Note that the set of valid length values is a subset of that of the returned type.
         """
+        assert self._length_field_type.bit_length % self.element_type.alignment_requirement == 0
         return self._length_field_type
 
-    def _compute_footprint(self, default_multiplier: int) -> int:
-        return typing.cast(SerializableType, self.length_field_type)._compute_footprint(default_multiplier) + \
-            self.element_type._compute_footprint(default_multiplier) * self.capacity
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        # Please refer to the corresponding implementation for the fixed-length array.
-        # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
-        # different sizes, from zero elements up to the maximum number of elements.
-        output = BitLengthSet()
-        for capacity in range(self.capacity + 1):
-            case = self.element_type.bit_length_set.elementwise_sum_k_multicombinations(capacity)
-            output.unite_with(case)
-        # Add the bit length of the implicit array length field.
-        output.increment(self.length_field_type.bit_length)
-        return output
+    def _compute_margin(self, zero: bool) -> int:
+        return typing.cast(SerializableType, self.length_field_type)._compute_margin(zero) + \
+               self.element_type._compute_margin(zero) * self.capacity
 
     def __str__(self) -> str:
         return '%s[<=%d]' % (self.element_type, self.capacity)
