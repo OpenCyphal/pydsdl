@@ -18,7 +18,7 @@ from ._primitive import PrimitiveType, UnsignedIntegerType
 try:
     from functools import cached_property
 except ImportError:
-    cached_property = property
+    cached_property = property  # type: ignore
 
 
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
@@ -229,7 +229,7 @@ class CompositeType(SerializableType):
         return self._extent
 
     @cached_property
-    def bit_length_set(self) -> BitLengthSet:
+    def bit_length_set(self) -> BitLengthSet:  # type: ignore
         """
         The bit length set of a composite is always aligned at :attr:`alignment_requirement`.
 
@@ -247,8 +247,9 @@ class CompositeType(SerializableType):
         if self.final:
             return self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
         else:
-            return BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) +\
-                self.delimiter_header_type.bit_length
+            dh = self.delimiter_header_type
+            assert dh is not None
+            return BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) + dh.bit_length
 
     @property
     def delimiter_header_type(self) -> typing.Optional[UnsignedIntegerType]:
@@ -504,7 +505,8 @@ class UnionType(CompositeType):
             unaligned_tag_bit_length = (len(field_types) - 1).bit_length()
             tag_bit_length = 2 ** math.ceil(math.log2(max(SerializableType.BITS_PER_BYTE, unaligned_tag_bit_length)))
             # This is to prevent the tag from breaking the alignment of the following variant.
-            tag_bit_length = max([tag_bit_length] + [x.alignment_requirement for x in field_types])
+            tag_bit_length = max(tag_bit_length, *(x.alignment_requirement for x in field_types))
+            assert isinstance(tag_bit_length, int)
             assert tag_bit_length in {8, 16, 32, 64}
             return tag_bit_length
         else:
@@ -555,12 +557,12 @@ class ServiceType(CompositeType):
         def __init__(self,
                      attributes: typing.Iterable[Attribute],
                      extent:     typing.Optional[int],
-                     is_union:   bool,
-                     is_final:   bool):
+                     is_final:   bool,
+                     is_union:   bool):
             self.attributes = list(attributes)
             self.extent = int(extent) if extent is not None else None
-            self.is_union = bool(is_union)
             self.is_final = bool(is_final)
+            self.is_union = bool(is_union)
 
     def __init__(self,
                  name:             str,
@@ -637,6 +639,8 @@ def _unittest_composite_types() -> None:
         return StructureType(name=name,
                              version=Version(0, 1),
                              attributes=[],
+                             extent=None,
+                             final=False,
                              deprecated=False,
                              fixed_port_id=None,
                              source_file_path='')
@@ -672,10 +676,8 @@ def _unittest_composite_types() -> None:
 
     print(ServiceType(name='a' * 48 + '.T',     # No exception raised
                       version=Version(0, 1),
-                      request_attributes=[],
-                      response_attributes=[],
-                      request_is_union=False,
-                      response_is_union=False,
+                      request_params=ServiceType.SchemaParams([], None, False, False),
+                      response_params=ServiceType.SchemaParams([], None, False, False),
                       deprecated=False,
                       fixed_port_id=None,
                       source_file_path=''))
@@ -684,6 +686,8 @@ def _unittest_composite_types() -> None:
         UnionType(name='a.A',
                   version=Version(0, 1),
                   attributes=[],
+                  extent=None,
+                  final=False,
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
@@ -696,6 +700,8 @@ def _unittest_composite_types() -> None:
                       Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
                       PaddingField(VoidType(16)),
                   ],
+                  extent=None,
+                  final=False,
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
@@ -707,6 +713,8 @@ def _unittest_composite_types() -> None:
                       Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
                       Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
                   ],
+                  extent=None,
+                  final=False,
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
@@ -729,6 +737,8 @@ def _unittest_composite_types() -> None:
                           PaddingField(VoidType(2)),
                           Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
                       ],
+                      extent=None,
+                      final=False,
                       deprecated=False,
                       fixed_port_id=None,
                       source_file_path='')
@@ -753,6 +763,8 @@ def _unittest_composite_types() -> None:
         return UnionType(name='a.A',
                          version=Version(0, 1),
                          attributes=atr,
+                         extent=None,
+                         final=False,
                          deprecated=False,
                          fixed_port_id=None,
                          source_file_path='')
@@ -795,6 +807,8 @@ def _unittest_composite_types() -> None:
         return StructureType(name='a.A',
                              version=Version(0, 1),
                              attributes=atr,
+                             extent=None,
+                             final=False,
                              deprecated=False,
                              fixed_port_id=None,
                              source_file_path='')
@@ -828,6 +842,8 @@ def _unittest_field_iterators() -> None:
         return meta('ns.Type' + str(_seq_no),
                     version=Version(1, 0),
                     attributes=attributes,
+                    extent=None,
+                    final=False,
                     deprecated=False,
                     fixed_port_id=None,
                     source_file_path='')
@@ -973,10 +989,8 @@ def _unittest_field_iterators() -> None:
     with raises(TypeError, match='.*request or response.*'):
         ServiceType(name='ns.S',
                     version=Version(1, 0),
-                    request_attributes=[],
-                    response_attributes=[],
-                    request_is_union=False,
-                    response_is_union=False,
+                    request_params=ServiceType.SchemaParams([], None, False, False),
+                    response_params=ServiceType.SchemaParams([], None, False, False),
                     deprecated=False,
                     fixed_port_id=None,
                     source_file_path='').iterate_fields_with_offsets()

@@ -331,7 +331,7 @@ class BitLengthSet:
         """
         return type(self).__name__ + '(' + str(self or '') + ')'
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._value)
 
 
