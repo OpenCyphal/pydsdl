@@ -32,6 +32,10 @@ class AttributeNameCollisionError(TypeParameterError):
     pass
 
 
+class InvalidExtentError(TypeParameterError):
+    pass
+
+
 class InvalidFixedPortIDError(TypeParameterError):
     pass
 
@@ -60,6 +64,7 @@ class CompositeType(SerializableType):
                  name:             str,
                  version:          Version,
                  attributes:       typing.Iterable[Attribute],
+                 extent:           typing.Optional[int],
                  final:            bool,
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
@@ -135,6 +140,43 @@ class CompositeType(SerializableType):
                         raise DeprecatedDependencyError('A type cannot depend on deprecated types '
                                                         'unless it is also deprecated.')
 
+        # Extent initialization.
+        minimal_extent = max(self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement))
+        if extent is None:
+            if self.final:
+                self._extent = minimal_extent
+            else:
+                unaligned = max(self._aggregate_bit_length_sets()) * 2  # Multiply first, then align.
+                self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
+        else:
+            self._extent = int(extent)
+
+        # Extent verification.
+        assert self.alignment_requirement >= self.BITS_PER_BYTE
+        assert self.alignment_requirement % self.BITS_PER_BYTE == 0
+        if self._extent % self.alignment_requirement != 0:
+            raise InvalidExtentError('The specified extent of %d bits is not a multiple of %d bits' %
+                                     (self._extent, self.alignment_requirement))
+        if self._extent < minimal_extent:
+            raise InvalidExtentError(
+                'The specified extent of %d bits is too small for this data type. '
+                'Either compactify the data type or increase the extent at least to %d bits. '
+                'Beware that the latter option may break wire compatibility.' %
+                (self._extent, minimal_extent)
+            )
+        if self.final and self._extent > minimal_extent:
+            raise InvalidExtentError(
+                'Cannot override the extent because the type is final. '
+                'Either remove the explicit extent specification or change it from the current value of '
+                '%d bits to %d bits.' %
+                (self._extent, minimal_extent)
+            )
+        # Paranoid internal consistency validation.
+        assert self.extent % self.BITS_PER_BYTE == 0
+        assert self.extent % self.alignment_requirement == 0
+        assert self.extent >= minimal_extent
+        assert self.extent == minimal_extent or not self.final
+
     @property
     def full_name(self) -> str:
         """The full name, e.g., ``uavcan.node.Heartbeat``."""
@@ -168,32 +210,53 @@ class CompositeType(SerializableType):
     @property
     def final(self) -> bool:
         """
-        Whether the definition is marked ``@final``.
-        Finality implies that the delimiter header is not used.
-        Finality DOES NOT imply zero margin because a final type may contain non-final nested types.
+        Whether the definition is marked ``@final``. Finality implies that the delimiter header is not used.
         """
         return self._final
 
+    @property
+    def extent(self) -> int:
+        """
+        The amount of memory, in bits, that needs to be allocated in order to store a serialized representation of
+        this type or any of its minor versions under the same major version.
+        This value is always at least as large as the sum of maximum bit lengths of all fields padded to one byte.
+
+        If the type is :attr:`final`, its extent is at the minimum padded to :attr:`alignment_requirement`.
+        If the type is not :attr:`final`, its extent can be specified explicitly via ``@extent`` (provided that it
+        is not less than the minimum); otherwise, it defaults to the double of the sum of maximum bit lengths
+        of all fields padded to :attr:`alignment_requirement` (which is not the same as twice the minimum).
+        """
+        return self._extent
+
     @cached_property
     def bit_length_set(self) -> BitLengthSet:
-        bls = self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
-        if not self.final:
-            # Since the type is not final, we cannot make any guarantees about its bit length set or alignment,
-            # because it may be mutated in the next revision. Therefore, we erase the old bit length set and create
-            # a new one that is merely a list of all possible bit lengths plus the margin, aligned at one byte.
-            dh = self.delimiter_header_type.bit_length
-            bls = BitLengthSet(range(max(bls) + self.margin + 1)).pad_to_alignment(self.BITS_PER_BYTE) + dh
-            assert min(bls) == dh
-        return bls
+        """
+        The bit length set of a composite is always aligned at :attr:`alignment_requirement`.
+
+        For a :attr:`final` type this is the true bit length set computed by aggregating the fields and
+        padding the result to :attr:`alignment_requirement`.
+        That is, final types expose their internal structure; for example, a type that contains a single field
+        of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
+
+        For a non-final type, not many guarantees about the bit length set can be provided,
+        because the type may be mutated in the next minor revision. Therefore, a synthetic bit length set is
+        constructed that is merely a list of all possible bit lengths plus the delimiter header.
+        For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
+        ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
+        """
+        if self.final:
+            return self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
+        else:
+            return BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) +\
+                self.delimiter_header_type.bit_length
 
     @property
     def delimiter_header_type(self) -> typing.Optional[UnsignedIntegerType]:
         """
-        If the type is ``@final``, the delimiter header is not used and this property is None.
+        If the type is :attr:`final`, the delimiter header is not used and this property is None.
         Otherwise, the delimiter header is an unsigned integer type of a standard bit length.
 
-        Non-final composites are serialized into opaque containers like
-        ``uint8[<=(bit_length_set + margin + 7) // 8]``,
+        Non-final composites are serialized into opaque containers like ``uint8[<=(bit_length_set + 7) // 8]``,
         where the implicit length prefix is of this type.
         Their bit length set is also computed as if it was an array as declared above,
         in order to prevent the containing definitions from making assumptions about the offsets of the following fields
@@ -243,26 +306,11 @@ class CompositeType(SerializableType):
         """
         return self._source_file_path
 
-    @cached_property
-    def margin(self) -> int:
-        """
-        The margin is the amount of surplus memory, in bits, that is required to hold the serialized representation
-        of a received DSDL object in a forward-compatible way, such that new appended fields that are not known
-        to the recipient, if any, are accommodated properly.
-
-        The total amount of memory that needs to be allocated to store the serialized representation of a received
-        DSDL object equals ``max(bit_length_set) + margin`` bits.
-
-        The margin (surplus memory) is not needed when constructing a new serialized representation locally because
-        the exact definition of each involved type is known.
-        """
-        return self._compute_margin_impl()
-
     @property
     def alignment_requirement(self) -> int:
         # This is more general than required by the Specification, but it is done this way in case if we decided
         # to support greater alignment requirements in the future.
-        return max([self.BITS_PER_BYTE] + [x.data_type.alignment_requirement for x in self.fields])
+        return max(self.BITS_PER_BYTE, *(x.data_type.alignment_requirement for x in self.fields))
 
     @property
     def parent_service(self) -> typing.Optional['ServiceType']:
@@ -316,30 +364,15 @@ class CompositeType(SerializableType):
                 assert isinstance(c.value, _expression.Any)
                 return c.value
 
-        if name.native_value == '_margin_':  # Experimental non-standard extension
-            return _expression.Rational(self.margin)
+        if name.native_value == '_extent_':  # Experimental non-standard extension
+            return _expression.Rational(self.extent)
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
-
-    def _compute_margin(self, zero: bool) -> int:
-        del zero  # The parameter loses relevance at the first nested composite, which always overwrites it.
-        return self._compute_margin_impl()
-
-    def _compute_margin_impl(self) -> int:
-        return self._aggregate_margin(zero=self.final)
 
     @abc.abstractmethod
     def _aggregate_bit_length_sets(self) -> BitLengthSet:
         """
         Compute the aggregate bit length set for the current composite disregarding the outer padding.
-        The aggregation policy is dependent on the kind of the type: either union or struct.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _aggregate_margin(self, zero: bool) -> int:
-        """
-        Compute the aggregate margin for the current composite disregarding the outer padding.
         The aggregation policy is dependent on the kind of the type: either union or struct.
         """
         raise NotImplementedError
@@ -358,7 +391,7 @@ class CompositeType(SerializableType):
 
     def __repr__(self) -> str:
         return (
-            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, margin=%r, final=%r, '
+            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, extent=%r, final=%r, '
             'deprecated=%r, fixed_port_id=%r)'
         ) % (
             self.__class__.__name__,
@@ -367,7 +400,7 @@ class CompositeType(SerializableType):
             self.fields,
             self.constants,
             self.alignment_requirement,
-            self.margin,
+            self.extent,
             self.final,
             self.deprecated,
             self.fixed_port_id,
@@ -385,6 +418,7 @@ class UnionType(CompositeType):
                  name:             str,
                  version:          Version,
                  attributes:       typing.Iterable[Attribute],
+                 extent:           typing.Optional[int],
                  final:            bool,
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
@@ -395,6 +429,7 @@ class UnionType(CompositeType):
         super(UnionType, self).__init__(name=name,
                                         version=version,
                                         attributes=attributes,
+                                        extent=extent,
                                         final=final,
                                         deprecated=deprecated,
                                         fixed_port_id=fixed_port_id,
@@ -435,10 +470,6 @@ class UnionType(CompositeType):
 
     def _aggregate_bit_length_sets(self) -> BitLengthSet:
         return self.aggregate_bit_length_sets([x.data_type for x in self.fields])
-
-    def _aggregate_margin(self, zero: bool) -> int:
-        return max(f.data_type._compute_margin(zero) for f in self.fields) + \
-            typing.cast(SerializableType, self.tag_field_type)._compute_margin(zero)
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
@@ -497,9 +528,6 @@ class StructureType(CompositeType):
     def _aggregate_bit_length_sets(self) -> BitLengthSet:
         return self.aggregate_bit_length_sets([f.data_type for f in self.fields])
 
-    def _aggregate_margin(self, zero: bool) -> int:
-        return sum(f.data_type._compute_margin(zero) for f in self.fields)
-
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
         """
@@ -526,9 +554,11 @@ class ServiceType(CompositeType):
         """A trivial helper dataclass used for constructing new instances."""
         def __init__(self,
                      attributes: typing.Iterable[Attribute],
+                     extent:     typing.Optional[int],
                      is_union:   bool,
                      is_final:   bool):
             self.attributes = list(attributes)
+            self.extent = int(extent) if extent is not None else None
             self.is_union = bool(is_union)
             self.is_final = bool(is_final)
 
@@ -544,6 +574,7 @@ class ServiceType(CompositeType):
         self._request_type = request_meta_type(name=name + '.Request',
                                                version=version,
                                                attributes=request_params.attributes,
+                                               extent=request_params.extent,
                                                final=request_params.is_final,
                                                deprecated=deprecated,
                                                fixed_port_id=None,
@@ -554,6 +585,7 @@ class ServiceType(CompositeType):
         self._response_type = response_meta_type(name=name + '.Response',
                                                  version=version,
                                                  attributes=response_params.attributes,
+                                                 extent=response_params.extent,
                                                  final=response_params.is_final,
                                                  deprecated=deprecated,
                                                  fixed_port_id=None,
@@ -568,6 +600,7 @@ class ServiceType(CompositeType):
             name=name,
             version=version,
             attributes=container_attributes,
+            extent=None,
             final=True,
             deprecated=deprecated,
             fixed_port_id=fixed_port_id,
@@ -593,9 +626,6 @@ class ServiceType(CompositeType):
 
     def _aggregate_bit_length_sets(self) -> BitLengthSet:  # pragma: no cover
         raise TypeError('Service types are not directly serializable. Use either request or response.')
-
-    def _aggregate_margin(self, zero: bool) -> int:    # pragma: no cover
-        raise TypeError('Service types do not have margin. Use either request or response.')
 
 
 def _unittest_composite_types() -> None:
@@ -914,7 +944,7 @@ def _unittest_field_iterators() -> None:
     # Ensuring the equivalency between bit length and bit offset
     b_offset = BitLengthSet()
     for f in b.fields:
-        b_offset.increment(f.data_type.bit_length_set)
+        b_offset += f.data_type.bit_length_set
     print('b_offset:', b_offset)
     assert b_offset == b.bit_length_set
     assert not b_offset.is_aligned_at_byte()

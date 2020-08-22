@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -36,9 +36,6 @@ class VoidType(SerializableType):
     @property
     def alignment_requirement(self) -> int:
         return 1
-
-    def _compute_margin(self, zero: bool) -> int:
-        return 0 if zero else self.bit_length
 
     def __str__(self) -> str:
         return 'void%d' % self.bit_length

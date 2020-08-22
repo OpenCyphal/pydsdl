@@ -104,9 +104,6 @@ class FixedLengthArrayType(ArrayType):
             assert self.element_type.bit_length_set.elementwise_sum_k_multicombinations(index) == _self_test_base_offset
             _self_test_base_offset += self.element_type.bit_length_set
 
-    def _compute_margin(self, zero: bool) -> int:
-        return self.element_type._compute_margin(zero) * self.capacity
-
     def __str__(self) -> str:
         return '%s[%d]' % (self.element_type, self.capacity)
 
@@ -185,10 +182,6 @@ class VariableLengthArrayType(ArrayType):
         """
         assert self._length_field_type.bit_length % self.element_type.alignment_requirement == 0
         return self._length_field_type
-
-    def _compute_margin(self, zero: bool) -> int:
-        return typing.cast(SerializableType, self.length_field_type)._compute_margin(zero) + \
-               self.element_type._compute_margin(zero) * self.capacity
 
     def __str__(self) -> str:
         return '%s[<=%d]' % (self.element_type, self.capacity)

@@ -87,9 +87,6 @@ class PrimitiveType(SerializableType):
             self.CastMode.TRUNCATED: 'truncated',
         }[self.cast_mode]
 
-    def _compute_margin(self, zero: bool) -> int:
-        return 0 if zero else self.bit_length
-
     @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         raise NotImplementedError

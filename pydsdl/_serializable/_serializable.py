@@ -68,15 +68,6 @@ class SerializableType(_expression.Any):
         return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
 
     @abc.abstractmethod
-    def _compute_margin(self, zero: bool) -> int:
-        """
-        :param zero: True if no margin is required at this level of nesting.
-            This parameter is passed down the data structure tree until the first composite,
-            at which point it is overwritten by said composite according to its own definition.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
         # Implementations must return a DSDL spec-compatible textual representation of the type.
         # The string representation is used for determining equivalency by the comparison operator __eq__().
