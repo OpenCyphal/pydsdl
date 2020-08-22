@@ -9,6 +9,10 @@ import typing
 from .._bit_length_set import BitLengthSet
 from ._serializable import SerializableType, TypeParameterError
 from ._primitive import UnsignedIntegerType, PrimitiveType
+try:
+    from functools import cached_property
+except ImportError:
+    cached_property = property
 
 
 class InvalidNumberOfElementsError(TypeParameterError):
@@ -65,7 +69,7 @@ class FixedLengthArrayType(ArrayType):
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
 
-    @property
+    @cached_property
     def bit_length_set(self) -> BitLengthSet:
         # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
@@ -82,14 +86,12 @@ class FixedLengthArrayType(ArrayType):
         except that we iterate over indexes instead of fields.
 
         :param base_offset: The base offset to add to each element. If not supplied, assumed to be ``{0}``.
-            The base offset shall satisfy the :attr:`alignment_requirement`, otherwise it's a :class:`ValueError`.
+            The base offset will be implicitly padded out to :attr:`alignment_requirement`.
 
         :returns: For an N-element array, an iterator over N elements, where each element is a tuple of the index
             of the array element (zero-based) and its offset as a bit length set.
         """
-        base_offset = BitLengthSet(base_offset or 0)
-        if not base_offset.is_aligned_at(self.alignment_requirement):
-            raise ValueError('Alignment requirement %r not satisfied by %r' % (self.alignment_requirement, base_offset))
+        base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
         _self_test_base_offset = BitLengthSet(0)
         for index in range(self.capacity):
             assert base_offset.is_aligned_at(self.element_type.alignment_requirement),\
@@ -158,7 +160,7 @@ class VariableLengthArrayType(ArrayType):
 
         self._length_field_type = UnsignedIntegerType(length_field_length, PrimitiveType.CastMode.TRUNCATED)
 
-    @property
+    @cached_property
     def bit_length_set(self) -> BitLengthSet:
         # Please refer to the corresponding implementation for the fixed-length array.
         # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
