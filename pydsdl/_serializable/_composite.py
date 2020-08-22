@@ -265,7 +265,7 @@ class CompositeType(SerializableType):
         If the type is :attr:`final`, the delimiter header is not used and this property is None.
         Otherwise, the delimiter header is an unsigned integer type of a standard bit length.
 
-        Non-final composites are serialized into opaque containers like ``uint8[<=(bit_length_set + 7) // 8]``,
+        Non-final composites are serialized into opaque containers like ``uint8[<=(max(bit_length_set) + 7) // 8]``,
         where the implicit length prefix is of this type.
         Their bit length set is also computed as if it was an array as declared above,
         in order to prevent the containing definitions from making assumptions about the offsets of the following fields
