@@ -15,10 +15,6 @@ from ._attribute import Attribute, Field, PaddingField, Constant
 from ._name import check_name, InvalidNameError
 from ._void import VoidType
 from ._primitive import PrimitiveType, UnsignedIntegerType
-try:
-    from functools import cached_property
-except ImportError:
-    cached_property = property  # type: ignore
 
 
 Version = typing.NamedTuple('Version', [('major', int), ('minor', int)])
@@ -141,13 +137,13 @@ class CompositeType(SerializableType):
                                                         'unless it is also deprecated.')
 
         # Extent initialization.
-        minimal_extent = max(self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement))
+        aggregated_bls = self._aggregate_bit_length_sets()
+        minimal_extent = max(aggregated_bls.pad_to_alignment(self.alignment_requirement))
         if extent is None:
             if self.final:
                 self._extent = minimal_extent
-            else:
-                unaligned = max(self._aggregate_bit_length_sets()) * 2  # Multiply first, then align.
-                self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
+            else:            # Multiply first, then align:
+                self._extent = max(BitLengthSet(max(aggregated_bls) * 2).pad_to_alignment(self.alignment_requirement))
         else:
             self._extent = int(extent)
 
@@ -171,11 +167,28 @@ class CompositeType(SerializableType):
                 '%d bits to %d bits.' %
                 (self._extent, minimal_extent)
             )
-        # Paranoid internal consistency validation.
+
+        # Bit length set computation.
+        if self.final:
+            self._bit_length_set = aggregated_bls.pad_to_alignment(self.alignment_requirement)
+        else:
+            dh = self.delimiter_header_type
+            assert dh is not None
+            self._bit_length_set = BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) +\
+                dh.bit_length
+
+        # Validate the logic above.
         assert self.extent % self.BITS_PER_BYTE == 0
         assert self.extent % self.alignment_requirement == 0
         assert self.extent >= minimal_extent
         assert self.extent == minimal_extent or not self.final
+        assert self.extent >= (max(self.bit_length_set) -
+                               (self.delimiter_header_type.bit_length if self.delimiter_header_type else 0))
+        assert len(self.bit_length_set) > 0
+        assert self.bit_length_set.is_aligned_at_byte()
+        assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
+        assert min(self.bit_length_set) >= typing.cast(UnsignedIntegerType, self.delimiter_header_type).bit_length \
+            or self.final
 
     @property
     def full_name(self) -> str:
@@ -228,8 +241,8 @@ class CompositeType(SerializableType):
         """
         return self._extent
 
-    @cached_property
-    def bit_length_set(self) -> BitLengthSet:  # type: ignore
+    @property
+    def bit_length_set(self) -> BitLengthSet:
         """
         The bit length set of a composite is always aligned at :attr:`alignment_requirement`.
 
@@ -244,12 +257,7 @@ class CompositeType(SerializableType):
         For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
         ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
         """
-        if self.final:
-            return self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
-        else:
-            dh = self.delimiter_header_type
-            assert dh is not None
-            return BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) + dh.bit_length
+        return self._bit_length_set
 
     @property
     def delimiter_header_type(self) -> typing.Optional[UnsignedIntegerType]:

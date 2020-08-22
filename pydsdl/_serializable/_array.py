@@ -9,10 +9,6 @@ import typing
 from .._bit_length_set import BitLengthSet
 from ._serializable import SerializableType, TypeParameterError
 from ._primitive import UnsignedIntegerType, PrimitiveType
-try:
-    from functools import cached_property
-except ImportError:
-    cached_property = property  # type: ignore
 
 
 class InvalidNumberOfElementsError(TypeParameterError):
@@ -68,15 +64,16 @@ class FixedLengthArrayType(ArrayType):
                  element_type: SerializableType,
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
-
-    @cached_property
-    def bit_length_set(self) -> BitLengthSet:  # type: ignore
         # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
         # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
         # performance measured on the standard data type set was about tenfold.
-        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).\
+        self._bit_length_set = self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).\
             pad_to_alignment(self.alignment_requirement)
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        return self._bit_length_set
 
     def enumerate_elements_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
@@ -157,8 +154,8 @@ class VariableLengthArrayType(ArrayType):
 
         self._length_field_type = UnsignedIntegerType(length_field_length, PrimitiveType.CastMode.TRUNCATED)
 
-    @cached_property
-    def bit_length_set(self) -> BitLengthSet:  # type: ignore
+    @property
+    def bit_length_set(self) -> BitLengthSet:
         # Please refer to the corresponding implementation for the fixed-length array.
         # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
         # different sizes, from zero elements up to the maximum number of elements.
