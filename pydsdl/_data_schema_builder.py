@@ -84,15 +84,17 @@ class DataSchemaBuilder:
         self._constants.append(constant)
 
     def set_extent(self, value: int) -> None:
-        assert self._extent is None, 'Suspicious usage'
+        assert self._extent is None
+        assert not self._is_final
         self._extent = int(value)
 
     def make_final(self) -> None:
-        assert not self.final, 'Suspicious usage'
+        assert not self.final
+        assert self._extent is None
         self._is_final = True
 
     def make_union(self) -> None:
-        assert not self.union, 'Suspicious usage'
+        assert not self.union
         self._is_union = True
 
     def to_service_schema_params(self) -> _serializable.ServiceType.SchemaParams:

@@ -64,16 +64,15 @@ class FixedLengthArrayType(ArrayType):
                  element_type: SerializableType,
                  capacity: int):
         super(FixedLengthArrayType, self).__init__(element_type, capacity)
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
         # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
         # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
         # performance measured on the standard data type set was about tenfold.
-        self._bit_length_set = self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).\
+        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).\
             pad_to_alignment(self.alignment_requirement)
-
-    @property
-    def bit_length_set(self) -> BitLengthSet:
-        return self._bit_length_set
 
     def enumerate_elements_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:

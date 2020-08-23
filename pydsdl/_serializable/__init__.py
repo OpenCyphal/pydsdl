@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -23,6 +23,7 @@ from ._array import VariableLengthArrayType as VariableLengthArrayType
 from ._composite import CompositeType as CompositeType
 from ._composite import UnionType as UnionType
 from ._composite import StructureType as StructureType
+from ._composite import DelimitedType as DelimitedType
 from ._composite import ServiceType as ServiceType
 from ._composite import Version as Version
 

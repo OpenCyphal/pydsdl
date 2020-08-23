@@ -49,21 +49,17 @@ class CompositeType(SerializableType):
     """
     This is the most interesting type in the library because it represents an actual DSDL definition upon its
     interpretation.
+    This is an abstract class with several specializations.
     """
 
     MAX_NAME_LENGTH = 50
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
 
-    DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
-    DEFAULT_EXTENT_MULTIPLIER = fractions.Fraction(3, 2)
-
     def __init__(self,
                  name:             str,
                  version:          Version,
                  attributes:       typing.Iterable[Attribute],
-                 extent:           typing.Optional[int],
-                 final:            bool,
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
                  source_file_path: str,
@@ -74,7 +70,6 @@ class CompositeType(SerializableType):
         self._version = version
         self._attributes = list(attributes)
         self._attributes_by_name = {a.name: a for a in self._attributes if not isinstance(a, PaddingField)}
-        self._final = bool(final)
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
@@ -138,60 +133,15 @@ class CompositeType(SerializableType):
                         raise DeprecatedDependencyError('A type cannot depend on deprecated types '
                                                         'unless it is also deprecated.')
 
-        # Extent initialization.
-        aggregated_bls = self._aggregate_bit_length_sets()
-        minimal_extent = max(aggregated_bls.pad_to_alignment(self.alignment_requirement))
-        if extent is None:
-            if self.final:
-                self._extent = minimal_extent
-            else:
-                unaligned = math.floor(max(aggregated_bls) * self.DEFAULT_EXTENT_MULTIPLIER)
-                self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
-        else:
-            self._extent = int(extent)
-
-        # Extent verification.
+        # Invariant checks.
         assert self.alignment_requirement >= self.BITS_PER_BYTE
         assert self.alignment_requirement % self.BITS_PER_BYTE == 0
-        if self._extent % self.alignment_requirement != 0:
-            raise InvalidExtentError('The specified extent of %d bits is not a multiple of %d bits' %
-                                     (self._extent, self.alignment_requirement))
-        if self._extent < minimal_extent:
-            raise InvalidExtentError(
-                'The specified extent of %d bits is too small for this data type. '
-                'Either compactify the data type or increase the extent at least to %d bits. '
-                'Beware that the latter option may break wire compatibility.' %
-                (self._extent, minimal_extent)
-            )
-        if self.final and self._extent > minimal_extent:
-            raise InvalidExtentError(
-                'Cannot override the extent because the type is final. '
-                'Either remove the explicit extent specification or change it from the current value of '
-                '%d bits to %d bits.' %
-                (self._extent, minimal_extent)
-            )
-
-        # Bit length set computation.
-        if self.final:
-            self._bit_length_set = aggregated_bls.pad_to_alignment(self.alignment_requirement)
-        else:
-            dh = self.delimiter_header_type
-            assert dh is not None
-            self._bit_length_set = BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) +\
-                dh.bit_length
-
-        # Validate the logic above.
         assert self.extent % self.BITS_PER_BYTE == 0
         assert self.extent % self.alignment_requirement == 0
-        assert self.extent >= minimal_extent
-        assert self.extent == minimal_extent or not self.final
-        assert self.extent >= (max(self.bit_length_set) -
-                               (self.delimiter_header_type.bit_length if self.delimiter_header_type else 0))
         assert len(self.bit_length_set) > 0
         assert self.bit_length_set.is_aligned_at_byte()
         assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
-        assert min(self.bit_length_set) >= typing.cast(UnsignedIntegerType, self.delimiter_header_type).bit_length \
-            or self.final
+        assert self.extent >= max(self.bit_length_set)
 
     @property
     def full_name(self) -> str:
@@ -224,63 +174,25 @@ class CompositeType(SerializableType):
         return self._version
 
     @property
-    def final(self) -> bool:
-        """
-        Whether the definition is marked ``@final``. Finality implies that the delimiter header is not used.
-        """
-        return self._final
-
-    @property
     def extent(self) -> int:
         """
         The amount of memory, in bits, that needs to be allocated in order to store a serialized representation of
         this type or any of its minor versions under the same major version.
         This value is always at least as large as the sum of maximum bit lengths of all fields padded to one byte.
-
-        If the type is :attr:`final`, its extent is at the minimum padded to :attr:`alignment_requirement`.
-        If the type is not :attr:`final`, its extent can be specified explicitly via ``@extent`` (provided that it
-        is not less than the minimum); otherwise, it defaults to the double of the sum of maximum bit lengths
-        of all fields padded to :attr:`alignment_requirement` (which is not the same as twice the minimum).
+        If the type is final, its extent equals ``max(bit_length_set)``.
         """
-        return self._extent
+        return max(self.bit_length_set)
 
     @property
     def bit_length_set(self) -> BitLengthSet:
         """
         The bit length set of a composite is always aligned at :attr:`alignment_requirement`.
-
-        For a :attr:`final` type this is the true bit length set computed by aggregating the fields and
+        For a final type this is the true bit length set computed by aggregating the fields and
         padding the result to :attr:`alignment_requirement`.
         That is, final types expose their internal structure; for example, a type that contains a single field
         of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
-
-        For a non-final type, not many guarantees about the bit length set can be provided,
-        because the type may be mutated in the next minor revision. Therefore, a synthetic bit length set is
-        constructed that is merely a list of all possible bit lengths plus the delimiter header.
-        For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
-        ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
         """
-        return self._bit_length_set
-
-    @property
-    def delimiter_header_type(self) -> typing.Optional[UnsignedIntegerType]:
-        """
-        If the type is :attr:`final`, the delimiter header is not used and this property is None.
-        Otherwise, the delimiter header is an unsigned integer type of a standard bit length.
-
-        Non-final composites are serialized into opaque containers like ``uint8[<=(max(bit_length_set) + 7) // 8]``,
-        where the implicit length prefix is of this type.
-        Their bit length set is also computed as if it was an array as declared above,
-        in order to prevent the containing definitions from making assumptions about the offsets of the following fields
-        that might not survive the evolution of the type (e.g., version 1 may be 64 bits long, version 2 might be
-        56 bits long).
-        """
-        if not self.final:
-            bit_length = self.DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
-            # This is to prevent the delimiter header from breaking the alignment of the following composite.
-            bit_length = max(bit_length, self.alignment_requirement)
-            return UnsignedIntegerType(bit_length, UnsignedIntegerType.CastMode.SATURATED)
-        return None
+        return self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
 
     @property
     def deprecated(self) -> bool:
@@ -403,7 +315,7 @@ class CompositeType(SerializableType):
 
     def __repr__(self) -> str:
         return (
-            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, extent=%r, final=%r, '
+            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, extent=%r, '
             'deprecated=%r, fixed_port_id=%r)'
         ) % (
             self.__class__.__name__,
@@ -413,7 +325,6 @@ class CompositeType(SerializableType):
             self.constants,
             self.alignment_requirement,
             self.extent,
-            self.final,
             self.deprecated,
             self.fixed_port_id,
         )
@@ -430,8 +341,6 @@ class UnionType(CompositeType):
                  name:             str,
                  version:          Version,
                  attributes:       typing.Iterable[Attribute],
-                 extent:           typing.Optional[int],
-                 final:            bool,
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
                  source_file_path: str,
@@ -441,8 +350,6 @@ class UnionType(CompositeType):
         super(UnionType, self).__init__(name=name,
                                         version=version,
                                         attributes=attributes,
-                                        extent=extent,
-                                        final=final,
                                         deprecated=deprecated,
                                         fixed_port_id=fixed_port_id,
                                         source_file_path=source_file_path,
@@ -554,6 +461,113 @@ class StructureType(CompositeType):
         return bls
 
 
+class DelimitedType(CompositeType):
+    """
+    Composites that are not final are wrapped into this container.
+    It is a decorator over a composite type instance that injects the extent, bit length set, and field iteration
+    logic that is specific to delimited (appendable, non-final) types.
+
+    Most of the attributes are copied from the wrapped type (e.g., name, fixed port-ID, attributes, etc.),
+    except for those that relate to the bit layout.
+    """
+
+    DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
+    DEFAULT_EXTENT_MULTIPLIER = fractions.Fraction(3, 2)
+
+    def __init__(self, inner: CompositeType, extent: typing.Optional[int]):
+        self._inner = inner
+        super(DelimitedType, self).__init__(name=inner.full_name,
+                                            version=inner.version,
+                                            attributes=inner.attributes,
+                                            deprecated=inner.deprecated,
+                                            fixed_port_id=inner.fixed_port_id,
+                                            source_file_path=inner.source_file_path,
+                                            parent_service=inner.parent_service)
+        if extent is None:
+            unaligned = math.floor(inner.extent * self.DEFAULT_EXTENT_MULTIPLIER)
+            self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
+        else:
+            self._extent = int(extent)
+
+        if self._extent % self.alignment_requirement != 0:
+            raise InvalidExtentError('The specified extent of %d bits is not a multiple of %d bits' %
+                                     (self._extent, self.alignment_requirement))
+        if self._extent < inner.extent:
+            raise InvalidExtentError(
+                'The specified extent of %d bits is too small for this data type. '
+                'Either compactify the data type or increase the extent at least to %d bits. '
+                'Beware that the latter option may break wire compatibility.' %
+                (self._extent, inner.extent)
+            )
+
+        # Invariant checks.
+        assert self.extent % self.BITS_PER_BYTE == 0
+        assert self.extent % self.alignment_requirement == 0
+        assert self.extent >= self.inner_type.extent
+        assert len(self.bit_length_set) > 0
+        assert self.bit_length_set.is_aligned_at_byte()
+        assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
+        assert self.extent >= max(self.bit_length_set) - self.delimiter_header_type.bit_length
+
+    @property
+    def inner_type(self) -> CompositeType:
+        """
+        The appendable type serialized inside the delimited container.
+        Its bit length set, extent, and other layout-specific entities are computed as if it was a final type.
+        """
+        return self._inner
+
+    @property
+    def extent(self) -> int:
+        """
+        The extent of a delimited type can be specified explicitly via ``@extent`` (provided that it is not less
+        than the minimum); otherwise, it defaults to ``floor(minimum * 3/2)`` padded to byte.
+        """
+        return self._extent
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        """
+        For a non-final type, not many guarantees about the bit length set can be provided,
+        because the type may be mutated in the next minor revision.
+        Therefore, a synthetic bit length set is constructed that is merely a list of all possible bit lengths
+        plus the delimiter header.
+        For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
+        ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
+        """
+        return BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) +\
+            self.delimiter_header_type.bit_length
+
+    @property
+    def delimiter_header_type(self) -> UnsignedIntegerType:
+        """
+        Non-final composites are serialized into opaque containers like ``uint8[<=(max(bit_length_set) + 7) // 8]``,
+        where the implicit length prefix is of this type.
+        Their bit length set is also computed as if it was an array as declared above,
+        in order to prevent the containing definitions from making assumptions about the offsets of the following fields
+        that might not survive the evolution of the type (e.g., version 1 may be 64 bits long, version 2 might be
+        56 bits long).
+        """
+        bit_length = self.DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
+        # This is to prevent the delimiter header from breaking the alignment of the following composite.
+        bit_length = max(bit_length, self.alignment_requirement)
+        return UnsignedIntegerType(bit_length, UnsignedIntegerType.CastMode.SATURATED)
+
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        """
+        Delegates the call to the inner type, but with the base offset increased by the size of the delimiter header.
+        """
+        base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
+        return self.inner_type.iterate_fields_with_offsets(base_offset)
+
+    def _aggregate_bit_length_sets(self) -> BitLengthSet:
+        return self.inner_type._aggregate_bit_length_sets()
+
+    def __repr__(self) -> str:
+        return '%s(inner=%r, extent=%r)' % (self.__class__.__name__, self.inner_type, self.extent)
+
+
 class ServiceType(CompositeType):
     """
     A service (not message) type.
@@ -574,6 +588,28 @@ class ServiceType(CompositeType):
             self.extent = int(extent) if extent is not None else None
             self.is_final = bool(is_final)
             self.is_union = bool(is_union)
+            if self.is_final and self.extent is not None:
+                raise ValueError('API misuse: cannot set the extent on a final type')
+
+        def construct_composite(self,
+                                name: str,
+                                version: Version,
+                                deprecated: bool,
+                                parent_service: 'ServiceType') -> CompositeType:
+            request_meta_type = UnionType if self.is_union else StructureType  # type: type
+            ty = request_meta_type(name=name,
+                                   version=version,
+                                   attributes=self.attributes,
+                                   deprecated=deprecated,
+                                   fixed_port_id=None,
+                                   source_file_path='',
+                                   parent_service=parent_service)
+            assert isinstance(ty, CompositeType)
+            if self.is_final:
+                assert self.extent is None
+                return ty
+            else:
+                return DelimitedType(ty, extent=self.extent)
 
     def __init__(self,
                  name:             str,
@@ -583,42 +619,24 @@ class ServiceType(CompositeType):
                  deprecated:       bool,
                  fixed_port_id:    typing.Optional[int],
                  source_file_path: str):
-        request_meta_type = UnionType if request_params.is_union else StructureType  # type: type
-        self._request_type = request_meta_type(name=name + '.Request',
-                                               version=version,
-                                               attributes=request_params.attributes,
-                                               extent=request_params.extent,
-                                               final=request_params.is_final,
-                                               deprecated=deprecated,
-                                               fixed_port_id=None,
-                                               source_file_path='',
-                                               parent_service=self)  # type: CompositeType
-
-        response_meta_type = UnionType if response_params.is_union else StructureType  # type: type
-        self._response_type = response_meta_type(name=name + '.Response',
-                                                 version=version,
-                                                 attributes=response_params.attributes,
-                                                 extent=response_params.extent,
-                                                 final=response_params.is_final,
-                                                 deprecated=deprecated,
-                                                 fixed_port_id=None,
-                                                 source_file_path='',
-                                                 parent_service=self)  # type: CompositeType
-
+        self._request_type = request_params.construct_composite(name=name + '.Request',
+                                                                version=version,
+                                                                deprecated=deprecated,
+                                                                parent_service=self)
+        self._response_type = response_params.construct_composite(name=name + '.Response',
+                                                                  version=version,
+                                                                  deprecated=deprecated,
+                                                                  parent_service=self)
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
             Field(data_type=self._response_type, name='response'),
         ]
-        super(ServiceType, self).__init__(
-            name=name,
-            version=version,
-            attributes=container_attributes,
-            extent=None,
-            final=True,
-            deprecated=deprecated,
-            fixed_port_id=fixed_port_id,
-            source_file_path=source_file_path,
-        )
+        super(ServiceType, self).__init__(name=name,
+                                          version=version,
+                                          attributes=container_attributes,
+                                          deprecated=deprecated,
+                                          fixed_port_id=fixed_port_id,
+                                          source_file_path=source_file_path)
         assert self.request_type.parent_service is self
         assert self.response_type.parent_service is self
 
@@ -650,8 +668,6 @@ def _unittest_composite_types() -> None:
         return StructureType(name=name,
                              version=Version(0, 1),
                              attributes=[],
-                             extent=None,
-                             final=False,
                              deprecated=False,
                              fixed_port_id=None,
                              source_file_path='')
@@ -697,8 +713,6 @@ def _unittest_composite_types() -> None:
         UnionType(name='a.A',
                   version=Version(0, 1),
                   attributes=[],
-                  extent=None,
-                  final=False,
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
@@ -711,8 +725,6 @@ def _unittest_composite_types() -> None:
                       Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
                       PaddingField(VoidType(16)),
                   ],
-                  extent=None,
-                  final=False,
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
@@ -724,8 +736,6 @@ def _unittest_composite_types() -> None:
                       Field(SignedIntegerType(16, PrimitiveType.CastMode.SATURATED), 'b'),
                       Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
                   ],
-                  extent=None,
-                  final=False,
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
@@ -748,8 +758,6 @@ def _unittest_composite_types() -> None:
                           PaddingField(VoidType(2)),
                           Constant(FloatType(32, PrimitiveType.CastMode.SATURATED), 'A', _expression.Rational(123)),
                       ],
-                      extent=None,
-                      final=False,
                       deprecated=False,
                       fixed_port_id=None,
                       source_file_path='')
@@ -774,8 +782,6 @@ def _unittest_composite_types() -> None:
         return UnionType(name='a.A',
                          version=Version(0, 1),
                          attributes=atr,
-                         extent=None,
-                         final=False,
                          deprecated=False,
                          fixed_port_id=None,
                          source_file_path='')
@@ -818,8 +824,6 @@ def _unittest_composite_types() -> None:
         return StructureType(name='a.A',
                              version=Version(0, 1),
                              attributes=atr,
-                             extent=None,
-                             final=False,
                              deprecated=False,
                              fixed_port_id=None,
                              source_file_path='')
@@ -853,8 +857,6 @@ def _unittest_field_iterators() -> None:
         return meta('ns.Type' + str(_seq_no),
                     version=Version(1, 0),
                     attributes=attributes,
-                    extent=None,
-                    final=False,
                     deprecated=False,
                     fixed_port_id=None,
                     source_file_path='')

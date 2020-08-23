@@ -61,14 +61,18 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         if len(self._structs) == 1:     # Message type
             struct, = self._structs     # type: _data_schema_builder.DataSchemaBuilder,
             ty = _serializable.UnionType if struct.union else _serializable.StructureType
-            out = ty(name=self._definition.full_name,
+            fin = ty(name=self._definition.full_name,
                      version=self._definition.version,
                      attributes=struct.attributes,
-                     extent=struct.extent,
-                     final=struct.final,
                      deprecated=self._is_deprecated,
                      fixed_port_id=self._definition.fixed_port_id,
                      source_file_path=self._definition.file_path)  # type: _serializable.CompositeType
+            if not struct.final:
+                out = _serializable.DelimitedType(fin, extent=struct.extent)  # type: _serializable.CompositeType
+                _logger.debug('%r wrapped into %r', fin, out)
+            else:
+                assert struct.extent is None, 'Internal constraint violation'
+                out = fin
         else:  # Service type
             request, response = self._structs
             assert isinstance(request, _data_schema_builder.DataSchemaBuilder)
@@ -214,6 +218,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                         value.TYPE_NAME)
 
     def _on_extent_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
+        if self._structs[-1].final:
+            raise InvalidDirectiveError('The extent cannot be specified for a final type')
         if value is None:
             raise InvalidDirectiveError('The extent directive requires an expression')
         elif isinstance(value, _expression.Rational):
@@ -228,6 +234,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError('The extent directive expects a rational, not %s' % value.TYPE_NAME)
 
     def _on_final_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
+        if self._structs[-1].extent is not None:
+            raise InvalidDirectiveError('A type whose extent is defined explicitly cannot be made final')
         if value is not None:
             raise InvalidDirectiveError('The final directive does not expect an expression')
         if self._structs[-1].final:
