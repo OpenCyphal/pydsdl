@@ -7,6 +7,7 @@ import abc
 import math
 import typing
 import itertools
+import fractions
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
@@ -55,6 +56,7 @@ class CompositeType(SerializableType):
     NAME_COMPONENT_SEPARATOR = '.'
 
     DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
+    DEFAULT_EXTENT_MULTIPLIER = fractions.Fraction(3, 2)
 
     def __init__(self,
                  name:             str,
@@ -142,8 +144,9 @@ class CompositeType(SerializableType):
         if extent is None:
             if self.final:
                 self._extent = minimal_extent
-            else:            # Multiply first, then align:
-                self._extent = max(BitLengthSet(max(aggregated_bls) * 2).pad_to_alignment(self.alignment_requirement))
+            else:
+                unaligned = math.floor(max(aggregated_bls) * self.DEFAULT_EXTENT_MULTIPLIER)
+                self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
         else:
             self._extent = int(extent)
 
