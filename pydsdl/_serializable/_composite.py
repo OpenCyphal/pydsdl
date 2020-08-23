@@ -527,6 +527,10 @@ class DelimitedType(CompositeType):
         """
         The extent of a delimited type can be specified explicitly via ``@extent`` (provided that it is not less
         than the minimum); otherwise, it defaults to ``floor(minimum * 3/2)`` padded to byte.
+
+        Optional optimization hint: if the objective is to allocate buffer memory for constructing a new
+        serialized representation locally, then it may be beneficial to use the extent of the inner type
+        rather than this one because it may be smaller. This is not safe for deserialization.
         """
         return self._extent
 
