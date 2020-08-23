@@ -192,7 +192,8 @@ class CompositeType(SerializableType):
         That is, final types expose their internal structure; for example, a type that contains a single field
         of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
         """
-        return self._aggregate_bit_length_sets().pad_to_alignment(self.alignment_requirement)
+        return self._bit_length_sets_aggregator([f.data_type for f in self.fields]).\
+            pad_to_alignment(self.alignment_requirement)
 
     @property
     def deprecated(self) -> bool:
@@ -293,10 +294,12 @@ class CompositeType(SerializableType):
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
+    @property
     @abc.abstractmethod
-    def _aggregate_bit_length_sets(self) -> BitLengthSet:
+    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
         """
-        Compute the aggregate bit length set for the current composite disregarding the outer padding.
+        Construct the mapping from a sequence of field types to the aggregate bit length set
+        for the current composite disregarding the outer padding.
         The aggregation policy is dependent on the kind of the type: either union or struct.
         """
         raise NotImplementedError
@@ -387,8 +390,9 @@ class UnionType(CompositeType):
             assert base_offset.is_aligned_at(f.data_type.alignment_requirement)
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
-    def _aggregate_bit_length_sets(self) -> BitLengthSet:
-        return self.aggregate_bit_length_sets([x.data_type for x in self.fields])
+    @property
+    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
+        return self.aggregate_bit_length_sets
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
@@ -445,8 +449,9 @@ class StructureType(CompositeType):
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
             base_offset += f.data_type.bit_length_set
 
-    def _aggregate_bit_length_sets(self) -> BitLengthSet:
-        return self.aggregate_bit_length_sets([f.data_type for f in self.fields])
+    @property
+    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
+        return self.aggregate_bit_length_sets
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
@@ -561,8 +566,8 @@ class DelimitedType(CompositeType):
         base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
-    def _aggregate_bit_length_sets(self) -> BitLengthSet:
-        return self.inner_type._aggregate_bit_length_sets()
+    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
+        return self.inner_type._bit_length_sets_aggregator
 
     def __repr__(self) -> str:
         return '%s(inner=%r, extent=%r)' % (self.__class__.__name__, self.inner_type, self.extent)
@@ -655,7 +660,8 @@ class ServiceType(CompositeType):
         """Always raises a :class:`TypeError`."""
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
 
-    def _aggregate_bit_length_sets(self) -> BitLengthSet:  # pragma: no cover
+    def _bit_length_sets_aggregator(self) \
+            -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:  # pragma: no cover
         raise TypeError('Service types are not directly serializable. Use either request or response.')
 
 
