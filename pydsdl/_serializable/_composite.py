@@ -133,16 +133,6 @@ class CompositeType(SerializableType):
                         raise DeprecatedDependencyError('A type cannot depend on deprecated types '
                                                         'unless it is also deprecated.')
 
-        # Invariant checks.
-        assert self.alignment_requirement >= self.BITS_PER_BYTE
-        assert self.alignment_requirement % self.BITS_PER_BYTE == 0
-        assert self.extent % self.BITS_PER_BYTE == 0
-        assert self.extent % self.alignment_requirement == 0
-        assert len(self.bit_length_set) > 0
-        assert self.bit_length_set.is_aligned_at_byte()
-        assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
-        assert self.extent >= max(self.bit_length_set)
-
     @property
     def full_name(self) -> str:
         """The full name, e.g., ``uavcan.node.Heartbeat``."""
@@ -235,7 +225,7 @@ class CompositeType(SerializableType):
     def alignment_requirement(self) -> int:
         # This is more general than required by the Specification, but it is done this way in case if we decided
         # to support greater alignment requirements in the future.
-        return max(self.BITS_PER_BYTE, *(x.data_type.alignment_requirement for x in self.fields))
+        return max([self.BITS_PER_BYTE] + [x.data_type.alignment_requirement for x in self.fields])
 
     @property
     def parent_service(self) -> typing.Optional['ServiceType']:
@@ -427,7 +417,7 @@ class UnionType(CompositeType):
             unaligned_tag_bit_length = (len(field_types) - 1).bit_length()
             tag_bit_length = 2 ** math.ceil(math.log2(max(SerializableType.BITS_PER_BYTE, unaligned_tag_bit_length)))
             # This is to prevent the tag from breaking the alignment of the following variant.
-            tag_bit_length = max(tag_bit_length, *(x.alignment_requirement for x in field_types))
+            tag_bit_length = max([tag_bit_length] + [x.alignment_requirement for x in field_types])
             assert isinstance(tag_bit_length, int)
             assert tag_bit_length in {8, 16, 32, 64}
             return tag_bit_length

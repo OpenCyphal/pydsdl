@@ -46,6 +46,7 @@ from ._serializable import VariableLengthArrayType as VariableLengthArrayType   
 from ._serializable import CompositeType as CompositeType                           # noqa
 from ._serializable import UnionType as UnionType                                   # noqa
 from ._serializable import StructureType as StructureType                           # noqa
+from ._serializable import DelimitedType as DelimitedType                           # noqa
 from ._serializable import ServiceType as ServiceType                               # noqa
 
 # Data type model - attributes.
