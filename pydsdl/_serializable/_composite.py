@@ -474,10 +474,21 @@ class DelimitedType(CompositeType):
 
     Most of the attributes are copied from the wrapped type (e.g., name, fixed port-ID, attributes, etc.),
     except for those that relate to the bit layout.
+
+    Non-final composites are serialized into delimited opaque containers like ``uint8[<=(extent + 7) // 8]``,
+    where the implicit length prefix is of type :attr:`delimiter_header_type`.
+    Their bit length set is also computed as if it was an array as declared above,
+    in order to prevent the containing definitions from making assumptions about the offsets of the following fields
+    that might not survive the evolution of the type (e.g., version 1 may be 64 bits long, version 2 might be
+    56 bits long, then version 3 could grow to 96 bits, unpredictable).
     """
 
-    DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
     DEFAULT_EXTENT_MULTIPLIER = fractions.Fraction(3, 2)
+    """
+    If the extent is not specified explicitly, it is computed by multiplying the extent of the inner type by this.
+    """
+
+    _DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
 
     def __init__(self, inner: CompositeType, extent: typing.Optional[int]):
         self._inner = inner
@@ -517,7 +528,7 @@ class DelimitedType(CompositeType):
     @property
     def inner_type(self) -> CompositeType:
         """
-        The appendable type serialized inside the delimited container.
+        The appendable type that is serialized inside this delimited container.
         Its bit length set, extent, and other layout-specific entities are computed as if it was a final type.
         """
         return self._inner
@@ -526,11 +537,11 @@ class DelimitedType(CompositeType):
     def extent(self) -> int:
         """
         The extent of a delimited type can be specified explicitly via ``@extent`` (provided that it is not less
-        than the minimum); otherwise, it defaults to ``floor(minimum * 3/2)`` padded to byte.
+        than the minimum); otherwise, it defaults to ``floor(inner_type.extent * 3/2)`` padded to byte.
 
         Optional optimization hint: if the objective is to allocate buffer memory for constructing a new
         serialized representation locally, then it may be beneficial to use the extent of the inner type
-        rather than this one because it may be smaller. This is not safe for deserialization.
+        rather than this one because it may be smaller. This is not safe for deserialization, of course.
         """
         return self._extent
 
@@ -550,14 +561,10 @@ class DelimitedType(CompositeType):
     @property
     def delimiter_header_type(self) -> UnsignedIntegerType:
         """
-        Non-final composites are serialized into opaque containers like ``uint8[<=(max(bit_length_set) + 7) // 8]``,
-        where the implicit length prefix is of this type.
-        Their bit length set is also computed as if it was an array as declared above,
-        in order to prevent the containing definitions from making assumptions about the offsets of the following fields
-        that might not survive the evolution of the type (e.g., version 1 may be 64 bits long, version 2 might be
-        56 bits long).
+        The type of the integer prefix field that encodes the size of the serialized representation [in bytes]
+        of the :attr:`inner_type`.
         """
-        bit_length = self.DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
+        bit_length = self._DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
         # This is to prevent the delimiter header from breaking the alignment of the following composite.
         bit_length = max(bit_length, self.alignment_requirement)
         return UnsignedIntegerType(bit_length, UnsignedIntegerType.CastMode.SATURATED)
