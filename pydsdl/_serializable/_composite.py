@@ -429,7 +429,7 @@ class StructureType(CompositeType):
         """See the base class."""
         base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
         for f in self.fields:
-            base_offset.pad_to_alignment(f.data_type.alignment_requirement)
+            base_offset = base_offset.pad_to_alignment(f.data_type.alignment_requirement)
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
             base_offset += f.data_type.bit_length_set
 
@@ -452,7 +452,7 @@ class StructureType(CompositeType):
         """
         bls = BitLengthSet()
         for t in field_types:
-            bls.pad_to_alignment(t.alignment_requirement)
+            bls = bls.pad_to_alignment(t.alignment_requirement)
             bls += t.bit_length_set
         return bls or BitLengthSet(0)  # Empty bit length sets are forbidden
 
@@ -1112,3 +1112,23 @@ def _unittest_field_iterators() -> None:
                     deprecated=False,
                     fixed_port_id=None,
                     source_file_path='').iterate_fields_with_offsets()
+
+    # Check the auto-padding logic.
+    e = StructureType(name='e.E',
+                      version=Version(0, 1),
+                      attributes=[],
+                      deprecated=False,
+                      fixed_port_id=None,
+                      source_file_path='')
+    validate_iterator(e, [])
+    a = make_type(StructureType, [
+        Field(UnsignedIntegerType(3, PrimitiveType.CastMode.TRUNCATED), 'x'),
+        Field(e, 'y'),
+        Field(UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED), 'z'),
+    ])
+    assert a.bit_length_set == {16}
+    validate_iterator(a, [
+        ('x', {0}),
+        ('y', {8}),  # Padded out!
+        ('z', {8}),
+    ])

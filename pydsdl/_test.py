@@ -27,7 +27,7 @@ def _parse_definition(definition:         _dsdl_definition.DSDLDefinition,
                       lookup_definitions: typing.Sequence[_dsdl_definition.DSDLDefinition]) \
         -> _serializable.CompositeType:
     return definition.read(lookup_definitions,
-                           print_output_handler=lambda *_: None,
+                           print_output_handler=lambda line, text: print('Output from line %d:' % line, text),
                            allow_unregulated_fixed_port_id=False)
 
 
@@ -743,6 +743,33 @@ def _unittest_assert() -> None:
         [
             _define('ns/J.1.0.uavcan', 'uint8 foo\n@extent 64'),
             _define('ns/K.1.0.uavcan', 'uint8 foo\n@final'),
+        ]
+    )
+
+    # Alignment
+    _parse_definition(
+        _define(
+            'ns/L.1.0.uavcan',
+            dedent('''
+            @assert _offset_ == {0}
+            uint3 a
+            @assert _offset_ == {3}
+            N.1.0 nothing
+            @print _offset_
+            @assert _offset_ == {8}   # Aligned!
+            uint5 b
+            @assert _offset_ == {13}
+            N.1.0[3] array_of_nothing
+            @assert _offset_ == {16}  # Aligned!
+            bool c
+            @assert _offset_ == {17}
+            M.1.0 variable
+            @assert _offset_ == 32 + {24, 32, 40}  # Aligned; variability due to extensibility (non-finality)
+            ''')
+        ),
+        [
+            _define('ns/M.1.0.uavcan', '@extent 16'),
+            _define('ns/N.1.0.uavcan', '@final'),
         ]
     )
 
