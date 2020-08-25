@@ -66,8 +66,7 @@ class DataSchemaBuilder:
         # only the total offset (i.e., total size) is defined.
         self._bit_length_computed_at_least_once = True
         ty = _serializable.UnionType if self.union else _serializable.StructureType
-        assert isinstance(ty, (_serializable.UnionType, _serializable.StructureType))
-        out = ty.aggregate_bit_length_sets([f.data_type for f in self.fields])
+        out = ty.aggregate_bit_length_sets([f.data_type for f in self.fields])  # type: ignore
         assert isinstance(out, _bit_length_set.BitLengthSet) and len(out) > 0
         return out
 
