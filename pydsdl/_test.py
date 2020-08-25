@@ -766,6 +766,7 @@ def _unittest_parse_namespace() -> None:
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'), b'/my/path')  # type: ignore
 
     with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
+        # noinspection PyTypeChecker
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [b'/my/path'])  # type: ignore
 
     assert print_output is not None

@@ -609,7 +609,7 @@ class ServiceType(CompositeType):
             self.extent = int(extent) if extent is not None else None
             self.is_final = bool(is_final)
             self.is_union = bool(is_union)
-            if self.is_final and self.extent is not None:
+            if self.is_final and self.extent is not None:  # pragma: no cover
                 raise ValueError('API misuse: cannot set the extent on a final type')
 
         def construct_composite(self,
@@ -795,7 +795,34 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert s['']        # Padding fields are not accessible
     assert hash(s) == hash(s)
-    del s
+
+    d = DelimitedType(s, None)
+    assert d.inner_type is s
+    assert d.attributes == d.inner_type.attributes
+    with raises(KeyError):
+        assert d['c']
+    assert hash(d) == hash(d)
+    assert d.delimiter_header_type.bit_length == 32
+    assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.extent == d.inner_type.extent * 3 // 2
+
+    d = DelimitedType(s, 256)
+    assert hash(d) == hash(d)
+    assert d.delimiter_header_type.bit_length == 32
+    assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.extent == 256
+
+    d = DelimitedType(s, s.extent)  # Minimal extent
+    assert hash(d) == hash(d)
+    assert d.delimiter_header_type.bit_length == 32
+    assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.extent == s.extent == d.inner_type.extent
+
+    with raises(InvalidExtentError):
+        assert DelimitedType(s, 255)  # Unaligned extent
+
+    with raises(InvalidExtentError):
+        assert DelimitedType(s, 8)  # Extent too small
 
     def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
@@ -809,10 +836,19 @@ def _unittest_composite_types() -> None:
                          fixed_port_id=None,
                          source_file_path='')
 
-    assert try_union_fields([
+    u = try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {24}
+    ])
+    assert u.bit_length_set == {24}
+    assert u.extent == 24
+    assert DelimitedType(u, None).extent == 40
+    assert DelimitedType(u, None).bit_length_set == {32, 40, 48, 56, 64, 72}
+    assert DelimitedType(u, 24).extent == 24
+    assert DelimitedType(u, 24).bit_length_set == {32, 40, 48, 56}
+    assert DelimitedType(u, 32).extent == 32
+    assert DelimitedType(u, 32).bit_length_set == {32, 40, 48, 56, 64}
+    assert DelimitedType(u, 800).extent == 800
 
     assert try_union_fields(
         [
@@ -851,10 +887,18 @@ def _unittest_composite_types() -> None:
                              fixed_port_id=None,
                              source_file_path='')
 
-    assert try_struct_fields([
+    s = try_struct_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {32}
+    ])
+    assert s.bit_length_set == {32}
+    assert s.extent == 32
+    assert DelimitedType(s, None).extent == 48
+    assert DelimitedType(s, None).bit_length_set == {32, 40, 48, 56, 64, 72, 80}
+    assert DelimitedType(s, 32).extent == 32
+    assert DelimitedType(s, 32).bit_length_set == {32, 40, 48, 56, 64}
+    assert DelimitedType(s, 40).extent == 40
+    assert DelimitedType(s, 40).bit_length_set == {32, 40, 48, 56, 64, 72}
 
     assert try_struct_fields([]).bit_length_set == {0}   # Empty sets forbidden
 
@@ -916,6 +960,27 @@ def _unittest_field_iterators() -> None:
         }),
     ])
 
+    d = DelimitedType(a, None)
+    validate_iterator(d, [
+        ('a', {32 + 0}),
+        ('b', {32 + 10}),
+        ('c', {32 + 11}),
+        ('d', {
+            32 + 11 + 8 + 32 * 0,
+            32 + 11 + 8 + 32 * 1,
+            32 + 11 + 8 + 32 * 2,
+        }),
+        ('', {
+            32 + 11 + 8 + 32 * 0 + 32 * 7,
+            32 + 11 + 8 + 32 * 1 + 32 * 7,
+            32 + 11 + 8 + 32 * 2 + 32 * 7,
+        }),
+    ])
+    print('d.bit_length_set', d.bit_length_set)
+    assert d.bit_length_set == BitLengthSet({
+        32 + x for x in range(((11 + 8 + 32 * 2 + 32 * 7) + 7) // 8 * 8 * 3 // 2 + 1)
+    }).pad_to_alignment(8)
+
     a_bls_options = [
         11 + 8 + 32 * 0 + 32 * 7 + 3,
         11 + 8 + 32 * 1 + 32 * 7 + 3,
@@ -946,6 +1011,31 @@ def _unittest_field_iterators() -> None:
             16 + 11 + 8 + 32 * 2 + 32 * 7,
         }),
     ], BitLengthSet({1, 16}))  # 1 becomes 8 due to padding.
+
+    # Wrap the above into a delimited type with a manually specified extent.
+    d = DelimitedType(a, 400)
+    validate_iterator(d, [
+        ('a', {32 + 8, 32 + 16}),
+        ('b', {32 + 8 + 10, 32 + 16 + 10}),
+        ('c', {32 + 8 + 11, 32 + 16 + 11}),
+        ('d', {
+            32 + 8 + 11 + 8 + 32 * 0,
+            32 + 8 + 11 + 8 + 32 * 1,
+            32 + 8 + 11 + 8 + 32 * 2,
+            32 + 16 + 11 + 8 + 32 * 0,
+            32 + 16 + 11 + 8 + 32 * 1,
+            32 + 16 + 11 + 8 + 32 * 2,
+        }),
+        ('', {
+            32 + 8 + 11 + 8 + 32 * 0 + 32 * 7,
+            32 + 8 + 11 + 8 + 32 * 1 + 32 * 7,
+            32 + 8 + 11 + 8 + 32 * 2 + 32 * 7,
+            32 + 16 + 11 + 8 + 32 * 0 + 32 * 7,
+            32 + 16 + 11 + 8 + 32 * 1 + 32 * 7,
+            32 + 16 + 11 + 8 + 32 * 2 + 32 * 7,
+        }),
+    ], BitLengthSet({1, 16}))  # 1 becomes 8 due to padding.
+    assert d.bit_length_set == BitLengthSet({(32 + x + 7) // 8 * 8 for x in range(400 + 1)})
 
     b = make_type(StructureType, [
         Field(a, 'z'),

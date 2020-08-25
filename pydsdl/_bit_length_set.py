@@ -376,3 +376,16 @@ def _unittest_bit_length_set() -> None:
     with raises(TypeError):
         s = BitLengthSet([4, 5, 6])
         s += '1'
+
+    with raises(TypeError):
+        assert '1' | BitLengthSet([4, 5, 6])
+
+    with raises(TypeError):
+        assert BitLengthSet([4, 5, 6]) | '1'
+
+    with raises(TypeError):
+        s = BitLengthSet([4, 5, 6])
+        s |= '1'
+
+    with raises(ValueError):
+        BitLengthSet([4, 5, 6]).pad_to_alignment(0)
