@@ -15,6 +15,5 @@ before_script:
 script:
   - ./test.sh
 
-# TODO: re-enable when releasing.
-#  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
-#  - ./demo.py dsdl-test/uavcan
+  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test --branch beta # TODO: drop '--branch beta'
+  - python -c "import pydsdl; pydsdl.read_namespace('dsdl-test/uavcan', [])"

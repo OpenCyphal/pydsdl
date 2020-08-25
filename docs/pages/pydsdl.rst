@@ -6,6 +6,8 @@ PyDSDL usage
 The entirety of the library API is exposed at the top level as ``pydsdl.*``.
 There are no usable submodules.
 
+You can find a practical usage example in the Nunavut code generation library that uses PyDSDL as the frontend.
+
 .. contents:: Contents
    :local:
 
