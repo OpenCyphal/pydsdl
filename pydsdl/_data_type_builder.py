@@ -171,7 +171,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             lookup_nss = set(x.root_namespace for x in self._lookup_definitions)
             subroot_ns = self._definition.name_components[1] if len(self._definition.name_components) > 2 else None
             error_description = 'Data type %s.%d.%d could not be found in the following root namespaces: %s. ' % \
-                                (full_name, version.major, version.minor, lookup_nss)
+                                (full_name, version.major, version.minor, lookup_nss or '(empty set)')
             if requested_ns not in lookup_nss and requested_ns == subroot_ns:
                 error_description += ' Did you mean to use the directory %r instead of %r?' % (
                     os.path.join(self._definition.root_namespace_path, subroot_ns),

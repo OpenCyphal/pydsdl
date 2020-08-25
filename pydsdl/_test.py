@@ -490,6 +490,58 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '---')
 
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*final.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @extent 128
+                   @final
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*final.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @final
+                   @extent 128
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*final.*expression.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @final 12345678
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*expression.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @extent
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   @extent 8  # Too small
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   @extent {16}  # Wrong type
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*attribute.*'):
+        standalone('vendor/finality/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   @extent 64
+                   int8 b
+                   '''))
+
 
 @_in_n_out
 def _unittest_print() -> None:
@@ -559,6 +611,8 @@ def _unittest_assert() -> None:
             @assert truncated uint64._bit_length_ == {64}
             @assert uint64._bit_length_ == {64}
             @assert Array.1.0._bit_length_.max == 8 + 8 + 8
+            @assert Array.1.0._extent_ == 8 + 8 + 8
+            @assert Array.1.0._extent_ == Array.1.0._bit_length_.max
             ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo\n@final')
@@ -674,6 +728,23 @@ def _unittest_assert() -> None:
                 ''')),
             []
         )
+
+    # Extent verification
+    _parse_definition(
+        _define(
+            'ns/I.1.0.uavcan',
+            dedent('''
+            @assert J.1.0._extent_ == 64
+            @assert J.1.0._bit_length_ == {0, 1, 2, 3, 4, 5, 6, 7, 8} * 8 + 32
+            @assert K.1.0._extent_ == 8
+            @assert K.1.0._bit_length_ == {8}
+            ''')
+        ),
+        [
+            _define('ns/J.1.0.uavcan', 'uint8 foo\n@extent 64'),
+            _define('ns/K.1.0.uavcan', 'uint8 foo\n@final'),
+        ]
+    )
 
 
 def _unittest_parse_namespace() -> None:
@@ -1144,6 +1215,30 @@ def _unittest_repeated_directives() -> None:
                     @union
                     int8 a
                     float16 b
+                    ''')),
+            []
+        )
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*final.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    dedent('''
+                    @final
+                    @final
+                    int8 a
+                    float16 b
+                    ''')),
+            []
+        )
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*already set.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    dedent('''
+                    int8 a
+                    float16 b
+                    @extent 256
+                    @extent 800
                     ''')),
             []
         )
