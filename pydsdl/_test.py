@@ -1094,6 +1094,14 @@ def _unittest_parse_namespace_versioning() -> None:
         'ns.Spartans.0.1',
     ]
 
+    _define('ns/ExtentConsistency.1.0.uavcan', 'uint8 a\n@extent 128')
+    _define('ns/ExtentConsistency.1.1.uavcan', 'uint8 a\nuint8 b\n@extent 128')
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/ExtentConsistency.1.2.uavcan', 'uint8 a\nuint8 b\nuint8 c\n@extent 256')  # Extent is different
+    with raises(_namespace.ExtentConsistencyError, match='(?i).*extent.*128.*version.*'):
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+
 
 def _unittest_parse_namespace_faults() -> None:
     try:
