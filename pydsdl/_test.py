@@ -96,15 +96,18 @@ def _unittest_simple() -> None:
 
     p = _parse_definition(abc, [])
     print('Parsed:', p)
-    assert isinstance(p, _serializable.StructureType)
+    assert isinstance(p, _serializable.DelimitedType)
+    assert isinstance(p.inner_type, _serializable.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith(os.path.join('vendor', 'nested', '7000.Abc.1.2.uavcan'))
     assert p.source_file_path == abc.file_path
     assert p.fixed_port_id == 7000
     assert p.deprecated
     assert p.version == (1, 2)
-    assert min(p.bit_length_set) == 16
-    assert max(p.bit_length_set) == 16 + 64 * 32
+    assert min(p.inner_type.bit_length_set) == 16
+    assert max(p.inner_type.bit_length_set) == 16 + 64 * 32
+    assert min(p.bit_length_set) == 32
+    assert max(p.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
     assert len(p.attributes) == 3
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
@@ -123,17 +126,18 @@ def _unittest_simple() -> None:
 
     empty_new = _define(
         'vendor/nested/Empty.255.255.uavcan',
-        ''''''
+        '''@final'''
     )
 
     empty_old = _define(
         'vendor/nested/Empty.255.254.uavcan',
-        ''''''
+        '''@final'''
     )
 
     constants = _define(
         'another/Constants.5.0.uavcan',
         dedent('''
+        @final
         float64 PI = 3.1415926535897932384626433
         ''')
     )
@@ -146,7 +150,9 @@ def _unittest_simple() -> None:
         vendor.nested.Empty.255.255 new_empty_implicit
         vendor.nested.Empty.255.255 new_empty_explicit
         vendor.nested.Empty.255.254 old_empty
+        @extent 32
         -----------------------------------
+        @final                       # RESPONSE FINAL REQUEST NOT
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
         ''')
@@ -172,7 +178,8 @@ def _unittest_simple() -> None:
     assert p.fields[0].name == 'request'
     assert p.fields[1].name == 'response'
     req, res = [x.data_type for x in p.fields]
-    assert isinstance(req, _serializable.UnionType)
+    assert isinstance(req, _serializable.DelimitedType)
+    assert isinstance(req.inner_type, _serializable.UnionType)
     assert isinstance(res, _serializable.StructureType)
     assert req.full_name == 'another.Service.Request'
     assert res.full_name == 'another.Service.Response'
@@ -181,11 +188,13 @@ def _unittest_simple() -> None:
 
     assert len(req.constants) == 0
     assert len(req.fields) == 3
-    assert req.number_of_variants == 3
+    # noinspection PyUnresolvedReferences
+    assert req.inner_type.number_of_variants == 3
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
-    assert req.bit_length_set == 8   # Remember this is a union
+    assert req.bit_length_set == {32, 32 + 8, 32 + 16, 32 + 24, 32 + 32}  # Delimited container, @extent
+    assert req.inner_type.bit_length_set == 8                             # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
@@ -208,8 +217,9 @@ def _unittest_simple() -> None:
     assert res.deprecated
     assert not res.has_fixed_port_id
     assert res.version == (0, 1)
-    assert min(res.bit_length_set) == 16
-    assert max(res.bit_length_set) == 16 + 64 * 32
+    # This is a final type, so we get the real BLS, but we mustn't forget about the non-final nested field!
+    assert min(res.bit_length_set) == 32                                            # Just the delimiter header
+    assert max(res.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
 
     t = res.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
@@ -217,7 +227,8 @@ def _unittest_simple() -> None:
     assert t.version == (5, 0)
 
     t = res.fields[1].data_type
-    assert isinstance(t, _serializable.StructureType)
+    assert isinstance(t, _serializable.DelimitedType)
+    assert isinstance(t.inner_type, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
@@ -235,6 +246,7 @@ def _unittest_simple() -> None:
         'another/Union.5.9.uavcan',
         dedent('''
         @union
+        @final
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
@@ -258,7 +270,7 @@ def _unittest_simple() -> None:
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
     assert min(p.bit_length_set) == 8
-    assert max(p.bit_length_set) == 8 + 8 + 255
+    assert max(p.bit_length_set) == 8 + 8 + 255 + 1  # The last +1 is the padding to byte.
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
@@ -549,7 +561,7 @@ def _unittest_assert() -> None:
             @assert Array.1.0._bit_length_.max == 8 + 8 + 8
             ''')),
         [
-            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
+            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo\n@final')
         ]
     )
 
@@ -690,6 +702,7 @@ def _unittest_parse_namespace() -> None:
         uint8[<256] a
         @assert _offset_.min == 8
         @assert _offset_.max == 2048
+        @final
         """)
     )
 

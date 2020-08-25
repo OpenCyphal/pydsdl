@@ -124,6 +124,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             handler = {
                 'print':      self._on_print_directive,
                 'assert':     self._on_assert_directive,
+                'extent':     self._on_extent_directive,
+                'final':      self._on_final_directive,
                 'union':      self._on_union_directive,
                 'deprecated': self._on_deprecated_directive,
             }[directive_name]
