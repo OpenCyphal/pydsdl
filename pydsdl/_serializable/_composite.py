@@ -182,14 +182,7 @@ class CompositeType(SerializableType):
         That is, final types expose their internal structure; for example, a type that contains a single field
         of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
         """
-        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
-        att = '_1000242406'
-        if not hasattr(self, att):
-            agr = self._bit_length_sets_aggregator
-            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
-        out = getattr(self, att)
-        assert isinstance(out, BitLengthSet)
-        return out
+        raise NotImplementedError
 
     @property
     def deprecated(self) -> bool:
@@ -290,16 +283,6 @@ class CompositeType(SerializableType):
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
-    @property
-    @abc.abstractmethod
-    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
-        """
-        Construct the mapping from a sequence of field types to the aggregate bit length set
-        for the current composite disregarding the outer padding.
-        The aggregation policy is dependent on the kind of the type: either union or struct.
-        """
-        raise NotImplementedError
-
     def __getitem__(self, attribute_name: str) -> Attribute:
         """
         Allows the caller to retrieve an attribute by name.
@@ -365,6 +348,17 @@ class UnionType(CompositeType):
                                                    PrimitiveType.CastMode.TRUNCATED)
 
     @property
+    def bit_length_set(self) -> BitLengthSet:
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_8579621435'
+        if not hasattr(self, att):
+            agr = self.aggregate_bit_length_sets
+            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
+
+    @property
     def number_of_variants(self) -> int:
         return len(self.fields)
 
@@ -384,10 +378,6 @@ class UnionType(CompositeType):
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
             assert base_offset.is_aligned_at(f.data_type.alignment_requirement)
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
-
-    @property
-    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
-        return self.aggregate_bit_length_sets
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
@@ -419,16 +409,14 @@ class UnionType(CompositeType):
 
     @staticmethod
     def _compute_tag_bit_length(field_types: typing.Sequence[SerializableType]) -> int:
-        if len(field_types) > 1:
-            unaligned_tag_bit_length = (len(field_types) - 1).bit_length()
-            tag_bit_length = 2 ** math.ceil(math.log2(max(SerializableType.BITS_PER_BYTE, unaligned_tag_bit_length)))
-            # This is to prevent the tag from breaking the alignment of the following variant.
-            tag_bit_length = max([tag_bit_length] + [x.alignment_requirement for x in field_types])
-            assert isinstance(tag_bit_length, int)
-            assert tag_bit_length in {8, 16, 32, 64}
-            return tag_bit_length
-        else:
-            raise ValueError('Invalid number of variants: ' + repr(len(field_types)))
+        assert len(field_types) > 1, 'Internal API misuse'
+        unaligned_tag_bit_length = (len(field_types) - 1).bit_length()
+        tag_bit_length = 2 ** math.ceil(math.log2(max(SerializableType.BITS_PER_BYTE, unaligned_tag_bit_length)))
+        # This is to prevent the tag from breaking the alignment of the following variant.
+        tag_bit_length = max([tag_bit_length] + [x.alignment_requirement for x in field_types])
+        assert isinstance(tag_bit_length, int)
+        assert tag_bit_length in {8, 16, 32, 64}
+        return tag_bit_length
 
 
 class StructureType(CompositeType):
@@ -446,8 +434,15 @@ class StructureType(CompositeType):
             base_offset += f.data_type.bit_length_set
 
     @property
-    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
-        return self.aggregate_bit_length_sets
+    def bit_length_set(self) -> BitLengthSet:
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_7953874601'
+        if not hasattr(self, att):
+            agr = self.aggregate_bit_length_sets
+            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
@@ -581,10 +576,6 @@ class DelimitedType(CompositeType):
         base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
-    @property
-    def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
-        return self.inner_type._bit_length_sets_aggregator
-
     def __repr__(self) -> str:
         return '%s(inner=%r, extent=%r)' % (self.__class__.__name__, self.inner_type, self.extent)
 
@@ -662,6 +653,10 @@ class ServiceType(CompositeType):
         assert self.response_type.parent_service is self
 
     @property
+    def bit_length_set(self) -> BitLengthSet:
+        raise TypeError('Service types are not directly serializable. Use either request or response.')
+
+    @property
     def request_type(self) -> CompositeType:
         """The type of the request schema."""
         return self._request_type
@@ -675,11 +670,6 @@ class ServiceType(CompositeType):
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """Always raises a :class:`TypeError`."""
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
-
-    @property
-    def _bit_length_sets_aggregator(self) \
-            -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:  # pragma: no cover
-        raise TypeError('Service types are not directly serializable. Use either request or response.')
 
 
 def _unittest_composite_types() -> None:
