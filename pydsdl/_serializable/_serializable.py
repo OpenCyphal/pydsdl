@@ -4,7 +4,6 @@
 #
 
 import abc
-import typing
 from .. import _expression
 from .. import _error
 from .._bit_length_set import BitLengthSet

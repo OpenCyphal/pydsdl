@@ -182,8 +182,14 @@ class CompositeType(SerializableType):
         That is, final types expose their internal structure; for example, a type that contains a single field
         of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
         """
-        return self._bit_length_sets_aggregator([f.data_type for f in self.fields]).\
-            pad_to_alignment(self.alignment_requirement)
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_1000242406'
+        if not hasattr(self, att):
+            agr = self._bit_length_sets_aggregator
+            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
 
     @property
     def deprecated(self) -> bool:
@@ -308,7 +314,7 @@ class CompositeType(SerializableType):
 
     def __repr__(self) -> str:
         return (
-            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, extent=%r, '
+            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, '
             'deprecated=%r, fixed_port_id=%r)'
         ) % (
             self.__class__.__name__,
@@ -317,7 +323,6 @@ class CompositeType(SerializableType):
             self.fields,
             self.constants,
             self.alignment_requirement,
-            self.extent,
             self.deprecated,
             self.fixed_port_id,
         )
@@ -547,8 +552,15 @@ class DelimitedType(CompositeType):
         For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
         ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
         """
-        return BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) +\
-            self.delimiter_header_type.bit_length
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_3476583631'
+        if not hasattr(self, att):
+            x = BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) + \
+                self.delimiter_header_type.bit_length
+            setattr(self, att, x)
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
 
     @property
     def delimiter_header_type(self) -> UnsignedIntegerType:
@@ -569,6 +581,7 @@ class DelimitedType(CompositeType):
         base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
+    @property
     def _bit_length_sets_aggregator(self) -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:
         return self.inner_type._bit_length_sets_aggregator
 
@@ -663,6 +676,7 @@ class ServiceType(CompositeType):
         """Always raises a :class:`TypeError`."""
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
 
+    @property
     def _bit_length_sets_aggregator(self) \
             -> typing.Callable[[typing.Sequence[SerializableType]], BitLengthSet]:  # pragma: no cover
         raise TypeError('Service types are not directly serializable. Use either request or response.')
@@ -804,20 +818,20 @@ def _unittest_composite_types() -> None:
         [
             UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
             SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-        ] * 1000
+        ] * 257
     ).bit_length_set == {16 + 16}
 
     assert try_union_fields(
         [
             UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
             SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-        ] * 1000000
+        ] * 32769
     ).bit_length_set == {32 + 16}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     small = VariableLengthArrayType(tu8, 2)
-    outer = FixedLengthArrayType(small, 2)   # bit length values: {4, 12, 20, 28, 36}
+    outer = FixedLengthArrayType(small, 2)   # unpadded bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
     assert try_union_fields([
