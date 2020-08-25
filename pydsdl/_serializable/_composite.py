@@ -171,7 +171,7 @@ class CompositeType(SerializableType):
         This value is always at least as large as the sum of maximum bit lengths of all fields padded to one byte.
         If the type is final, its extent equals ``max(bit_length_set)``.
         """
-        return max(self.bit_length_set)
+        return max(self.bit_length_set or {0})
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -405,10 +405,11 @@ class UnionType(CompositeType):
         if len(ms) == 1:
             return BitLengthSet(ms[0])
 
+        tbl = UnionType._compute_tag_bit_length(field_types)
         out = BitLengthSet()
         for s in ms:
-            out |= s
-        out += UnionType._compute_tag_bit_length(field_types)  # Add the union tag
+            out |= s + tbl
+        assert len(out) > 0, 'Empty sets forbidden'
         return out
 
     @staticmethod
@@ -453,7 +454,7 @@ class StructureType(CompositeType):
         for t in field_types:
             bls.pad_to_alignment(t.alignment_requirement)
             bls += t.bit_length_set
-        return bls
+        return bls or BitLengthSet(0)  # Empty bit length sets are forbidden
 
 
 class DelimitedType(CompositeType):
@@ -513,7 +514,8 @@ class DelimitedType(CompositeType):
         assert len(self.bit_length_set) > 0
         assert self.bit_length_set.is_aligned_at_byte()
         assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
-        assert self.extent >= max(self.bit_length_set) - self.delimiter_header_type.bit_length
+        assert not self.bit_length_set or \
+            self.extent >= max(self.bit_length_set) - self.delimiter_header_type.bit_length
 
     @property
     def inner_type(self) -> CompositeType:
@@ -905,30 +907,31 @@ def _unittest_field_iterators() -> None:
         11 + 8 + 32 * 1 + 32 * 7 + 3,
         11 + 8 + 32 * 2 + 32 * 7 + 3,
     ]
-    assert a.bit_length_set == BitLengthSet(a_bls_options)
+    assert a.bit_length_set == BitLengthSet(a_bls_options).pad_to_alignment(8)
 
-    # Testing "a" again, this time with non-zero base offset
+    # Testing "a" again, this time with non-zero base offset.
+    # The first base offset element is one, but it is padded to byte, so it becomes 8.
     validate_iterator(a, [
-        ('a', {1, 16}),
-        ('b', {1 + 10, 16 + 10}),
-        ('c', {1 + 11, 16 + 11}),
+        ('a', {8, 16}),
+        ('b', {8 + 10, 16 + 10}),
+        ('c', {8 + 11, 16 + 11}),
         ('d', {
-            1 + 11 + 8 + 32 * 0,
-            1 + 11 + 8 + 32 * 1,
-            1 + 11 + 8 + 32 * 2,
+            8 + 11 + 8 + 32 * 0,
+            8 + 11 + 8 + 32 * 1,
+            8 + 11 + 8 + 32 * 2,
             16 + 11 + 8 + 32 * 0,
             16 + 11 + 8 + 32 * 1,
             16 + 11 + 8 + 32 * 2,
         }),
         ('', {
-            1 + 11 + 8 + 32 * 0 + 32 * 7,
-            1 + 11 + 8 + 32 * 1 + 32 * 7,
-            1 + 11 + 8 + 32 * 2 + 32 * 7,
+            8 + 11 + 8 + 32 * 0 + 32 * 7,
+            8 + 11 + 8 + 32 * 1 + 32 * 7,
+            8 + 11 + 8 + 32 * 2 + 32 * 7,
             16 + 11 + 8 + 32 * 0 + 32 * 7,
             16 + 11 + 8 + 32 * 1 + 32 * 7,
             16 + 11 + 8 + 32 * 2 + 32 * 7,
         }),
-    ], BitLengthSet({1, 16}))
+    ], BitLengthSet({1, 16}))  # 1 becomes 8 due to padding.
 
     b = make_type(StructureType, [
         Field(a, 'z'),
@@ -936,53 +939,54 @@ def _unittest_field_iterators() -> None:
         Field(UnsignedIntegerType(6, saturated), 'x'),
     ])
 
+    a_bls_padded = [((x + 7) // 8) * 8 for x in a_bls_options]
     validate_iterator(b, [
         ('z', {0}),
         ('y', {
-            a_bls_options[0],
-            a_bls_options[1],
-            a_bls_options[2],
+            a_bls_padded[0],
+            a_bls_padded[1],
+            a_bls_padded[2],
         }),
         ('x', {  # The lone "+2" is for the variable-length array's implicit length field
             # First length option of z
-            a_bls_options[0] + 8 + a_bls_options[0] * 0,  # suka
-            a_bls_options[0] + 8 + a_bls_options[1] * 0,
-            a_bls_options[0] + 8 + a_bls_options[2] * 0,
-            a_bls_options[0] + 8 + a_bls_options[0] * 1,
-            a_bls_options[0] + 8 + a_bls_options[1] * 1,
-            a_bls_options[0] + 8 + a_bls_options[2] * 1,
-            a_bls_options[0] + 8 + a_bls_options[0] * 2,
-            a_bls_options[0] + 8 + a_bls_options[1] * 2,
-            a_bls_options[0] + 8 + a_bls_options[2] * 2,
+            a_bls_padded[0] + 8 + a_bls_padded[0] * 0,  # suka
+            a_bls_padded[0] + 8 + a_bls_padded[1] * 0,
+            a_bls_padded[0] + 8 + a_bls_padded[2] * 0,
+            a_bls_padded[0] + 8 + a_bls_padded[0] * 1,
+            a_bls_padded[0] + 8 + a_bls_padded[1] * 1,
+            a_bls_padded[0] + 8 + a_bls_padded[2] * 1,
+            a_bls_padded[0] + 8 + a_bls_padded[0] * 2,
+            a_bls_padded[0] + 8 + a_bls_padded[1] * 2,
+            a_bls_padded[0] + 8 + a_bls_padded[2] * 2,
             # Second length option of z
-            a_bls_options[1] + 8 + a_bls_options[0] * 0,
-            a_bls_options[1] + 8 + a_bls_options[1] * 0,
-            a_bls_options[1] + 8 + a_bls_options[2] * 0,
-            a_bls_options[1] + 8 + a_bls_options[0] * 1,
-            a_bls_options[1] + 8 + a_bls_options[1] * 1,
-            a_bls_options[1] + 8 + a_bls_options[2] * 1,
-            a_bls_options[1] + 8 + a_bls_options[0] * 2,
-            a_bls_options[1] + 8 + a_bls_options[1] * 2,
-            a_bls_options[1] + 8 + a_bls_options[2] * 2,
+            a_bls_padded[1] + 8 + a_bls_padded[0] * 0,
+            a_bls_padded[1] + 8 + a_bls_padded[1] * 0,
+            a_bls_padded[1] + 8 + a_bls_padded[2] * 0,
+            a_bls_padded[1] + 8 + a_bls_padded[0] * 1,
+            a_bls_padded[1] + 8 + a_bls_padded[1] * 1,
+            a_bls_padded[1] + 8 + a_bls_padded[2] * 1,
+            a_bls_padded[1] + 8 + a_bls_padded[0] * 2,
+            a_bls_padded[1] + 8 + a_bls_padded[1] * 2,
+            a_bls_padded[1] + 8 + a_bls_padded[2] * 2,
             # Third length option of z
-            a_bls_options[2] + 8 + a_bls_options[0] * 0,
-            a_bls_options[2] + 8 + a_bls_options[1] * 0,
-            a_bls_options[2] + 8 + a_bls_options[2] * 0,
-            a_bls_options[2] + 8 + a_bls_options[0] * 1,
-            a_bls_options[2] + 8 + a_bls_options[1] * 1,
-            a_bls_options[2] + 8 + a_bls_options[2] * 1,
-            a_bls_options[2] + 8 + a_bls_options[0] * 2,
-            a_bls_options[2] + 8 + a_bls_options[1] * 2,
-            a_bls_options[2] + 8 + a_bls_options[2] * 2,
+            a_bls_padded[2] + 8 + a_bls_padded[0] * 0,
+            a_bls_padded[2] + 8 + a_bls_padded[1] * 0,
+            a_bls_padded[2] + 8 + a_bls_padded[2] * 0,
+            a_bls_padded[2] + 8 + a_bls_padded[0] * 1,
+            a_bls_padded[2] + 8 + a_bls_padded[1] * 1,
+            a_bls_padded[2] + 8 + a_bls_padded[2] * 1,
+            a_bls_padded[2] + 8 + a_bls_padded[0] * 2,
+            a_bls_padded[2] + 8 + a_bls_padded[1] * 2,
+            a_bls_padded[2] + 8 + a_bls_padded[2] * 2,
         }),
     ])
 
-    # Ensuring the equivalency between bit length and bit offset
+    # Ensuring the equivalency between bit length and aligned bit offset
     b_offset = BitLengthSet()
     for f in b.fields:
         b_offset += f.data_type.bit_length_set
     print('b_offset:', b_offset)
-    assert b_offset == b.bit_length_set
+    assert b_offset.pad_to_alignment(8) == b.bit_length_set
     assert not b_offset.is_aligned_at_byte()
     assert not b_offset.is_aligned_at(32)
 
@@ -1002,9 +1006,9 @@ def _unittest_field_iterators() -> None:
     ], BitLengthSet(8))
 
     validate_iterator(c, [
-        ('foo', {0 + 8, 4 + 8, 8 + 8}),
-        ('bar', {0 + 8, 4 + 8, 8 + 8}),
-    ], BitLengthSet({0, 4, 8}))
+        ('foo', {0 + 8, 8 + 8}),
+        ('bar', {0 + 8, 8 + 8}),
+    ], BitLengthSet({0, 4, 8}))  # The option 4 is eliminated due to padding to byte, so we're left with {0, 8}.
 
     with raises(TypeError, match='.*request or response.*'):
         ServiceType(name='ns.S',

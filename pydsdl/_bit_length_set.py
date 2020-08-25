@@ -108,8 +108,8 @@ class BitLengthSet:
         else:
             assert r >= 2
             out = BitLengthSet(((x + r - 1) // r) * r for x in self)
-            assert 0 <= min(out) - min(self) < r
-            assert 0 <= max(out) - max(self) < r
+            assert not out or 0 <= min(out) - min(self) < r
+            assert not out or 0 <= max(out) - max(self) < r
             assert len(out) <= len(self)
             return out
 
@@ -330,9 +330,6 @@ class BitLengthSet:
         BitLengthSet({7, 16, 42, 918})
         """
         return type(self).__name__ + '(' + str(self or '') + ')'
-
-    def __hash__(self) -> int:
-        return hash(self._value)
 
 
 _OPERAND_TYPES = BitLengthSet, set, int
