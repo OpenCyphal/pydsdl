@@ -18,7 +18,7 @@ class DataSchemaBuilder:
         self._fields = []       # type: typing.List[_serializable.Field]
         self._constants = []    # type: typing.List[_serializable.Constant]
         self._extent = None     # type: typing.Optional[int]
-        self._is_final = False
+        self._is_sealed = False
         self._is_union = False
         self._bit_length_computed_at_least_once = False
 
@@ -48,8 +48,8 @@ class DataSchemaBuilder:
         return self._extent
 
     @property
-    def final(self) -> bool:
-        return self._is_final
+    def sealed(self) -> bool:
+        return self._is_sealed
 
     @property
     def union(self) -> bool:
@@ -84,13 +84,13 @@ class DataSchemaBuilder:
 
     def set_extent(self, value: int) -> None:
         assert self._extent is None
-        assert not self._is_final
+        assert not self._is_sealed
         self._extent = int(value)
 
-    def make_final(self) -> None:
-        assert not self.final
+    def make_sealed(self) -> None:
+        assert not self.sealed
         assert self._extent is None
-        self._is_final = True
+        self._is_sealed = True
 
     def make_union(self) -> None:
         assert not self.union
@@ -100,6 +100,6 @@ class DataSchemaBuilder:
         return _serializable.ServiceType.SchemaParams(
             attributes=self.attributes,
             extent=self.extent,
-            is_final=self.final,
+            is_sealed=self.sealed,
             is_union=self.union,
         )

@@ -67,7 +67,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                      deprecated=self._is_deprecated,
                      fixed_port_id=self._definition.fixed_port_id,
                      source_file_path=self._definition.file_path)  # type: _serializable.CompositeType
-            if not struct.final:
+            if not struct.sealed:
                 out = _serializable.DelimitedType(fin, extent=struct.extent)  # type: _serializable.CompositeType
                 _logger.debug('%r wrapped into %r', fin, out)
             else:
@@ -125,7 +125,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 'print':      self._on_print_directive,
                 'assert':     self._on_assert_directive,
                 'extent':     self._on_extent_directive,
-                'final':      self._on_final_directive,
+                'sealed':     self._on_sealed_directive,
                 'union':      self._on_union_directive,
                 'deprecated': self._on_deprecated_directive,
             }[directive_name]
@@ -220,8 +220,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                         value.TYPE_NAME)
 
     def _on_extent_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
-        if self._structs[-1].final:
-            raise InvalidDirectiveError('The extent cannot be specified for a final type')
+        if self._structs[-1].sealed:
+            raise InvalidDirectiveError('The extent cannot be specified for a sealed type')
         if value is None:
             raise InvalidDirectiveError('The extent directive requires an expression')
         elif isinstance(value, _expression.Rational):
@@ -235,14 +235,14 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         else:
             raise InvalidDirectiveError('The extent directive expects a rational, not %s' % value.TYPE_NAME)
 
-    def _on_final_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_sealed_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
         if self._structs[-1].extent is not None:
-            raise InvalidDirectiveError('A type whose extent is defined explicitly cannot be made final')
+            raise InvalidDirectiveError('A type whose extent is defined explicitly cannot be made sealed')
         if value is not None:
-            raise InvalidDirectiveError('The final directive does not expect an expression')
-        if self._structs[-1].final:
-            raise InvalidDirectiveError('Duplicated final directive')
-        self._structs[-1].make_final()
+            raise InvalidDirectiveError('The sealed directive does not expect an expression')
+        if self._structs[-1].sealed:
+            raise InvalidDirectiveError('Duplicated sealed directive')
+        self._structs[-1].make_sealed()
 
     def _on_union_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
         if value is not None:

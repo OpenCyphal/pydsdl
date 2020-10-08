@@ -126,18 +126,18 @@ def _unittest_simple() -> None:
 
     empty_new = _define(
         'vendor/nested/Empty.255.255.uavcan',
-        '''@final'''
+        '''@sealed'''
     )
 
     empty_old = _define(
         'vendor/nested/Empty.255.254.uavcan',
-        '''@final'''
+        '''@sealed'''
     )
 
     constants = _define(
         'another/Constants.5.0.uavcan',
         dedent('''
-        @final
+        @sealed
         float64 PI = 3.1415926535897932384626433
         ''')
     )
@@ -152,7 +152,7 @@ def _unittest_simple() -> None:
         vendor.nested.Empty.255.254 old_empty
         @extent 32
         -----------------------------------
-        @final                       # RESPONSE FINAL REQUEST NOT
+        @sealed                      # RESPONSE SEALED REQUEST NOT
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
         ''')
@@ -217,7 +217,7 @@ def _unittest_simple() -> None:
     assert res.deprecated
     assert not res.has_fixed_port_id
     assert res.version == (0, 1)
-    # This is a final type, so we get the real BLS, but we mustn't forget about the non-final nested field!
+    # This is a sealed type, so we get the real BLS, but we mustn't forget about the non-sealed nested field!
     assert min(res.bit_length_set) == 32                                            # Just the delimiter header
     assert max(res.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
 
@@ -246,7 +246,7 @@ def _unittest_simple() -> None:
         'another/Union.5.9.uavcan',
         dedent('''
         @union
-        @final
+        @sealed
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
@@ -490,52 +490,52 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '---')
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*final.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*sealed.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int8 a
                    @extent 128
-                   @final
+                   @sealed
                    '''))
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*final.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*sealed.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int8 a
-                   @final
+                   @sealed
                    @extent 128
                    '''))
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*final.*expression.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+    with raises(_error.InvalidDefinitionError, match='(?i).*sealed.*expression.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int8 a
-                   @final 12345678
+                   @sealed 12345678
                    '''))
 
     with raises(_error.InvalidDefinitionError, match='(?i).*extent.*expression.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int8 a
                    @extent
                    '''))
 
     with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int16 a
                    @extent 8  # Too small
                    '''))
 
     with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int16 a
                    @extent {16}  # Wrong type
                    '''))
 
     with raises(_error.InvalidDefinitionError, match='(?i).*extent.*attribute.*'):
-        standalone('vendor/finality/A.1.0.uavcan',
+        standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int16 a
                    @extent 64
@@ -615,7 +615,7 @@ def _unittest_assert() -> None:
             @assert Array.1.0._extent_ == Array.1.0._bit_length_.max
             ''')),
         [
-            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo\n@final')
+            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo\n@sealed')
         ]
     )
 
@@ -742,7 +742,7 @@ def _unittest_assert() -> None:
         ),
         [
             _define('ns/J.1.0.uavcan', 'uint8 foo\n@extent 64'),
-            _define('ns/K.1.0.uavcan', 'uint8 foo\n@final'),
+            _define('ns/K.1.0.uavcan', 'uint8 foo\n@sealed'),
         ]
     )
 
@@ -764,12 +764,12 @@ def _unittest_assert() -> None:
             bool c
             @assert _offset_ == {17}
             M.1.0 variable
-            @assert _offset_ == 32 + {24, 32, 40}  # Aligned; variability due to extensibility (non-finality)
+            @assert _offset_ == 32 + {24, 32, 40}  # Aligned; variability due to extensibility (non-sealing)
             ''')
         ),
         [
             _define('ns/M.1.0.uavcan', '@extent 16'),
-            _define('ns/N.1.0.uavcan', '@final'),
+            _define('ns/N.1.0.uavcan', '@sealed'),
         ]
     )
 
@@ -800,7 +800,7 @@ def _unittest_parse_namespace() -> None:
         uint8[<256] a
         @assert _offset_.min == 8
         @assert _offset_.max == 2048
-        @final
+        @sealed
         """)
     )
 
@@ -1254,12 +1254,12 @@ def _unittest_repeated_directives() -> None:
             []
         )
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*final.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*sealed.*'):
         _parse_definition(
             _define('ns/A.1.0.uavcan',
                     dedent('''
-                    @final
-                    @final
+                    @sealed
+                    @sealed
                     int8 a
                     float16 b
                     ''')),

@@ -169,7 +169,7 @@ class CompositeType(SerializableType):
         The amount of memory, in bits, that needs to be allocated in order to store a serialized representation of
         this type or any of its minor versions under the same major version.
         This value is always at least as large as the sum of maximum bit lengths of all fields padded to one byte.
-        If the type is final, its extent equals ``max(bit_length_set)``.
+        If the type is sealed, its extent equals ``max(bit_length_set)``.
         """
         return max(self.bit_length_set or {0})
 
@@ -177,9 +177,9 @@ class CompositeType(SerializableType):
     def bit_length_set(self) -> BitLengthSet:
         """
         The bit length set of a composite is always aligned at :attr:`alignment_requirement`.
-        For a final type this is the true bit length set computed by aggregating the fields and
+        For a sealed type this is the true bit length set computed by aggregating the fields and
         padding the result to :attr:`alignment_requirement`.
-        That is, final types expose their internal structure; for example, a type that contains a single field
+        That is, sealed types expose their internal structure; for example, a type that contains a single field
         of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
         """
         raise NotImplementedError
@@ -459,14 +459,14 @@ class StructureType(CompositeType):
 
 class DelimitedType(CompositeType):
     """
-    Composites that are not final are wrapped into this container.
+    Composites that are not sealed are wrapped into this container.
     It is a decorator over a composite type instance that injects the extent, bit length set, and field iteration
-    logic that is specific to delimited (appendable, non-final) types.
+    logic that is specific to delimited (appendable, non-sealed) types.
 
     Most of the attributes are copied from the wrapped type (e.g., name, fixed port-ID, attributes, etc.),
     except for those that relate to the bit layout.
 
-    Non-final composites are serialized into delimited opaque containers like ``uint8[<=(extent + 7) // 8]``,
+    Non-sealed composites are serialized into delimited opaque containers like ``uint8[<=(extent + 7) // 8]``,
     where the implicit length prefix is of type :attr:`delimiter_header_type`.
     Their bit length set is also computed as if it was an array as declared above,
     in order to prevent the containing definitions from making assumptions about the offsets of the following fields
@@ -521,7 +521,7 @@ class DelimitedType(CompositeType):
     def inner_type(self) -> CompositeType:
         """
         The appendable type that is serialized inside this delimited container.
-        Its bit length set, extent, and other layout-specific entities are computed as if it was a final type.
+        Its bit length set, extent, and other layout-specific entities are computed as if it was a sealed type.
         """
         return self._inner
 
@@ -540,7 +540,7 @@ class DelimitedType(CompositeType):
     @property
     def bit_length_set(self) -> BitLengthSet:
         """
-        For a non-final type, not many guarantees about the bit length set can be provided,
+        For a non-sealed type, not many guarantees about the bit length set can be provided,
         because the type may be mutated in the next minor revision.
         Therefore, a synthetic bit length set is constructed that is merely a list of all possible bit lengths
         plus the delimiter header.
@@ -594,14 +594,14 @@ class ServiceType(CompositeType):
         def __init__(self,
                      attributes: typing.Iterable[Attribute],
                      extent:     typing.Optional[int],
-                     is_final:   bool,
+                     is_sealed:  bool,
                      is_union:   bool):
             self.attributes = list(attributes)
             self.extent = int(extent) if extent is not None else None
-            self.is_final = bool(is_final)
+            self.is_sealed = bool(is_sealed)
             self.is_union = bool(is_union)
-            if self.is_final and self.extent is not None:  # pragma: no cover
-                raise ValueError('API misuse: cannot set the extent on a final type')
+            if self.is_sealed and self.extent is not None:  # pragma: no cover
+                raise ValueError('API misuse: cannot set the extent on a sealed type')
 
         def construct_composite(self,
                                 name: str,
@@ -617,7 +617,7 @@ class ServiceType(CompositeType):
                                    source_file_path='',
                                    parent_service=parent_service)
             assert isinstance(ty, CompositeType)
-            if self.is_final:
+            if self.is_sealed:
                 assert self.extent is None
                 return ty
             else:
