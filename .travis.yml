@@ -15,5 +15,6 @@ before_script:
 script:
   - ./test.sh
 
-  - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test --branch beta # TODO drop '--branch beta'
-  - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
+# TODO: re-enable when the transition to @sealed is finished.
+#  - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
+#  - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
