@@ -1,8 +1,5 @@
 language: python
-dist: bionic
-
-os:
-  - linux   # Travis-CI doesn't support Python on other platforms.
+dist: focal
 
 python:
   - '3.6'
