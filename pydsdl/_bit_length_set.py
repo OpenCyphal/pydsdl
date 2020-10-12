@@ -103,10 +103,8 @@ class BitLengthSet:
         r = int(bit_length)
         if r < 1:
             raise ValueError('Invalid alignment: %r bits' % r)
-        elif r == 1:
-            return BitLengthSet(self)  # This is a no-op, supported for completeness.
         else:
-            assert r >= 2
+            assert r >= 1
             out = BitLengthSet(((x + r - 1) // r) * r for x in self)
             assert not out or 0 <= min(out) - min(self) < r
             assert not out or 0 <= max(out) - max(self) < r
