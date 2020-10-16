@@ -75,6 +75,13 @@ class ExtentConsistencyError(_error.InvalidDefinitionError):
     pass
 
 
+class SealingConsistencyError(_error.InvalidDefinitionError):
+    """
+    Different sealing status under the same major version.
+    """
+    pass
+
+
 PrintOutputHandler = typing.Callable[[str, int, str], None]
 """Invoked when the frontend encounters a print directive or needs to output a generic diagnostic."""
 
@@ -287,50 +294,74 @@ def _ensure_minor_version_compatibility(types: typing.List[_serializable.Composi
             _logger.debug('Minor version compatibility check amongst: %s', [str(x) for x in subject_to_check])
             for a in subject_to_check:
                 for b in subject_to_check:
-                    if a is b:
-                        continue
+                    if a is not b:
+                        _ensure_minor_version_compatibility_pairwise(a, b)
 
-                    assert a.version.major == b.version.major
-                    assert a.full_name == b.full_name
 
-                    # Version collision
-                    if a.version.minor == b.version.minor:
-                        raise MultipleDefinitionsUnderSameVersionError(
-                            'This definition shares its version number with %r' % b.source_file_path,
-                            path=a.source_file_path
-                        )
+def _ensure_minor_version_compatibility_pairwise(a: _serializable.CompositeType,
+                                                 b: _serializable.CompositeType) -> None:
+    assert a is not b
+    assert a.version.major == b.version.major
+    assert a.full_name == b.full_name
 
-                    # Must be of the same kind: both messages or both services
-                    if isinstance(a, _serializable.ServiceType) != isinstance(b, _serializable.ServiceType):
-                        raise VersionsOfDifferentKindError(
-                            'This definition is not of the same kind as %r' % b.source_file_path,
-                            path=a.source_file_path
-                        )
+    # Version collision
+    if a.version.minor == b.version.minor:
+        raise MultipleDefinitionsUnderSameVersionError(
+            'This definition shares its version number with %r' % b.source_file_path,
+            path=a.source_file_path
+        )
 
-                    # Must use either the same RPID, or the older one should not have an RPID
-                    if a.has_fixed_port_id == b.has_fixed_port_id:
-                        if a.fixed_port_id != b.fixed_port_id:
-                            raise MinorVersionFixedPortIDError(
-                                'Different fixed port ID values under the same version %r' % b.source_file_path,
-                                path=a.source_file_path
-                            )
-                    else:
-                        must_have = a if a.version.minor > b.version.minor else b
-                        if not must_have.has_fixed_port_id:
-                            raise MinorVersionFixedPortIDError(
-                                'Fixed port ID cannot be removed under the same major version',
-                                path=must_have.source_file_path
-                            )
+    # Must be of the same kind: both messages or both services
+    if isinstance(a, _serializable.ServiceType) != isinstance(b, _serializable.ServiceType):
+        raise VersionsOfDifferentKindError(
+            'This definition is not of the same kind as %r' % b.source_file_path,
+            path=a.source_file_path
+        )
 
-                    if not isinstance(a, _serializable.ServiceType):
-                        if a.extent != b.extent:
-                            raise ExtentConsistencyError(
-                                'The extent of this type is %d bits, whereas the extent of %r is %d bits. '
-                                'The types share the same major version, so their extents should be equal '
-                                'to avoid wire compatibility issues.' %
-                                (a.extent, b.source_file_path, b.extent),
-                                path=a.source_file_path
-                            )
+    # Must use either the same RPID, or the older one should not have an RPID
+    if a.has_fixed_port_id == b.has_fixed_port_id:
+        if a.fixed_port_id != b.fixed_port_id:
+            raise MinorVersionFixedPortIDError(
+                'Different fixed port ID values under the same version %r' % b.source_file_path,
+                path=a.source_file_path
+            )
+    else:
+        must_have = a if a.version.minor > b.version.minor else b
+        if not must_have.has_fixed_port_id:
+            raise MinorVersionFixedPortIDError(
+                'Fixed port ID cannot be removed under the same major version',
+                path=must_have.source_file_path
+            )
+
+    # Extent and sealing equality
+    if isinstance(a, _serializable.ServiceType) and isinstance(b, _serializable.ServiceType):
+        _ensure_minor_version_compatibility_pairwise(a.request_type, b.request_type)
+        _ensure_minor_version_compatibility_pairwise(a.response_type, b.response_type)
+    else:
+        if a.extent != b.extent:
+            raise ExtentConsistencyError(
+                'The extent of %s is %d bits, whereas the extent of %s is %d bits. '
+                'The types share the same major version, so their extents should be equal '
+                'to avoid wire compatibility issues.' %
+                (
+                    a, a.extent,
+                    b, b.extent
+                ),
+                path=a.source_file_path
+            )
+        a_sealed = not isinstance(a, _serializable.DelimitedType)
+        b_sealed = not isinstance(b, _serializable.DelimitedType)
+        sealing_name = ['delimited', 'sealed']
+        if a_sealed != b_sealed:
+            raise SealingConsistencyError(
+                '%s is %s, but %s is %s. '
+                'Mixing sealed and delimited types under the same major version will cause wire compatibility issues.' %
+                (
+                    a, sealing_name[a_sealed],
+                    b, sealing_name[b_sealed],
+                ),
+                path=a.source_file_path
+            )
 
 
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:

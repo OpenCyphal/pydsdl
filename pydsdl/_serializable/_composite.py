@@ -607,14 +607,15 @@ class ServiceType(CompositeType):
                                 name: str,
                                 version: Version,
                                 deprecated: bool,
-                                parent_service: 'ServiceType') -> CompositeType:
+                                parent_service: 'ServiceType',
+                                source_file_path: str) -> CompositeType:
             request_meta_type = UnionType if self.is_union else StructureType  # type: type
             ty = request_meta_type(name=name,
                                    version=version,
                                    attributes=self.attributes,
                                    deprecated=deprecated,
                                    fixed_port_id=None,
-                                   source_file_path='',
+                                   source_file_path=source_file_path,
                                    parent_service=parent_service)
             assert isinstance(ty, CompositeType)
             if self.is_sealed:
@@ -634,11 +635,13 @@ class ServiceType(CompositeType):
         self._request_type = request_params.construct_composite(name=name + '.Request',
                                                                 version=version,
                                                                 deprecated=deprecated,
-                                                                parent_service=self)
+                                                                parent_service=self,
+                                                                source_file_path=source_file_path)
         self._response_type = response_params.construct_composite(name=name + '.Response',
                                                                   version=version,
                                                                   deprecated=deprecated,
-                                                                  parent_service=self)
+                                                                  parent_service=self,
+                                                                  source_file_path=source_file_path)
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
             Field(data_type=self._response_type, name='response'),

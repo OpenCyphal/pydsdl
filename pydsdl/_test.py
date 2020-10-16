@@ -1211,13 +1211,161 @@ def _unittest_parse_namespace_versioning() -> None:
         'ns.Spartans.0.1',
     ]
 
-    _define('ns/ExtentConsistency.1.0.uavcan', 'uint8 a\n@extent 128')
-    _define('ns/ExtentConsistency.1.1.uavcan', 'uint8 a\nuint8 b\n@extent 128')
+    # Extent consistency -- non-service type
+    _define('ns/Consistency.1.0.uavcan', 'uint8 a\n@extent 128')
+    _define('ns/Consistency.1.1.uavcan', 'uint8 a\nuint8 b\n@extent 128')
     parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
     assert len(parsed) == 10
-    _define('ns/ExtentConsistency.1.2.uavcan', 'uint8 a\nuint8 b\nuint8 c\n@extent 256')  # Extent is different
-    with raises(_namespace.ExtentConsistencyError, match='(?i).*extent.*128.*version.*'):
+    _define('ns/Consistency.1.2.uavcan', 'uint8 a\nuint8 b\nuint8 c\n@extent 256')
+    with raises(_namespace.ExtentConsistencyError,
+                match=r'(?i).*extent of ns\.Consistency\.1\.2 is 256 bits.*') as exc_info:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    print(exc_info.value)
+    _undefine_glob('ns/Consistency*')
+
+    # Extent consistency -- request
+    _define('ns/Consistency.1.0.uavcan',
+            dedent('''
+            uint8 a
+            @extent 128
+            ---
+            uint8 a
+            @extent 128
+            '''))
+    _define('ns/Consistency.1.1.uavcan',
+            dedent('''
+            uint8 a
+            uint8 b
+            @extent 128
+            ---
+            uint8 a
+            @extent 128
+            '''))
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/Consistency.1.2.uavcan',
+            dedent('''
+            uint8 a
+            uint8 b
+            @extent 256
+            ---
+            uint8 a
+            @extent 128
+            '''))
+    with raises(_namespace.ExtentConsistencyError,
+                match=r'(?i).*extent of ns\.Consistency.* is 256 bits.*') as exc_info:
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    print(exc_info.value)
+    _undefine_glob('ns/Consistency*')
+
+    # Extent consistency -- response
+    _define('ns/Consistency.1.0.uavcan',
+            dedent('''
+            uint8 a
+            @extent 128
+            ---
+            uint8 a
+            @extent 128
+            '''))
+    _define('ns/Consistency.1.1.uavcan',
+            dedent('''
+            uint8 a
+            @extent 128
+            ---
+            uint8 a
+            uint8 b
+            @extent 128
+            '''))
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/Consistency.1.2.uavcan',
+            dedent('''
+            uint8 a
+            @extent 128
+            ---
+            uint8 a
+            @extent 256
+            '''))
+    with raises(_namespace.ExtentConsistencyError,
+                match=r'(?i).*extent of ns\.Consistency.* is 256 bits.*') as exc_info:
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    print(exc_info.value)
+    _undefine_glob('ns/Consistency*')
+
+    # Sealing consistency -- non-service type
+    _define('ns/Consistency.1.0.uavcan', 'uint64 a\n@extent 64')
+    _define('ns/Consistency.1.1.uavcan', 'uint64 a\n@extent 64')
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/Consistency.1.2.uavcan', 'uint64 a\n@sealed')
+    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency\.1\.2 is sealed.*') as exc_info:
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    print(exc_info.value)
+    _undefine_glob('ns/Consistency*')
+
+    # Sealing consistency -- request
+    _define('ns/Consistency.1.0.uavcan',
+            dedent('''
+            uint64 a
+            @extent 64
+            ---
+            uint64 a
+            @extent 64
+            '''))
+    _define('ns/Consistency.1.1.uavcan',
+            dedent('''
+            uint64 a
+            @extent 64
+            ---
+            uint64 a
+            @extent 64
+            '''))
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/Consistency.1.2.uavcan',
+            dedent('''
+            uint64 a
+            @sealed
+            ---
+            uint64 a
+            @extent 64
+            '''))
+    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency.* is sealed.*') as exc_info:
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    print(exc_info.value)
+    _undefine_glob('ns/Consistency*')
+
+    # Sealing consistency -- response
+    _define('ns/Consistency.1.0.uavcan',
+            dedent('''
+            uint64 a
+            @extent 64
+            ---
+            uint64 a
+            @extent 64
+            '''))
+    _define('ns/Consistency.1.1.uavcan',
+            dedent('''
+            uint64 a
+            @extent 64
+            ---
+            uint64 a
+            @extent 64
+            '''))
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/Consistency.1.2.uavcan',
+            dedent('''
+            uint64 a
+            @extent 64
+            ---
+            uint64 a
+            @sealed
+            '''))
+    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency.* is sealed.*') as exc_info:
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    print(exc_info.value)
+    _undefine_glob('ns/Consistency*')
 
 
 def _unittest_parse_namespace_faults() -> None:
