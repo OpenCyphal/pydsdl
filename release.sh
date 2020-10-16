@@ -14,7 +14,7 @@ function die()
 
 function clean()
 {
-    rm -rf dist build *.egg-info &> /dev/null
+    rm -rf dist build ./*.egg-info &> /dev/null
 }
 
 [[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]]  || die "Can only release from the master branch."
@@ -33,4 +33,4 @@ clean  # May fail, we don't care.
 
 export PYTHONPATH=.
 version=$(python3 -c 'import pydsdl; print(pydsdl.__version__)')
-(git tag -a ${version} -m ${version} && git push --tags) || die "Could not tag the release. Please do it manually."
+(git tag -a "${version}" -m "${version}" && git push --tags) || die "Could not tag the release. Please do it manually."
