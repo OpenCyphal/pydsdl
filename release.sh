@@ -17,7 +17,8 @@ function clean()
     rm -rf dist build   &> /dev/null
     rm -rf ./*.egg-info &> /dev/null
     rm -rf docs/_build  &> /dev/null
-    rm -rf .coverage*
+    rm -rf .coverage*   &> /dev/null
+    rm -rf .*cache      &> /dev/null
 }
 
 [[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]]  || die "Can only release from the master branch."
