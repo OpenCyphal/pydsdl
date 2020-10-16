@@ -14,7 +14,10 @@ function die()
 
 function clean()
 {
-    rm -rf dist build ./*.egg-info &> /dev/null
+    rm -rf dist build   &> /dev/null
+    rm -rf ./*.egg-info &> /dev/null
+    rm -rf docs/_build  &> /dev/null
+    rm -rf .coverage*
 }
 
 [[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]]  || die "Can only release from the master branch."
