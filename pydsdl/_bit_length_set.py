@@ -3,7 +3,6 @@
 # This software is distributed under the terms of the MIT License.
 #
 
-import math
 import typing
 import itertools
 
@@ -14,6 +13,8 @@ class BitLengthSet:
     It is used for representing bit offsets of fields and bit lengths of serialized representations.
 
     Instances are comparable between each other, with plain integers, and with native sets of integers.
+    The methods do not mutate the instance they are invoked on; instead, the result is returned as a new instance,
+    excepting the in-place ``__ixx__()`` operator overloads.
     """
 
     def __init__(self, values: typing.Optional[typing.Union[typing.Iterable[int], int]] = None):
@@ -66,63 +67,54 @@ class BitLengthSet:
 
     def is_aligned_at_byte(self) -> bool:
         """
-        A shorthand for ``is_aligned_at(8)``.
+        A shorthand for :meth:`is_aligned_at` using the standard byte size as prescribed by the Specification.
 
         >>> BitLengthSet(32).is_aligned_at_byte()
         True
         >>> BitLengthSet(33).is_aligned_at_byte()
         False
         """
-        return self.is_aligned_at(8)
+        from ._serializable import SerializableType
+        return self.is_aligned_at(SerializableType.BITS_PER_BYTE)
 
-    def unite_with(self, other: typing.Union[typing.Iterable[int], int]) -> None:
+    def pad_to_alignment(self, bit_length: int) -> 'BitLengthSet':
         """
-        Modifies the object so that it is a union of itself with another bit length set.
+        Pad each element in the set such that the set becomes aligned at the specified alignment goal.
+        After this transformation is applied, elements may become up to ``bit_length-1`` bits larger.
+        The argument shall be a positive integer, otherwise it's a :class:`ValueError`.
 
-        >>> a = BitLengthSet()
-        >>> a.unite_with({1, 2, 3})
-        >>> a
-        BitLengthSet({1, 2, 3})
-        >>> a.unite_with({3, 4, 5})
-        >>> a
-        BitLengthSet({1, 2, 3, 4, 5})
-        >>> a.unite_with(6)
-        >>> a
-        BitLengthSet({1, 2, 3, 4, 5, 6})
+        >>> BitLengthSet({0, 1, 2, 3, 4, 5, 6, 7, 8}).pad_to_alignment(1)  # Alignment to 1 is a no-op.
+        BitLengthSet({0, 1, 2, 3, 4, 5, 6, 7, 8})
+        >>> BitLengthSet({0, 1, 2, 3, 4, 5, 6, 7, 8}).pad_to_alignment(2)
+        BitLengthSet({0, 2, 4, 6, 8})
+        >>> BitLengthSet({0, 1, 5, 7}).pad_to_alignment(2)
+        BitLengthSet({0, 2, 6, 8})
+        >>> BitLengthSet({0, 1, 2, 3, 4, 5, 6, 7, 8}).pad_to_alignment(3)
+        BitLengthSet({0, 3, 6, 9})
+        >>> BitLengthSet({0, 1, 2, 3, 4, 5, 6, 7, 8}).pad_to_alignment(8)
+        BitLengthSet({0, 8})
+        >>> BitLengthSet({0, 9}).pad_to_alignment(8)
+        BitLengthSet({0, 16})
+        >>> from random import randint
+        >>> alignment = randint(1, 64)
+        >>> BitLengthSet(randint(1, 1000) for _ in range(100)).pad_to_alignment(alignment).is_aligned_at(alignment)
+        True
         """
-        self._value |= BitLengthSet(other)._value
-
-    def increment(self, bit_length_set_or_scalar: typing.Union[typing.Iterable[int], int]) -> None:
-        """
-        This operation models the addition of a new object to a serialized representation.
-
-        If the argument is a bit length set, an elementwise sum set of the Cartesian product of the argument set
-        with the current set will be computed, and the result will replace the current set
-        (i.e., this method updates the object it is invoked on).
-        One can easily see that if the argument is a set of one value (or a scalar),
-        this method will result in the addition of said scalar to every element of the current set.
-
-        SPECIAL CASE: if the current set is empty at the time of invocation, it will be assumed to be equal ``{0}``.
-
-        >>> a = BitLengthSet({1, 2, 3})
-        >>> a.increment(4)
-        >>> a
-        BitLengthSet({5, 6, 7})
-        >>> a = BitLengthSet({1, 2, 3})
-        >>> a.increment({4, 5, 6})
-        >>> a
-        BitLengthSet({5, 6, 7, 8, 9})
-        >>> a = BitLengthSet()
-        >>> a.increment({1, 2, 3})
-        >>> a
-        BitLengthSet({1, 2, 3})
-        """
-        self._value = BitLengthSet.elementwise_sum_cartesian_product([self or BitLengthSet(0),
-                                                                      BitLengthSet(bit_length_set_or_scalar)])._value
+        r = int(bit_length)
+        if r < 1:
+            raise ValueError('Invalid alignment: %r bits' % r)
+        else:
+            assert r >= 1
+            out = BitLengthSet(((x + r - 1) // r) * r for x in self)
+            assert not out or 0 <= min(out) - min(self) < r
+            assert not out or 0 <= max(out) - max(self) < r
+            assert len(out) <= len(self)
+            return out
 
     def elementwise_sum_k_multicombinations(self, k: int) -> 'BitLengthSet':
         """
         This is a special case of :meth:`elementwise_sum_cartesian_product`.
+        The original object is not modified.
 
         One can replace this method with the aforementioned general case method and the behavior would not change;
         however, we need this special case method for performance reasons. When dealing with arrays (either fixed- or
@@ -183,49 +175,6 @@ class BitLengthSet:
         elementwise_sums = map(sum, cartesian_product)
         return BitLengthSet(elementwise_sums)  # type: ignore
 
-    @staticmethod
-    def for_struct(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) -> 'BitLengthSet':
-        """
-        Computes the bit length set for a structure type given the bit length sets of each of its fields.
-
-        As far as bit length sets are concerned, structures are similar to fixed-length arrays. The difference
-        here is that the length value sets are not homogeneous across fields, as they can be of different types.
-        """
-        return BitLengthSet.elementwise_sum_cartesian_product(member_bit_length_sets) \
-            or BitLengthSet(0)  # Empty output not permitted
-
-    @staticmethod
-    def for_tagged_union(member_bit_length_sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
-            -> 'BitLengthSet':
-        """
-        Computes the bit length set for a tagged union type given the bit length sets of each of its fields (variants).
-
-        Unions are easy to handle because when serialized, a union is essentially just a single field prefixed with
-        a fixed-length integer tag. So we just build a full set of combinations and then add the tag length
-        to each element.
-
-        Observe that unions are not defined for less than 2 elements;
-        however, this function tries to be generic by properly handling those cases as well,
-        even though they are not permitted by the specification.
-        For zero fields, the function yields ``{0}``; for one field, the function yields the BLS of the field itself.
-        """
-        ms = list(member_bit_length_sets)
-        del member_bit_length_sets
-
-        out = BitLengthSet()
-        if len(ms) == 0:
-            out = BitLengthSet(0)
-        elif len(ms) == 1:
-            out = BitLengthSet(ms[0])
-        else:
-            for s in ms:
-                out.unite_with(s)
-            # Add the union tag:
-            tag_bit_length = 2 ** math.ceil(math.log2(max(8, (len(ms) - 1).bit_length())))
-            out.increment(tag_bit_length)
-
-        return out
-
     def __iter__(self) -> typing.Iterator[int]:
         return iter(self._value)
 
@@ -256,7 +205,17 @@ class BitLengthSet:
 
     def __add__(self, other: typing.Any) -> 'BitLengthSet':
         """
-        Alias for ``elementwise_sum_cartesian_product([self, other])``.
+        This operation models the addition of a new object to a serialized representation;
+        i.e., it is an alias for ``elementwise_sum_cartesian_product([self, other])``.
+        The result is stored into a new instance which is returned.
+
+        If the argument is a bit length set, an elementwise sum set of the Cartesian product of the argument set
+        with the current set will be computed, and the result will be returned as a new set (self is not modified).
+        One can easily see that if the argument is a set of one value (or a scalar),
+        this method will result in the addition of said scalar to every element of the original set.
+
+        SPECIAL CASE: if the current set is empty at the time of invocation, it will be assumed to be equal ``{0}``.
+
         The other may be a bit length set, an integer, or a native ``typing.Set[int]``.
 
         >>> BitLengthSet() + BitLengthSet()
@@ -265,11 +224,11 @@ class BitLengthSet:
         BitLengthSet({7})
         >>> BitLengthSet({4, 91}) + 3
         BitLengthSet({7, 94})
+        >>> BitLengthSet({4, 91}) + {5, 7}
+        BitLengthSet({9, 11, 96, 98})
         """
         if isinstance(other, _OPERAND_TYPES):
-            left = BitLengthSet(self)   # Create copy
-            left.increment(other)
-            return left
+            return BitLengthSet.elementwise_sum_cartesian_product([self or BitLengthSet(0), BitLengthSet(other)])
         else:
             return NotImplemented
 
@@ -283,14 +242,13 @@ class BitLengthSet:
         BitLengthSet({3, 6, 8})
         """
         if isinstance(other, _OPERAND_TYPES):
-            return BitLengthSet(other) + BitLengthSet(self)
+            return BitLengthSet(other) + self
         else:
             return NotImplemented
 
     def __iadd__(self, other: typing.Any) -> 'BitLengthSet':
         """
-        Alias for ``self.increment(other)``.
-        The other may be a bit length set, an integer, or a native ``typing.Set[int]``.
+        See :meth:`__add__`.
 
         >>> a = BitLengthSet({1, 2, 3})
         >>> a += {4, 5, 6}
@@ -298,7 +256,55 @@ class BitLengthSet:
         BitLengthSet({5, 6, 7, 8, 9})
         """
         if isinstance(other, _OPERAND_TYPES):
-            self.increment(other)
+            self._value = (self + other)._value
+            return self
+        else:
+            return NotImplemented
+
+    def __or__(self, other: typing.Any) -> 'BitLengthSet':
+        """
+        Creates and returns a new set that is a union of this set with another bit length set.
+
+        >>> a = BitLengthSet()
+        >>> a = a | BitLengthSet({1, 2, 3})
+        >>> a
+        BitLengthSet({1, 2, 3})
+        >>> a = a | {3, 4, 5}
+        >>> a
+        BitLengthSet({1, 2, 3, 4, 5})
+        >>> a | 6
+        BitLengthSet({1, 2, 3, 4, 5, 6})
+        """
+        if isinstance(other, _OPERAND_TYPES):
+            return BitLengthSet(self._value | BitLengthSet(other)._value)
+        else:
+            return NotImplemented
+
+    def __ror__(self, other: typing.Any) -> 'BitLengthSet':
+        """
+        See :meth:`__or__`.
+
+        >>> {1, 2, 3} | BitLengthSet({4, 5, 6})
+        BitLengthSet({1, 2, 3, 4, 5, 6})
+        >>> 1 | BitLengthSet({2, 5, 7})
+        BitLengthSet({1, 2, 5, 7})
+        """
+        if isinstance(other, _OPERAND_TYPES):
+            return BitLengthSet(other) | self
+        else:
+            return NotImplemented
+
+    def __ior__(self, other: typing.Any) -> 'BitLengthSet':
+        """
+        See :meth:`__or__`.
+
+        >>> a = BitLengthSet({4, 5, 6})
+        >>> a |= {1, 2, 3}
+        >>> a
+        BitLengthSet({1, 2, 3, 4, 5, 6})
+        """
+        if isinstance(other, _OPERAND_TYPES):
+            self._value = (self | other)._value
             return self
         else:
             return NotImplemented
@@ -348,9 +354,9 @@ def _unittest_bit_length_set() -> None:
         BitLengthSet({-1})
 
     s = BitLengthSet({0, 8})
-    s.increment(8)
+    s += 8
     assert s == {8, 16}
-    s.increment({0, 4, 8})
+    s = s + {0, 4, 8}
     assert s == {8, 16, 12, 20, 24}
 
     assert BitLengthSet() + BitLengthSet() == BitLengthSet()
@@ -368,3 +374,16 @@ def _unittest_bit_length_set() -> None:
     with raises(TypeError):
         s = BitLengthSet([4, 5, 6])
         s += '1'
+
+    with raises(TypeError):
+        assert '1' | BitLengthSet([4, 5, 6])
+
+    with raises(TypeError):
+        assert BitLengthSet([4, 5, 6]) | '1'
+
+    with raises(TypeError):
+        s = BitLengthSet([4, 5, 6])
+        s |= '1'
+
+    with raises(ValueError):
+        BitLengthSet([4, 5, 6]).pad_to_alignment(0)

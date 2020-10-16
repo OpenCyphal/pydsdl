@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -22,6 +22,10 @@ class VoidType(SerializableType):
             raise InvalidBitLengthError('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
 
     @property
+    def bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet(self.bit_length)
+
+    @property
     def bit_length(self) -> int:
         """
         This is a shortcut for ``next(iter(x.bit_length_set))``, because the bit length set of a void type
@@ -29,8 +33,9 @@ class VoidType(SerializableType):
         """
         return self._bit_length
 
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet(self.bit_length)
+    @property
+    def alignment_requirement(self) -> int:
+        return 1
 
     def __str__(self) -> str:
         return 'void%d' % self.bit_length

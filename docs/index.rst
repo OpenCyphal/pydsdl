@@ -7,7 +7,7 @@ evaluating all constant expressions in the process.
 All DSDL features defined in the UAVCAN Specification are supported.
 
 It helps to know that `UAVCAN <https://uavcan.org>`_ stands for
-*Uncomplicated Application-level Vehicular Communication And Networking*.
+*Uncomplicated Application-level Vehicular Computing And Networking*.
 
 If you have questions, please bring them to the `support forum <https://forum.uavcan.org/>`_.
 
@@ -21,7 +21,6 @@ Contents
 
    pages/installation
    pages/pydsdl
-   pages/demo
    pages/dev
 
 

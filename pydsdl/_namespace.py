@@ -68,6 +68,13 @@ class MinorVersionFixedPortIDError(_error.InvalidDefinitionError):
     pass
 
 
+class ExtentConsistencyError(_error.InvalidDefinitionError):
+    """
+    Different extent under the same major version.
+    """
+    pass
+
+
 PrintOutputHandler = typing.Callable[[str, int, str], None]
 """Invoked when the frontend encounters a print directive or needs to output a generic diagnostic."""
 
@@ -313,6 +320,16 @@ def _ensure_minor_version_compatibility(types: typing.List[_serializable.Composi
                             raise MinorVersionFixedPortIDError(
                                 'Fixed port ID cannot be removed under the same major version',
                                 path=must_have.source_file_path
+                            )
+
+                    if not isinstance(a, _serializable.ServiceType):
+                        if a.extent != b.extent:
+                            raise ExtentConsistencyError(
+                                'The extent of this type is %d bits, whereas the extent of %r is %d bits. '
+                                'The types share the same major version, so their extents should be equal '
+                                'to avoid wire compatibility issues.' %
+                                (a.extent, b.source_file_path, b.extent),
+                                path=a.source_file_path
                             )
 
 

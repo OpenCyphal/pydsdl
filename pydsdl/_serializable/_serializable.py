@@ -4,7 +4,6 @@
 #
 
 import abc
-import typing
 from .. import _expression
 from .. import _error
 from .._bit_length_set import BitLengthSet
@@ -23,22 +22,40 @@ class SerializableType(_expression.Any):
 
     TYPE_NAME = 'metaserializable'
 
+    BITS_PER_BYTE = 8
+    """
+    This is dictated by the UAVCAN Specification.
+    """
+
     def __init__(self) -> None:
         super(SerializableType, self).__init__()
-        self._cached_bit_length_set = None  # type: typing.Optional[BitLengthSet]
 
     @property
+    @abc.abstractmethod
     def bit_length_set(self) -> BitLengthSet:
         """
         A set of all possible bit length values of the serialized representations of this type.
         Refer to the specification for the background. The returned set is guaranteed to be non-empty.
         See :class:`pydsdl.BitLengthSet`.
         """
-        # Derived classes should not override this property themselves;
-        # they must implement the method _compute_bit_length_set() instead.
-        if self._cached_bit_length_set is None:
-            self._cached_bit_length_set = self._compute_bit_length_set()
-        return self._cached_bit_length_set
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def alignment_requirement(self) -> int:
+        """
+        Serialized representations of this type are required/guaranteed to be aligned such that their offset
+        from the beginning of the containing serialized representation, in bits, is a multiple of this value, in bits.
+        Alignment of a type whose alignment requirement is X bits is facilitated by injecting ``[0, X)`` zero
+        padding bits before the serialized representation of the type.
+
+        For any element ``L`` of the bit length set of a type whose alignment requirement is ``A``, ``L % A = 0``.
+        I.e., the length of a serialized representation of the type is always a multiple of its alignment requirement.
+
+        This value is always a non-negative integer power of two. The alignment of one is a degenerate case denoting
+        no alignment.
+        """
+        raise NotImplementedError
 
     def _attribute(self, name: _expression.String) -> _expression.Any:
         if name.native_value == '_bit_length_':  # Experimental non-standard extension
@@ -48,15 +65,6 @@ class SerializableType(_expression.Any):
                 pass
 
         return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
-
-    @abc.abstractmethod
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        """
-        This is an expensive operation, so the result is cached in the base class.
-        Derived classes should not override the bit_length_set property themselves;
-        they must implement this method instead.
-        """
-        raise NotImplementedError
 
     @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover

@@ -6,7 +6,7 @@
 import os as _os
 import sys as _sys
 
-__version__ = '1.5.0'
+__version__ = '1.6.0'
 __version_info__ = tuple(map(int, __version__.split('.')))
 __license__ = 'MIT'
 __author__ = 'UAVCAN Development Team'
@@ -46,6 +46,7 @@ from ._serializable import VariableLengthArrayType as VariableLengthArrayType   
 from ._serializable import CompositeType as CompositeType                           # noqa
 from ._serializable import UnionType as UnionType                                   # noqa
 from ._serializable import StructureType as StructureType                           # noqa
+from ._serializable import DelimitedType as DelimitedType                           # noqa
 from ._serializable import ServiceType as ServiceType                               # noqa
 
 # Data type model - attributes.

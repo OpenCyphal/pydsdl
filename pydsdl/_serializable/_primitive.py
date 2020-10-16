@@ -48,6 +48,10 @@ class PrimitiveType(SerializableType):
             (self._bit_length >= self.BITS_IN_BYTE) and (2 ** round(math.log2(self._bit_length)) == self._bit_length)
 
     @property
+    def bit_length_set(self) -> BitLengthSet:
+        return BitLengthSet(self.bit_length)
+
+    @property
     def bit_length(self) -> int:
         """
         This is a shortcut for ``next(iter(x.bit_length_set))``, because the bit length set of a primitive type
@@ -72,15 +76,16 @@ class PrimitiveType(SerializableType):
         return self._cast_mode
 
     @property
+    def alignment_requirement(self) -> int:
+        return 1
+
+    @property
     def _cast_mode_name(self) -> str:
         """For internal use only."""
         return {
             self.CastMode.SATURATED: 'saturated',
             self.CastMode.TRUNCATED: 'truncated',
         }[self.cast_mode]
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet(self.bit_length)
 
     @abc.abstractmethod
     def __str__(self) -> str:   # pragma: no cover
@@ -179,11 +184,11 @@ class FloatType(ArithmeticType):
         try:
             frac = fractions.Fraction
             # The limits are exact
-            self._magnitude = {
+            self._magnitude = fractions.Fraction({
                 16: (2 ** 0x00F) * (2 - frac(2) ** frac(-10)),   # IEEE 754 binary16
                 32: (2 ** 0x07F) * (2 - frac(2) ** frac(-23)),   # IEEE 754 binary32
                 64: (2 ** 0x3FF) * (2 - frac(2) ** frac(-52)),   # IEEE 754 binary64
-            }[self.bit_length]  # type: fractions.Fraction
+            }[self.bit_length])
         except KeyError:
             raise InvalidBitLengthError('Invalid bit length for float type: %d' % bit_length) from None
 

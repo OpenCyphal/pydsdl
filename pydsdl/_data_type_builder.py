@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -60,36 +60,45 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
     def finalize(self) -> _serializable.CompositeType:
         if len(self._structs) == 1:     # Message type
             struct, = self._structs     # type: _data_schema_builder.DataSchemaBuilder,
-            if struct.union:
-                out = _serializable.UnionType(
-                    name=self._definition.full_name,
-                    version=self._definition.version,
-                    attributes=struct.attributes,
-                    deprecated=self._is_deprecated,
-                    fixed_port_id=self._definition.fixed_port_id,
-                    source_file_path=self._definition.file_path)  # type: _serializable.CompositeType
+            ty = _serializable.UnionType if struct.union else _serializable.StructureType
+            fin = ty(name=self._definition.full_name,
+                     version=self._definition.version,
+                     attributes=struct.attributes,
+                     deprecated=self._is_deprecated,
+                     fixed_port_id=self._definition.fixed_port_id,
+                     source_file_path=self._definition.file_path)  # type: _serializable.CompositeType
+            if not struct.sealed:
+                out = _serializable.DelimitedType(fin, extent=struct.extent)  # type: _serializable.CompositeType
+                _logger.debug('%r wrapped into %r', fin, out)
+                if struct.extent is None:
+                    assert isinstance(out, _serializable.DelimitedType)
+                    self._print_output_handler(1, self._render_explicit_extent_recommendation(out))
             else:
-                out = _serializable.StructureType(
-                    name=self._definition.full_name,
-                    version=self._definition.version,
-                    attributes=struct.attributes,
-                    deprecated=self._is_deprecated,
-                    fixed_port_id=self._definition.fixed_port_id,
-                    source_file_path=self._definition.file_path)
+                assert struct.extent is None, 'Internal constraint violation'
+                out = fin
+
         else:  # Service type
             request, response = self._structs
+            assert isinstance(request, _data_schema_builder.DataSchemaBuilder)
+            assert isinstance(response, _data_schema_builder.DataSchemaBuilder)
             # noinspection SpellCheckingInspection
             out = _serializable.ServiceType(
-                name=self._definition.full_name,            # pozabito vse na svete
-                version=self._definition.version,           # serdce zamerlo v grudi
-                request_attributes=request.attributes,      # tolko nebo tolko veter
-                response_attributes=response.attributes,    # tolko radost vperedi
-                request_is_union=request.union,             # tolko nebo tolko veter
-                response_is_union=response.union,           # tolko radost vperedi
+                name=self._definition.full_name,                        # pozabito vse na svete
+                version=self._definition.version,                       # serdce zamerlo v grudi
+                request_params=request.to_service_schema_params(),      # tolko nebo tolko veter
+                response_params=response.to_service_schema_params(),    # tolko radost vperedi
                 deprecated=self._is_deprecated,
                 fixed_port_id=self._definition.fixed_port_id,
-                source_file_path=self._definition.file_path)
+                source_file_path=self._definition.file_path,
+            )
+            assert isinstance(out, _serializable.ServiceType)
+            req_ty, resp_ty = out.request_type, out.response_type
+            if isinstance(req_ty, _serializable.DelimitedType) and request.extent is None:
+                self._print_output_handler(1, 'Request: ' + self._render_explicit_extent_recommendation(req_ty))
+            if isinstance(resp_ty, _serializable.DelimitedType) and response.extent is None:
+                self._print_output_handler(1, 'Response: ' + self._render_explicit_extent_recommendation(resp_ty))
 
+        assert isinstance(out, _serializable.CompositeType)
         if not self._allow_unregulated_fixed_port_id:
             port_id = out.fixed_port_id
             if port_id is not None:
@@ -101,20 +110,21 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                         'Regulated port ID %r for %s type %r is not valid. '
                         'Consider using allow_unregulated_fixed_port_id.' %
                         (port_id, 'service' if is_service_type else 'message', out.full_name))
-
-        assert isinstance(out, _serializable.CompositeType)
         return out
 
     def on_constant(self,
                     constant_type: _serializable.SerializableType,
                     name: str,
                     value: _expression.Any) -> None:
+        self._on_attribute()
         self._structs[-1].add_constant(_serializable.Constant(constant_type, name, value))
 
     def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
+        self._on_attribute()
         self._structs[-1].add_field(_serializable.Field(field_type, name))
 
     def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
+        self._on_attribute()
         self._structs[-1].add_field(_serializable.PaddingField(padding_field_type))
 
     def on_directive(self,
@@ -125,6 +135,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             handler = {
                 'print':      self._on_print_directive,
                 'assert':     self._on_assert_directive,
+                'extent':     self._on_extent_directive,
+                'sealed':     self._on_sealed_directive,
                 'union':      self._on_union_directive,
                 'deprecated': self._on_deprecated_directive,
             }[directive_name]
@@ -148,7 +160,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 return c.value
 
         if name == '_offset_':
-            bls = self._structs[-1].bit_length_set
+            bls = self._structs[-1].offset
             assert len(bls) > 0 and all(map(lambda x: isinstance(x, int), bls))
             return _expression.Set(map(_expression.Rational, bls))
         else:
@@ -170,7 +182,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             lookup_nss = set(x.root_namespace for x in self._lookup_definitions)
             subroot_ns = self._definition.name_components[1] if len(self._definition.name_components) > 2 else None
             error_description = 'Data type %s.%d.%d could not be found in the following root namespaces: %s. ' % \
-                                (full_name, version.major, version.minor, lookup_nss)
+                                (full_name, version.major, version.minor, lookup_nss or '(empty set)')
             if requested_ns not in lookup_nss and requested_ns == subroot_ns:
                 error_description += ' Did you mean to use the directory %r instead of %r?' % (
                     os.path.join(self._definition.root_namespace_path, subroot_ns),
@@ -192,6 +204,13 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                       print_output_handler=self._print_output_handler,
                                       allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id)
 
+    def _on_attribute(self) -> None:
+        if self._structs[-1].extent is not None:
+            raise InvalidDirectiveError(
+                'The extent directive can only be placed after the last attribute definition in the schema. '
+                'This is to prevent errors if the extent is dependent on the bit length set of the data schema.'
+            )
+
     def _on_print_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
         _logger.info('Print directive at %s:%d%s', self._definition.file_path, line_number,
                      (': %s' % value) if value is not None else ' (no value to print)')
@@ -211,31 +230,60 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError('The assertion check expression must yield a boolean, not %s' %
                                         value.TYPE_NAME)
 
+    def _on_extent_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
+        if self._structs[-1].sealed:
+            raise InvalidDirectiveError('The extent cannot be specified for a sealed type')
+        if value is None:
+            raise InvalidDirectiveError('The extent directive requires an expression')
+        elif isinstance(value, _expression.Rational):
+            struct = self._structs[-1]
+            if struct.extent is None:
+                struct.set_extent(value.as_native_integer())
+                _logger.debug('The extent is set to %d bits at %s:%d',
+                              struct.extent, self._definition.file_path, line_number)
+            else:
+                raise InvalidDirectiveError('Duplicated extent directive (already set to %d bits)' % struct.extent)
+        else:
+            raise InvalidDirectiveError('The extent directive expects a rational, not %s' % value.TYPE_NAME)
+
+    def _on_sealed_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
+        if self._structs[-1].extent is not None:
+            raise InvalidDirectiveError('A type whose extent is defined explicitly cannot be made sealed')
+        if value is not None:
+            raise InvalidDirectiveError('The sealed directive does not expect an expression')
+        if self._structs[-1].sealed:
+            raise InvalidDirectiveError('Duplicated sealed directive')
+        self._structs[-1].make_sealed()
+
     def _on_union_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
         if value is not None:
             raise InvalidDirectiveError('The union directive does not expect an expression')
-
         if self._structs[-1].union:
             raise InvalidDirectiveError('Duplicated union directive')
-
         if not self._structs[-1].empty:
             raise InvalidDirectiveError('The union directive must be placed before the first '
                                         'attribute definition')
-
         self._structs[-1].make_union()
 
     def _on_deprecated_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
         if value is not None:
             raise InvalidDirectiveError('The deprecated directive does not expect an expression')
-
         if self._is_deprecated:
             raise InvalidDirectiveError('Duplicated deprecated directive')
-
         if len(self._structs) > 1:
             raise InvalidDirectiveError('The deprecated directive cannot be placed in the response section')
-
         if not self._structs[-1].empty:
             raise InvalidDirectiveError('The deprecated directive must be placed before the first '
                                         'attribute definition')
-
         self._is_deprecated = True
+
+    @staticmethod
+    def _render_explicit_extent_recommendation(model: _serializable.DelimitedType) -> str:
+        assert model.extent % 8 == 0, 'Internal error: Extent is expected to be an integer multiple of 8 bits'
+        e_bytes = model.extent // 8
+        return (
+            'Extent is not specified explicitly, defaulting to {e_bytes} bytes. '
+            'To accept the default extent and silence this diagnostic, '
+            'add the following line near the end of the definition: '
+            '`@extent {e_bytes} * 8`'
+        ).format(e_bytes=e_bytes)

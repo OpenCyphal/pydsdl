@@ -7,6 +7,7 @@ import abc
 import math
 import typing
 import itertools
+import fractions
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
@@ -28,6 +29,10 @@ class AttributeNameCollisionError(TypeParameterError):
     pass
 
 
+class InvalidExtentError(TypeParameterError):
+    pass
+
+
 class InvalidFixedPortIDError(TypeParameterError):
     pass
 
@@ -44,6 +49,7 @@ class CompositeType(SerializableType):
     """
     This is the most interesting type in the library because it represents an actual DSDL definition upon its
     interpretation.
+    This is an abstract class with several specializations.
     """
 
     MAX_NAME_LENGTH = 50
@@ -158,6 +164,27 @@ class CompositeType(SerializableType):
         return self._version
 
     @property
+    def extent(self) -> int:
+        """
+        The amount of memory, in bits, that needs to be allocated in order to store a serialized representation of
+        this type or any of its minor versions under the same major version.
+        This value is always at least as large as the sum of maximum bit lengths of all fields padded to one byte.
+        If the type is sealed, its extent equals ``max(bit_length_set)``.
+        """
+        return max(self.bit_length_set or {0})
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        """
+        The bit length set of a composite is always aligned at :attr:`alignment_requirement`.
+        For a sealed type this is the true bit length set computed by aggregating the fields and
+        padding the result to :attr:`alignment_requirement`.
+        That is, sealed types expose their internal structure; for example, a type that contains a single field
+        of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
+        """
+        raise NotImplementedError
+
+    @property
     def deprecated(self) -> bool:
         """Whether the definition is marked ``@deprecated``."""
         return self._deprecated
@@ -194,32 +221,10 @@ class CompositeType(SerializableType):
         return self._source_file_path
 
     @property
-    def data_type_hash(self) -> int:
-        """
-        WARNING: THIS API ENTITY IS UNSTABLE AND IS NOT PART OF THE UAVCAN SPECIFICATION v1.0.
-        See the context here: https://forum.uavcan.org/t/alternative-transport-protocols/324
-        """
-        salt = 'cvo0'
-
-        def get_hash(data: str) -> int:
-            c = _CRC32C()
-            c.add((data + salt).encode())
-            return c.value
-
-        full_name_except_root_ns = self.NAME_COMPONENT_SEPARATOR.join(self.name_components[1:])
-        assert self.root_namespace + self.NAME_COMPONENT_SEPARATOR + full_name_except_root_ns == self.full_name
-
-        # Field assignment:
-        #   - Upper 32 bits contain the CRC32C of the root namespace salted with "cvo0"
-        #   - The bits [8, 31] (i.e., the next 24 bits) contain the 24 most significant bits of the CRC32C of the
-        #     full name excepting the root namespace and its separator. For example, that would be "node.Heartbeat"
-        #     of "uavcan.node.Heartbeat".
-        #   - The 8 least significant bits contain the major version number.
-        out = (get_hash(self.root_namespace) << 32) \
-            | (get_hash(full_name_except_root_ns) & 0xFFFFFF00) \
-            | self.version.major
-        assert 0 <= out < 2 ** 64
-        return out
+    def alignment_requirement(self) -> int:
+        # This is more general than required by the Specification, but it is done this way in case if we decided
+        # to support greater alignment requirements in the future.
+        return max([self.BITS_PER_BYTE] + [x.data_type.alignment_requirement for x in self.fields])
 
     @property
     def parent_service(self) -> typing.Optional['ServiceType']:
@@ -257,6 +262,7 @@ class CompositeType(SerializableType):
         Please refer to the usage examples to see how this feature can be used.
 
         :param base_offset: Assume the specified base offset; assume zero offset if the parameter is not provided.
+            The base offset will be implicitly padded out to :attr:`alignment_requirement`.
 
         :return: A generator of ``(Field, BitLengthSet)``.
             Each instance of :class:`pydsdl.BitLengthSet` yielded by the generator is a dedicated copy,
@@ -272,11 +278,10 @@ class CompositeType(SerializableType):
                 assert isinstance(c.value, _expression.Any)
                 return c.value
 
-        return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+        if name.native_value == '_extent_':  # Experimental non-standard extension
+            return _expression.Rational(self.extent)
 
-    @abc.abstractmethod
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        raise NotImplementedError
+        return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
 
     def __getitem__(self, attribute_name: str) -> Attribute:
         """
@@ -291,14 +296,19 @@ class CompositeType(SerializableType):
         return '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
 
     def __repr__(self) -> str:
-        return '%s(name=%r, version=%r, fields=%r, constants=%r, deprecated=%r, fixed_port_id=%r)' % \
-            (self.__class__.__name__,
-             self.full_name,
-             self.version,
-             self.fields,
-             self.constants,
-             self.deprecated,
-             self.fixed_port_id)
+        return (
+            '%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, '
+            'deprecated=%r, fixed_port_id=%r)'
+        ) % (
+            self.__class__.__name__,
+            self.full_name,
+            self.version,
+            self.fields,
+            self.constants,
+            self.alignment_requirement,
+            self.deprecated,
+            self.fixed_port_id,
+        )
 
 
 class UnionType(CompositeType):
@@ -334,11 +344,19 @@ class UnionType(CompositeType):
             if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
                 raise MalformedUnionError('Padding fields not allowed in unions')
 
-        # Construct once to allow reference equality checks
-        assert (self.number_of_variants - 1) > 0
-        unaligned_tag_bit_length = (self.number_of_variants - 1).bit_length()
-        tag_bit_length = 2 ** math.ceil(math.log2(max(8, unaligned_tag_bit_length)))
-        self._tag_field_type = UnsignedIntegerType(tag_bit_length, PrimitiveType.CastMode.TRUNCATED)
+        self._tag_field_type = UnsignedIntegerType(self._compute_tag_bit_length([x.data_type for x in self.fields]),
+                                                   PrimitiveType.CastMode.TRUNCATED)
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_8579621435'
+        if not hasattr(self, att):
+            agr = self.aggregate_bit_length_sets
+            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
 
     @property
     def number_of_variants(self) -> int:
@@ -355,13 +373,50 @@ class UnionType(CompositeType):
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
-        base_offset = BitLengthSet(base_offset or {0})
-        base_offset.increment(self.tag_field_type.bit_length)
+        base_offset = BitLengthSet(base_offset or {0}).pad_to_alignment(self.alignment_requirement)
+        base_offset += self.tag_field_type.bit_length
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
+            assert base_offset.is_aligned_at(f.data_type.alignment_requirement)
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
 
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_tagged_union(map(lambda f: f.data_type.bit_length_set, self.fields))
+    @staticmethod
+    def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
+        """
+        Computes the bit length set for a tagged union type given the type of each of its variants.
+        The final padding is not applied.
+
+        Unions are easy to handle because when serialized, a union is essentially just a single field prefixed with
+        a fixed-length integer tag. So we just build a full set of combinations and then add the tag length
+        to each element.
+
+        Observe that unions are not defined for less than 2 elements;
+        however, this function tries to be generic by properly handling those cases as well,
+        even though they are not permitted by the specification.
+        For zero fields, the function yields ``{0}``; for one field, the function yields the BLS of the field itself.
+        """
+        ms = [x.bit_length_set for x in field_types]
+        if len(ms) == 0:
+            return BitLengthSet(0)
+        if len(ms) == 1:
+            return BitLengthSet(ms[0])
+
+        tbl = UnionType._compute_tag_bit_length(field_types)
+        out = BitLengthSet()
+        for s in ms:
+            out |= s + tbl
+        assert len(out) > 0, 'Empty sets forbidden'
+        return out
+
+    @staticmethod
+    def _compute_tag_bit_length(field_types: typing.Sequence[SerializableType]) -> int:
+        assert len(field_types) > 1, 'Internal API misuse'
+        unaligned_tag_bit_length = (len(field_types) - 1).bit_length()
+        tag_bit_length = 2 ** math.ceil(math.log2(max(SerializableType.BITS_PER_BYTE, unaligned_tag_bit_length)))
+        # This is to prevent the tag from breaking the alignment of the following variant.
+        tag_bit_length = max([tag_bit_length] + [x.alignment_requirement for x in field_types])
+        assert isinstance(tag_bit_length, int)
+        assert tag_bit_length in {8, 16, 32, 64}
+        return tag_bit_length
 
 
 class StructureType(CompositeType):
@@ -372,24 +427,157 @@ class StructureType(CompositeType):
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
-        base_offset = BitLengthSet(base_offset or 0)
-
-        # The following variables do not serve the business logic, they are needed only for runtime cross-checking
-        _self_test_original_offset = BitLengthSet(0)
-        _self_test_field_bls_collection = []  # type: typing.List[BitLengthSet]
-
+        base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
         for f in self.fields:
+            base_offset = base_offset.pad_to_alignment(f.data_type.alignment_requirement)
             yield f, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
-            base_offset.increment(f.data_type.bit_length_set)
+            base_offset += f.data_type.bit_length_set
 
-            # This is only for ensuring that the logic is functioning as intended.
-            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
-            _self_test_original_offset.increment(f.data_type.bit_length_set)
-            _self_test_field_bls_collection.append(f.data_type.bit_length_set)
-            assert BitLengthSet.for_struct(_self_test_field_bls_collection) == _self_test_original_offset
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_7953874601'
+        if not hasattr(self, att):
+            agr = self.aggregate_bit_length_sets
+            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
 
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        return BitLengthSet.for_struct(map(lambda f: f.data_type.bit_length_set, self.fields))
+    @staticmethod
+    def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
+        """
+        Computes the bit length set for a structure type given the type of each of its fields.
+        The final padding is not applied.
+        """
+        bls = BitLengthSet()
+        for t in field_types:
+            bls = bls.pad_to_alignment(t.alignment_requirement)
+            bls += t.bit_length_set
+        return bls or BitLengthSet(0)  # Empty bit length sets are forbidden
+
+
+class DelimitedType(CompositeType):
+    """
+    Composites that are not sealed are wrapped into this container.
+    It is a decorator over a composite type instance that injects the extent, bit length set, and field iteration
+    logic that is specific to delimited (appendable, non-sealed) types.
+
+    Most of the attributes are copied from the wrapped type (e.g., name, fixed port-ID, attributes, etc.),
+    except for those that relate to the bit layout.
+
+    Non-sealed composites are serialized into delimited opaque containers like ``uint8[<=(extent + 7) // 8]``,
+    where the implicit length prefix is of type :attr:`delimiter_header_type`.
+    Their bit length set is also computed as if it was an array as declared above,
+    in order to prevent the containing definitions from making assumptions about the offsets of the following fields
+    that might not survive the evolution of the type (e.g., version 1 may be 64 bits long, version 2 might be
+    56 bits long, then version 3 could grow to 96 bits, unpredictable).
+    """
+
+    DEFAULT_EXTENT_MULTIPLIER = fractions.Fraction(3, 2)
+    """
+    If the extent is not specified explicitly, it is computed by multiplying the extent of the inner type by this.
+    """
+
+    _DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
+
+    def __init__(self, inner: CompositeType, extent: typing.Optional[int]):
+        self._inner = inner
+        super(DelimitedType, self).__init__(name=inner.full_name,
+                                            version=inner.version,
+                                            attributes=inner.attributes,
+                                            deprecated=inner.deprecated,
+                                            fixed_port_id=inner.fixed_port_id,
+                                            source_file_path=inner.source_file_path,
+                                            parent_service=inner.parent_service)
+        if extent is None:
+            unaligned = math.floor(inner.extent * self.DEFAULT_EXTENT_MULTIPLIER)
+            self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
+        else:
+            self._extent = int(extent)
+
+        if self._extent % self.alignment_requirement != 0:
+            raise InvalidExtentError('The specified extent of %d bits is not a multiple of %d bits' %
+                                     (self._extent, self.alignment_requirement))
+        if self._extent < inner.extent:
+            raise InvalidExtentError(
+                'The specified extent of %d bits is too small for this data type. '
+                'Either compactify the data type or increase the extent at least to %d bits. '
+                'Beware that the latter option may break wire compatibility.' %
+                (self._extent, inner.extent)
+            )
+
+        # Invariant checks.
+        assert self.extent % self.BITS_PER_BYTE == 0
+        assert self.extent % self.alignment_requirement == 0
+        assert self.extent >= self.inner_type.extent
+        assert len(self.bit_length_set) > 0
+        assert self.bit_length_set.is_aligned_at_byte()
+        assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
+        assert not self.bit_length_set or \
+            self.extent >= max(self.bit_length_set) - self.delimiter_header_type.bit_length
+
+    @property
+    def inner_type(self) -> CompositeType:
+        """
+        The appendable type that is serialized inside this delimited container.
+        Its bit length set, extent, and other layout-specific entities are computed as if it was a sealed type.
+        """
+        return self._inner
+
+    @property
+    def extent(self) -> int:
+        """
+        The extent of a delimited type can be specified explicitly via ``@extent`` (provided that it is not less
+        than the minimum); otherwise, it defaults to ``floor(inner_type.extent * 3/2)`` padded to byte.
+
+        Optional optimization hint: if the objective is to allocate buffer memory for constructing a new
+        serialized representation locally, then it may be beneficial to use the extent of the inner type
+        rather than this one because it may be smaller. This is not safe for deserialization, of course.
+        """
+        return self._extent
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        """
+        For a non-sealed type, not many guarantees about the bit length set can be provided,
+        because the type may be mutated in the next minor revision.
+        Therefore, a synthetic bit length set is constructed that is merely a list of all possible bit lengths
+        plus the delimiter header.
+        For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
+        ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
+        """
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        att = '_3476583631'
+        if not hasattr(self, att):
+            x = BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement) + \
+                self.delimiter_header_type.bit_length
+            setattr(self, att, x)
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
+
+    @property
+    def delimiter_header_type(self) -> UnsignedIntegerType:
+        """
+        The type of the integer prefix field that encodes the size of the serialized representation [in bytes]
+        of the :attr:`inner_type`.
+        """
+        bit_length = self._DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
+        # This is to prevent the delimiter header from breaking the alignment of the following composite.
+        bit_length = max(bit_length, self.alignment_requirement)
+        return UnsignedIntegerType(bit_length, UnsignedIntegerType.CastMode.SATURATED)
+
+    def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
+            -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
+        """
+        Delegates the call to the inner type, but with the base offset increased by the size of the delimiter header.
+        """
+        base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
+        return self.inner_type.iterate_fields_with_offsets(base_offset)
+
+    def __repr__(self) -> str:
+        return '%s(inner=%r, extent=%r)' % (self.__class__.__name__, self.inner_type, self.extent)
 
 
 class ServiceType(CompositeType):
@@ -401,39 +589,60 @@ class ServiceType(CompositeType):
     which contain the request and the response structure of the service type, respectively.
     """
 
+    class SchemaParams:
+        """A trivial helper dataclass used for constructing new instances."""
+        def __init__(self,
+                     attributes: typing.Iterable[Attribute],
+                     extent:     typing.Optional[int],
+                     is_sealed:  bool,
+                     is_union:   bool):
+            self.attributes = list(attributes)
+            self.extent = int(extent) if extent is not None else None
+            self.is_sealed = bool(is_sealed)
+            self.is_union = bool(is_union)
+            if self.is_sealed and self.extent is not None:  # pragma: no cover
+                raise ValueError('API misuse: cannot set the extent on a sealed type')
+
+        def construct_composite(self,
+                                name: str,
+                                version: Version,
+                                deprecated: bool,
+                                parent_service: 'ServiceType') -> CompositeType:
+            request_meta_type = UnionType if self.is_union else StructureType  # type: type
+            ty = request_meta_type(name=name,
+                                   version=version,
+                                   attributes=self.attributes,
+                                   deprecated=deprecated,
+                                   fixed_port_id=None,
+                                   source_file_path='',
+                                   parent_service=parent_service)
+            assert isinstance(ty, CompositeType)
+            if self.is_sealed:
+                assert self.extent is None
+                return ty
+            else:
+                return DelimitedType(ty, extent=self.extent)
+
     def __init__(self,
-                 name:                str,
-                 version:             Version,
-                 request_attributes:  typing.Iterable[Attribute],
-                 response_attributes: typing.Iterable[Attribute],
-                 request_is_union:    bool,
-                 response_is_union:   bool,
-                 deprecated:          bool,
-                 fixed_port_id:       typing.Optional[int],
-                 source_file_path:    str):
-        request_meta_type = UnionType if request_is_union else StructureType  # type: type
-        self._request_type = request_meta_type(name=name + '.Request',
-                                               version=version,
-                                               attributes=request_attributes,
-                                               deprecated=deprecated,
-                                               fixed_port_id=None,
-                                               source_file_path='',
-                                               parent_service=self)  # type: CompositeType
-
-        response_meta_type = UnionType if response_is_union else StructureType  # type: type
-        self._response_type = response_meta_type(name=name + '.Response',
-                                                 version=version,
-                                                 attributes=response_attributes,
-                                                 deprecated=deprecated,
-                                                 fixed_port_id=None,
-                                                 source_file_path='',
-                                                 parent_service=self)  # type: CompositeType
-
+                 name:             str,
+                 version:          Version,
+                 request_params:   SchemaParams,
+                 response_params:  SchemaParams,
+                 deprecated:       bool,
+                 fixed_port_id:    typing.Optional[int],
+                 source_file_path: str):
+        self._request_type = request_params.construct_composite(name=name + '.Request',
+                                                                version=version,
+                                                                deprecated=deprecated,
+                                                                parent_service=self)
+        self._response_type = response_params.construct_composite(name=name + '.Response',
+                                                                  version=version,
+                                                                  deprecated=deprecated,
+                                                                  parent_service=self)
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
             Field(data_type=self._response_type, name='response'),
         ]
-
         super(ServiceType, self).__init__(name=name,
                                           version=version,
                                           attributes=container_attributes,
@@ -442,6 +651,10 @@ class ServiceType(CompositeType):
                                           source_file_path=source_file_path)
         assert self.request_type.parent_service is self
         assert self.response_type.parent_service is self
+
+    @property
+    def bit_length_set(self) -> BitLengthSet:
+        raise TypeError('Service types are not directly serializable. Use either request or response.')
 
     @property
     def request_type(self) -> CompositeType:
@@ -457,9 +670,6 @@ class ServiceType(CompositeType):
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """Always raises a :class:`TypeError`."""
         raise TypeError('Service types do not have serializable fields. Use either request or response.')
-
-    def _compute_bit_length_set(self) -> BitLengthSet:     # pragma: no cover
-        raise TypeError('Service types are not directly serializable. Use either request or response.')
 
 
 def _unittest_composite_types() -> None:
@@ -506,10 +716,8 @@ def _unittest_composite_types() -> None:
 
     print(ServiceType(name='a' * 48 + '.T',     # No exception raised
                       version=Version(0, 1),
-                      request_attributes=[],
-                      response_attributes=[],
-                      request_is_union=False,
-                      response_is_union=False,
+                      request_params=ServiceType.SchemaParams([], None, False, False),
+                      response_params=ServiceType.SchemaParams([], None, False, False),
                       deprecated=False,
                       fixed_port_id=None,
                       source_file_path=''))
@@ -544,7 +752,6 @@ def _unittest_composite_types() -> None:
                   deprecated=False,
                   fixed_port_id=None,
                   source_file_path='')
-    assert u.data_type_hash == 0x666666667bc4992a     # Computed by hand
     assert u['a'].name == 'a'
     assert u['b'].name == 'b'
     assert u['A'].name == 'A'
@@ -578,7 +785,34 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert s['']        # Padding fields are not accessible
     assert hash(s) == hash(s)
-    del s
+
+    d = DelimitedType(s, None)
+    assert d.inner_type is s
+    assert d.attributes == d.inner_type.attributes
+    with raises(KeyError):
+        assert d['c']
+    assert hash(d) == hash(d)
+    assert d.delimiter_header_type.bit_length == 32
+    assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.extent == d.inner_type.extent * 3 // 2
+
+    d = DelimitedType(s, 256)
+    assert hash(d) == hash(d)
+    assert d.delimiter_header_type.bit_length == 32
+    assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.extent == 256
+
+    d = DelimitedType(s, s.extent)  # Minimal extent
+    assert hash(d) == hash(d)
+    assert d.delimiter_header_type.bit_length == 32
+    assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.extent == s.extent == d.inner_type.extent
+
+    with raises(InvalidExtentError):
+        assert DelimitedType(s, 255)  # Unaligned extent
+
+    with raises(InvalidExtentError):
+        assert DelimitedType(s, 8)  # Extent too small
 
     def try_union_fields(field_types: typing.List[SerializableType]) -> UnionType:
         atr = []
@@ -592,29 +826,38 @@ def _unittest_composite_types() -> None:
                          fixed_port_id=None,
                          source_file_path='')
 
-    assert try_union_fields([
+    u = try_union_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {24}
+    ])
+    assert u.bit_length_set == {24}
+    assert u.extent == 24
+    assert DelimitedType(u, None).extent == 40
+    assert DelimitedType(u, None).bit_length_set == {32, 40, 48, 56, 64, 72}
+    assert DelimitedType(u, 24).extent == 24
+    assert DelimitedType(u, 24).bit_length_set == {32, 40, 48, 56}
+    assert DelimitedType(u, 32).extent == 32
+    assert DelimitedType(u, 32).bit_length_set == {32, 40, 48, 56, 64}
+    assert DelimitedType(u, 800).extent == 800
 
     assert try_union_fields(
         [
             UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
             SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-        ] * 1000
+        ] * 257
     ).bit_length_set == {16 + 16}
 
     assert try_union_fields(
         [
             UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
             SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-        ] * 1000000
+        ] * 32769
     ).bit_length_set == {32 + 16}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     small = VariableLengthArrayType(tu8, 2)
-    outer = FixedLengthArrayType(small, 2)   # bit length values: {4, 12, 20, 28, 36}
+    outer = FixedLengthArrayType(small, 2)   # unpadded bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
     assert try_union_fields([
@@ -634,10 +877,18 @@ def _unittest_composite_types() -> None:
                              fixed_port_id=None,
                              source_file_path='')
 
-    assert try_struct_fields([
+    s = try_struct_fields([
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-    ]).bit_length_set == {32}
+    ])
+    assert s.bit_length_set == {32}
+    assert s.extent == 32
+    assert DelimitedType(s, None).extent == 48
+    assert DelimitedType(s, None).bit_length_set == {32, 40, 48, 56, 64, 72, 80}
+    assert DelimitedType(s, 32).extent == 32
+    assert DelimitedType(s, 32).bit_length_set == {32, 40, 48, 56, 64}
+    assert DelimitedType(s, 40).extent == 40
+    assert DelimitedType(s, 40).bit_length_set == {32, 40, 48, 56, 64, 72}
 
     assert try_struct_fields([]).bit_length_set == {0}   # Empty sets forbidden
 
@@ -699,35 +950,82 @@ def _unittest_field_iterators() -> None:
         }),
     ])
 
+    d = DelimitedType(a, None)
+    validate_iterator(d, [
+        ('a', {32 + 0}),
+        ('b', {32 + 10}),
+        ('c', {32 + 11}),
+        ('d', {
+            32 + 11 + 8 + 32 * 0,
+            32 + 11 + 8 + 32 * 1,
+            32 + 11 + 8 + 32 * 2,
+        }),
+        ('', {
+            32 + 11 + 8 + 32 * 0 + 32 * 7,
+            32 + 11 + 8 + 32 * 1 + 32 * 7,
+            32 + 11 + 8 + 32 * 2 + 32 * 7,
+        }),
+    ])
+    print('d.bit_length_set', d.bit_length_set)
+    assert d.bit_length_set == BitLengthSet({
+        32 + x for x in range(((11 + 8 + 32 * 2 + 32 * 7) + 7) // 8 * 8 * 3 // 2 + 1)
+    }).pad_to_alignment(8)
+
     a_bls_options = [
         11 + 8 + 32 * 0 + 32 * 7 + 3,
         11 + 8 + 32 * 1 + 32 * 7 + 3,
         11 + 8 + 32 * 2 + 32 * 7 + 3,
     ]
-    assert a.bit_length_set == BitLengthSet(a_bls_options)
+    assert a.bit_length_set == BitLengthSet(a_bls_options).pad_to_alignment(8)
 
-    # Testing "a" again, this time with non-zero base offset
+    # Testing "a" again, this time with non-zero base offset.
+    # The first base offset element is one, but it is padded to byte, so it becomes 8.
     validate_iterator(a, [
-        ('a', {1, 16}),
-        ('b', {1 + 10, 16 + 10}),
-        ('c', {1 + 11, 16 + 11}),
+        ('a', {8, 16}),
+        ('b', {8 + 10, 16 + 10}),
+        ('c', {8 + 11, 16 + 11}),
         ('d', {
-            1 + 11 + 8 + 32 * 0,
-            1 + 11 + 8 + 32 * 1,
-            1 + 11 + 8 + 32 * 2,
+            8 + 11 + 8 + 32 * 0,
+            8 + 11 + 8 + 32 * 1,
+            8 + 11 + 8 + 32 * 2,
             16 + 11 + 8 + 32 * 0,
             16 + 11 + 8 + 32 * 1,
             16 + 11 + 8 + 32 * 2,
         }),
         ('', {
-            1 + 11 + 8 + 32 * 0 + 32 * 7,
-            1 + 11 + 8 + 32 * 1 + 32 * 7,
-            1 + 11 + 8 + 32 * 2 + 32 * 7,
+            8 + 11 + 8 + 32 * 0 + 32 * 7,
+            8 + 11 + 8 + 32 * 1 + 32 * 7,
+            8 + 11 + 8 + 32 * 2 + 32 * 7,
             16 + 11 + 8 + 32 * 0 + 32 * 7,
             16 + 11 + 8 + 32 * 1 + 32 * 7,
             16 + 11 + 8 + 32 * 2 + 32 * 7,
         }),
-    ], BitLengthSet({1, 16}))
+    ], BitLengthSet({1, 16}))  # 1 becomes 8 due to padding.
+
+    # Wrap the above into a delimited type with a manually specified extent.
+    d = DelimitedType(a, 400)
+    validate_iterator(d, [
+        ('a', {32 + 8, 32 + 16}),
+        ('b', {32 + 8 + 10, 32 + 16 + 10}),
+        ('c', {32 + 8 + 11, 32 + 16 + 11}),
+        ('d', {
+            32 + 8 + 11 + 8 + 32 * 0,
+            32 + 8 + 11 + 8 + 32 * 1,
+            32 + 8 + 11 + 8 + 32 * 2,
+            32 + 16 + 11 + 8 + 32 * 0,
+            32 + 16 + 11 + 8 + 32 * 1,
+            32 + 16 + 11 + 8 + 32 * 2,
+        }),
+        ('', {
+            32 + 8 + 11 + 8 + 32 * 0 + 32 * 7,
+            32 + 8 + 11 + 8 + 32 * 1 + 32 * 7,
+            32 + 8 + 11 + 8 + 32 * 2 + 32 * 7,
+            32 + 16 + 11 + 8 + 32 * 0 + 32 * 7,
+            32 + 16 + 11 + 8 + 32 * 1 + 32 * 7,
+            32 + 16 + 11 + 8 + 32 * 2 + 32 * 7,
+        }),
+    ], BitLengthSet({1, 16}))  # 1 becomes 8 due to padding.
+    assert d.bit_length_set == BitLengthSet({(32 + x + 7) // 8 * 8 for x in range(400 + 1)})
 
     b = make_type(StructureType, [
         Field(a, 'z'),
@@ -735,53 +1033,54 @@ def _unittest_field_iterators() -> None:
         Field(UnsignedIntegerType(6, saturated), 'x'),
     ])
 
+    a_bls_padded = [((x + 7) // 8) * 8 for x in a_bls_options]
     validate_iterator(b, [
         ('z', {0}),
         ('y', {
-            a_bls_options[0],
-            a_bls_options[1],
-            a_bls_options[2],
+            a_bls_padded[0],
+            a_bls_padded[1],
+            a_bls_padded[2],
         }),
         ('x', {  # The lone "+2" is for the variable-length array's implicit length field
             # First length option of z
-            a_bls_options[0] + 8 + a_bls_options[0] * 0,  # suka
-            a_bls_options[0] + 8 + a_bls_options[1] * 0,
-            a_bls_options[0] + 8 + a_bls_options[2] * 0,
-            a_bls_options[0] + 8 + a_bls_options[0] * 1,
-            a_bls_options[0] + 8 + a_bls_options[1] * 1,
-            a_bls_options[0] + 8 + a_bls_options[2] * 1,
-            a_bls_options[0] + 8 + a_bls_options[0] * 2,
-            a_bls_options[0] + 8 + a_bls_options[1] * 2,
-            a_bls_options[0] + 8 + a_bls_options[2] * 2,
+            a_bls_padded[0] + 8 + a_bls_padded[0] * 0,  # suka
+            a_bls_padded[0] + 8 + a_bls_padded[1] * 0,
+            a_bls_padded[0] + 8 + a_bls_padded[2] * 0,
+            a_bls_padded[0] + 8 + a_bls_padded[0] * 1,
+            a_bls_padded[0] + 8 + a_bls_padded[1] * 1,
+            a_bls_padded[0] + 8 + a_bls_padded[2] * 1,
+            a_bls_padded[0] + 8 + a_bls_padded[0] * 2,
+            a_bls_padded[0] + 8 + a_bls_padded[1] * 2,
+            a_bls_padded[0] + 8 + a_bls_padded[2] * 2,
             # Second length option of z
-            a_bls_options[1] + 8 + a_bls_options[0] * 0,
-            a_bls_options[1] + 8 + a_bls_options[1] * 0,
-            a_bls_options[1] + 8 + a_bls_options[2] * 0,
-            a_bls_options[1] + 8 + a_bls_options[0] * 1,
-            a_bls_options[1] + 8 + a_bls_options[1] * 1,
-            a_bls_options[1] + 8 + a_bls_options[2] * 1,
-            a_bls_options[1] + 8 + a_bls_options[0] * 2,
-            a_bls_options[1] + 8 + a_bls_options[1] * 2,
-            a_bls_options[1] + 8 + a_bls_options[2] * 2,
+            a_bls_padded[1] + 8 + a_bls_padded[0] * 0,
+            a_bls_padded[1] + 8 + a_bls_padded[1] * 0,
+            a_bls_padded[1] + 8 + a_bls_padded[2] * 0,
+            a_bls_padded[1] + 8 + a_bls_padded[0] * 1,
+            a_bls_padded[1] + 8 + a_bls_padded[1] * 1,
+            a_bls_padded[1] + 8 + a_bls_padded[2] * 1,
+            a_bls_padded[1] + 8 + a_bls_padded[0] * 2,
+            a_bls_padded[1] + 8 + a_bls_padded[1] * 2,
+            a_bls_padded[1] + 8 + a_bls_padded[2] * 2,
             # Third length option of z
-            a_bls_options[2] + 8 + a_bls_options[0] * 0,
-            a_bls_options[2] + 8 + a_bls_options[1] * 0,
-            a_bls_options[2] + 8 + a_bls_options[2] * 0,
-            a_bls_options[2] + 8 + a_bls_options[0] * 1,
-            a_bls_options[2] + 8 + a_bls_options[1] * 1,
-            a_bls_options[2] + 8 + a_bls_options[2] * 1,
-            a_bls_options[2] + 8 + a_bls_options[0] * 2,
-            a_bls_options[2] + 8 + a_bls_options[1] * 2,
-            a_bls_options[2] + 8 + a_bls_options[2] * 2,
+            a_bls_padded[2] + 8 + a_bls_padded[0] * 0,
+            a_bls_padded[2] + 8 + a_bls_padded[1] * 0,
+            a_bls_padded[2] + 8 + a_bls_padded[2] * 0,
+            a_bls_padded[2] + 8 + a_bls_padded[0] * 1,
+            a_bls_padded[2] + 8 + a_bls_padded[1] * 1,
+            a_bls_padded[2] + 8 + a_bls_padded[2] * 1,
+            a_bls_padded[2] + 8 + a_bls_padded[0] * 2,
+            a_bls_padded[2] + 8 + a_bls_padded[1] * 2,
+            a_bls_padded[2] + 8 + a_bls_padded[2] * 2,
         }),
     ])
 
-    # Ensuring the equivalency between bit length and bit offset
+    # Ensuring the equivalency between bit length and aligned bit offset
     b_offset = BitLengthSet()
     for f in b.fields:
-        b_offset.increment(f.data_type.bit_length_set)
+        b_offset += f.data_type.bit_length_set
     print('b_offset:', b_offset)
-    assert b_offset == b.bit_length_set
+    assert b_offset.pad_to_alignment(8) == b.bit_length_set
     assert not b_offset.is_aligned_at_byte()
     assert not b_offset.is_aligned_at(32)
 
@@ -801,86 +1100,35 @@ def _unittest_field_iterators() -> None:
     ], BitLengthSet(8))
 
     validate_iterator(c, [
-        ('foo', {0 + 8, 4 + 8, 8 + 8}),
-        ('bar', {0 + 8, 4 + 8, 8 + 8}),
-    ], BitLengthSet({0, 4, 8}))
+        ('foo', {0 + 8, 8 + 8}),
+        ('bar', {0 + 8, 8 + 8}),
+    ], BitLengthSet({0, 4, 8}))  # The option 4 is eliminated due to padding to byte, so we're left with {0, 8}.
 
     with raises(TypeError, match='.*request or response.*'):
         ServiceType(name='ns.S',
                     version=Version(1, 0),
-                    request_attributes=[],
-                    response_attributes=[],
-                    request_is_union=False,
-                    response_is_union=False,
+                    request_params=ServiceType.SchemaParams([], None, False, False),
+                    response_params=ServiceType.SchemaParams([], None, False, False),
                     deprecated=False,
                     fixed_port_id=None,
                     source_file_path='').iterate_fields_with_offsets()
 
-
-class _CRC32C:
-    """
-    Implementation of the CRC-32C (Castagnoli) algorithm.
-    """
-
-    _CRC32C_TABLE = [
-        0x00000000, 0xF26B8303, 0xE13B70F7, 0x1350F3F4, 0xC79A971F, 0x35F1141C, 0x26A1E7E8, 0xD4CA64EB,
-        0x8AD958CF, 0x78B2DBCC, 0x6BE22838, 0x9989AB3B, 0x4D43CFD0, 0xBF284CD3, 0xAC78BF27, 0x5E133C24,
-        0x105EC76F, 0xE235446C, 0xF165B798, 0x030E349B, 0xD7C45070, 0x25AFD373, 0x36FF2087, 0xC494A384,
-        0x9A879FA0, 0x68EC1CA3, 0x7BBCEF57, 0x89D76C54, 0x5D1D08BF, 0xAF768BBC, 0xBC267848, 0x4E4DFB4B,
-        0x20BD8EDE, 0xD2D60DDD, 0xC186FE29, 0x33ED7D2A, 0xE72719C1, 0x154C9AC2, 0x061C6936, 0xF477EA35,
-        0xAA64D611, 0x580F5512, 0x4B5FA6E6, 0xB93425E5, 0x6DFE410E, 0x9F95C20D, 0x8CC531F9, 0x7EAEB2FA,
-        0x30E349B1, 0xC288CAB2, 0xD1D83946, 0x23B3BA45, 0xF779DEAE, 0x05125DAD, 0x1642AE59, 0xE4292D5A,
-        0xBA3A117E, 0x4851927D, 0x5B016189, 0xA96AE28A, 0x7DA08661, 0x8FCB0562, 0x9C9BF696, 0x6EF07595,
-        0x417B1DBC, 0xB3109EBF, 0xA0406D4B, 0x522BEE48, 0x86E18AA3, 0x748A09A0, 0x67DAFA54, 0x95B17957,
-        0xCBA24573, 0x39C9C670, 0x2A993584, 0xD8F2B687, 0x0C38D26C, 0xFE53516F, 0xED03A29B, 0x1F682198,
-        0x5125DAD3, 0xA34E59D0, 0xB01EAA24, 0x42752927, 0x96BF4DCC, 0x64D4CECF, 0x77843D3B, 0x85EFBE38,
-        0xDBFC821C, 0x2997011F, 0x3AC7F2EB, 0xC8AC71E8, 0x1C661503, 0xEE0D9600, 0xFD5D65F4, 0x0F36E6F7,
-        0x61C69362, 0x93AD1061, 0x80FDE395, 0x72966096, 0xA65C047D, 0x5437877E, 0x4767748A, 0xB50CF789,
-        0xEB1FCBAD, 0x197448AE, 0x0A24BB5A, 0xF84F3859, 0x2C855CB2, 0xDEEEDFB1, 0xCDBE2C45, 0x3FD5AF46,
-        0x7198540D, 0x83F3D70E, 0x90A324FA, 0x62C8A7F9, 0xB602C312, 0x44694011, 0x5739B3E5, 0xA55230E6,
-        0xFB410CC2, 0x092A8FC1, 0x1A7A7C35, 0xE811FF36, 0x3CDB9BDD, 0xCEB018DE, 0xDDE0EB2A, 0x2F8B6829,
-        0x82F63B78, 0x709DB87B, 0x63CD4B8F, 0x91A6C88C, 0x456CAC67, 0xB7072F64, 0xA457DC90, 0x563C5F93,
-        0x082F63B7, 0xFA44E0B4, 0xE9141340, 0x1B7F9043, 0xCFB5F4A8, 0x3DDE77AB, 0x2E8E845F, 0xDCE5075C,
-        0x92A8FC17, 0x60C37F14, 0x73938CE0, 0x81F80FE3, 0x55326B08, 0xA759E80B, 0xB4091BFF, 0x466298FC,
-        0x1871A4D8, 0xEA1A27DB, 0xF94AD42F, 0x0B21572C, 0xDFEB33C7, 0x2D80B0C4, 0x3ED04330, 0xCCBBC033,
-        0xA24BB5A6, 0x502036A5, 0x4370C551, 0xB11B4652, 0x65D122B9, 0x97BAA1BA, 0x84EA524E, 0x7681D14D,
-        0x2892ED69, 0xDAF96E6A, 0xC9A99D9E, 0x3BC21E9D, 0xEF087A76, 0x1D63F975, 0x0E330A81, 0xFC588982,
-        0xB21572C9, 0x407EF1CA, 0x532E023E, 0xA145813D, 0x758FE5D6, 0x87E466D5, 0x94B49521, 0x66DF1622,
-        0x38CC2A06, 0xCAA7A905, 0xD9F75AF1, 0x2B9CD9F2, 0xFF56BD19, 0x0D3D3E1A, 0x1E6DCDEE, 0xEC064EED,
-        0xC38D26C4, 0x31E6A5C7, 0x22B65633, 0xD0DDD530, 0x0417B1DB, 0xF67C32D8, 0xE52CC12C, 0x1747422F,
-        0x49547E0B, 0xBB3FFD08, 0xA86F0EFC, 0x5A048DFF, 0x8ECEE914, 0x7CA56A17, 0x6FF599E3, 0x9D9E1AE0,
-        0xD3D3E1AB, 0x21B862A8, 0x32E8915C, 0xC083125F, 0x144976B4, 0xE622F5B7, 0xF5720643, 0x07198540,
-        0x590AB964, 0xAB613A67, 0xB831C993, 0x4A5A4A90, 0x9E902E7B, 0x6CFBAD78, 0x7FAB5E8C, 0x8DC0DD8F,
-        0xE330A81A, 0x115B2B19, 0x020BD8ED, 0xF0605BEE, 0x24AA3F05, 0xD6C1BC06, 0xC5914FF2, 0x37FACCF1,
-        0x69E9F0D5, 0x9B8273D6, 0x88D28022, 0x7AB90321, 0xAE7367CA, 0x5C18E4C9, 0x4F48173D, 0xBD23943E,
-        0xF36E6F75, 0x0105EC76, 0x12551F82, 0xE03E9C81, 0x34F4F86A, 0xC69F7B69, 0xD5CF889D, 0x27A40B9E,
-        0x79B737BA, 0x8BDCB4B9, 0x988C474D, 0x6AE7C44E, 0xBE2DA0A5, 0x4C4623A6, 0x5F16D052, 0xAD7D5351,
-    ]
-
-    def __init__(self) -> None:
-        assert len(self._CRC32C_TABLE) == 256
-        self._value = 0xFFFFFFFF
-
-    def add(self, data: typing.Union[bytes, bytearray]) -> None:
-        for b in data:
-            self._value = self._CRC32C_TABLE[b ^ (self._value & 0xFF)] ^ (self._value >> 8)
-
-    @property
-    def value(self) -> int:
-        assert 0 <= self._value <= 0xFFFFFFFF
-        return self._value ^ 0xFFFFFFFF
-
-
-def _unittest_crc32c() -> None:
-    c = _CRC32C()
-    assert c.value == 0
-    c.add(b'')
-    assert c.value == 0
-    c.add(b'123456789')
-    assert c.value == 0xE3069283
-    c.add(b'')
-    assert c.value == 0xE3069283
-
-    c = _CRC32C()
-    c.add(b'uavcan' + b'cvo0')
-    assert c.value == 0x66666666
+    # Check the auto-padding logic.
+    e = StructureType(name='e.E',
+                      version=Version(0, 1),
+                      attributes=[],
+                      deprecated=False,
+                      fixed_port_id=None,
+                      source_file_path='')
+    validate_iterator(e, [])
+    a = make_type(StructureType, [
+        Field(UnsignedIntegerType(3, PrimitiveType.CastMode.TRUNCATED), 'x'),
+        Field(e, 'y'),
+        Field(UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED), 'z'),
+    ])
+    assert a.bit_length_set == {16}
+    validate_iterator(a, [
+        ('x', {0}),
+        ('y', {8}),  # Padded out!
+        ('z', {8}),
+    ])

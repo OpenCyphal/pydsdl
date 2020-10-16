@@ -1,13 +1,11 @@
 language: python
-dist: bionic
-
-os:
-  - linux   # Travis-CI doesn't support Python on other platforms.
+dist: focal
 
 python:
   - '3.6'
   - '3.7'
   - '3.8'
+  - '3.9-dev'
 
 before_script:
   - pip install -r requirements.txt
@@ -15,6 +13,5 @@ before_script:
 script:
   - ./test.sh
 
-# TODO: re-enable when releasing.
-#  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
-#  - ./demo.py dsdl-test/uavcan
+  - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
+  - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"

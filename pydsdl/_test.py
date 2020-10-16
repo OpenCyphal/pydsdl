@@ -27,7 +27,7 @@ def _parse_definition(definition:         _dsdl_definition.DSDLDefinition,
                       lookup_definitions: typing.Sequence[_dsdl_definition.DSDLDefinition]) \
         -> _serializable.CompositeType:
     return definition.read(lookup_definitions,
-                           print_output_handler=lambda *_: None,
+                           print_output_handler=lambda line, text: print('Output from line %d:' % line, text),
                            allow_unregulated_fixed_port_id=False)
 
 
@@ -96,15 +96,18 @@ def _unittest_simple() -> None:
 
     p = _parse_definition(abc, [])
     print('Parsed:', p)
-    assert isinstance(p, _serializable.StructureType)
+    assert isinstance(p, _serializable.DelimitedType)
+    assert isinstance(p.inner_type, _serializable.StructureType)
     assert p.full_name == 'vendor.nested.Abc'
     assert p.source_file_path.endswith(os.path.join('vendor', 'nested', '7000.Abc.1.2.uavcan'))
     assert p.source_file_path == abc.file_path
     assert p.fixed_port_id == 7000
     assert p.deprecated
     assert p.version == (1, 2)
-    assert min(p.bit_length_set) == 16
-    assert max(p.bit_length_set) == 16 + 64 * 32
+    assert min(p.inner_type.bit_length_set) == 16
+    assert max(p.inner_type.bit_length_set) == 16 + 64 * 32
+    assert min(p.bit_length_set) == 32
+    assert max(p.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
     assert len(p.attributes) == 3
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
@@ -123,17 +126,18 @@ def _unittest_simple() -> None:
 
     empty_new = _define(
         'vendor/nested/Empty.255.255.uavcan',
-        ''''''
+        '''@sealed'''
     )
 
     empty_old = _define(
         'vendor/nested/Empty.255.254.uavcan',
-        ''''''
+        '''@sealed'''
     )
 
     constants = _define(
         'another/Constants.5.0.uavcan',
         dedent('''
+        @sealed
         float64 PI = 3.1415926535897932384626433
         ''')
     )
@@ -146,7 +150,9 @@ def _unittest_simple() -> None:
         vendor.nested.Empty.255.255 new_empty_implicit
         vendor.nested.Empty.255.255 new_empty_explicit
         vendor.nested.Empty.255.254 old_empty
+        @extent 32
         -----------------------------------
+        @sealed                      # RESPONSE SEALED REQUEST NOT
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
         ''')
@@ -172,7 +178,8 @@ def _unittest_simple() -> None:
     assert p.fields[0].name == 'request'
     assert p.fields[1].name == 'response'
     req, res = [x.data_type for x in p.fields]
-    assert isinstance(req, _serializable.UnionType)
+    assert isinstance(req, _serializable.DelimitedType)
+    assert isinstance(req.inner_type, _serializable.UnionType)
     assert isinstance(res, _serializable.StructureType)
     assert req.full_name == 'another.Service.Request'
     assert res.full_name == 'another.Service.Response'
@@ -181,11 +188,13 @@ def _unittest_simple() -> None:
 
     assert len(req.constants) == 0
     assert len(req.fields) == 3
-    assert req.number_of_variants == 3
+    # noinspection PyUnresolvedReferences
+    assert req.inner_type.number_of_variants == 3
     assert req.deprecated
     assert not req.has_fixed_port_id
     assert req.version == (0, 1)
-    assert req.bit_length_set == 8   # Remember this is a union
+    assert req.bit_length_set == {32, 32 + 8, 32 + 16, 32 + 24, 32 + 32}  # Delimited container, @extent
+    assert req.inner_type.bit_length_set == 8                             # Remember this is a union
     assert [x.name for x in req.fields] == ['new_empty_implicit', 'new_empty_explicit', 'old_empty']
 
     t = req.fields[0].data_type
@@ -208,8 +217,9 @@ def _unittest_simple() -> None:
     assert res.deprecated
     assert not res.has_fixed_port_id
     assert res.version == (0, 1)
-    assert min(res.bit_length_set) == 16
-    assert max(res.bit_length_set) == 16 + 64 * 32
+    # This is a sealed type, so we get the real BLS, but we mustn't forget about the non-sealed nested field!
+    assert min(res.bit_length_set) == 32                                            # Just the delimiter header
+    assert max(res.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
 
     t = res.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
@@ -217,7 +227,8 @@ def _unittest_simple() -> None:
     assert t.version == (5, 0)
 
     t = res.fields[1].data_type
-    assert isinstance(t, _serializable.StructureType)
+    assert isinstance(t, _serializable.DelimitedType)
+    assert isinstance(t.inner_type, _serializable.StructureType)
     assert t.full_name == 'vendor.nested.Abc'
     assert t.version == (1, 2)
 
@@ -235,6 +246,7 @@ def _unittest_simple() -> None:
         'another/Union.5.9.uavcan',
         dedent('''
         @union
+        @sealed
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
@@ -258,7 +270,7 @@ def _unittest_simple() -> None:
     assert p.constants[0].name == 'PI'
     assert str(p.constants[0].data_type) == 'truncated float16'
     assert min(p.bit_length_set) == 8
-    assert max(p.bit_length_set) == 8 + 8 + 255
+    assert max(p.bit_length_set) == 8 + 8 + 255 + 1  # The last +1 is the padding to byte.
     assert len(p.fields) == 3
     assert str(p.fields[0]) == 'saturated uint8 a'
     assert str(p.fields[1]) == 'vendor.nested.Empty.255.255[5] b'
@@ -478,6 +490,58 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
         standalone('vendor/types/1.A.1.0.uavcan', '---')
 
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*sealed.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @extent 128
+                   @sealed
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*sealed.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @sealed
+                   @extent 128
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*sealed.*expression.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @sealed 12345678
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*expression.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int8 a
+                   @extent
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   @extent 8  # Too small
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   @extent {16}  # Wrong type
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*attribute.*'):
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   @extent 64
+                   int8 b
+                   '''))
+
 
 @_in_n_out
 def _unittest_print() -> None:
@@ -493,13 +557,14 @@ def _unittest_print() -> None:
         '# line number 2\n'
         '@print 2 + 2 == 4   # line number 3\n'
         '# line number 4\n'
+        '@sealed\n'
     ).read([], print_handler, False)
 
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == 'true'
 
-    _define('ns/B.1.0.uavcan', '@print false').read([], print_handler, False)
+    _define('ns/B.1.0.uavcan', '@print false\n@sealed').read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 1
     assert printed_items[1] == 'false'
@@ -509,10 +574,77 @@ def _unittest_print() -> None:
         '@print _offset_    # Not recorded\n'
         'uint8 a\n'
         '@print _offset_\n'
+        '@extent 800\n'
     ).read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == "{8}"
+
+
+@_in_n_out
+def _unittest_explicit_extent_diagnostic() -> None:
+    printed_items = None  # type: typing.Optional[typing.Tuple[int, str]]
+
+    def print_handler(line_number: int, text: str) -> None:
+        nonlocal printed_items
+        printed_items = line_number, text
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+    ).read([], print_handler, False)
+    assert printed_items
+    assert 1 <= printed_items[0] <= 2
+    assert '@extent 12 * 8' in printed_items[1]
+    printed_items = None
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '---\n'
+        'uint64 x\n'
+    ).read([], print_handler, False)
+    assert printed_items
+    assert 1 <= printed_items[0] <= 2
+    assert 'Response' in printed_items[1]
+    assert '@extent 12 * 8' in printed_items[1]
+    printed_items = None
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '---\n'
+        '@sealed\n'
+    ).read([], print_handler, False)
+    assert printed_items
+    assert 1 <= printed_items[0] <= 2
+    assert 'Request' in printed_items[1]
+    assert '@extent 12 * 8' in printed_items[1]
+    printed_items = None
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '@extent 1024\n'
+        '---\n'
+        'uint64 x\n'
+        '@sealed\n'
+    ).read([], print_handler, False)
+    assert not printed_items
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '@sealed\n'
+    ).read([], print_handler, False)
+    assert not printed_items
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '@extent 1024\n'
+    ).read([], print_handler, False)
+    assert not printed_items
 
 
 # noinspection PyProtectedMember
@@ -547,9 +679,11 @@ def _unittest_assert() -> None:
             @assert truncated uint64._bit_length_ == {64}
             @assert uint64._bit_length_ == {64}
             @assert Array.1.0._bit_length_.max == 8 + 8 + 8
+            @assert Array.1.0._extent_ == 8 + 8 + 8
+            @assert Array.1.0._extent_ == Array.1.0._bit_length_.max
             ''')),
         [
-            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo')
+            _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo\n@sealed')
         ]
     )
 
@@ -663,6 +797,50 @@ def _unittest_assert() -> None:
             []
         )
 
+    # Extent verification
+    _parse_definition(
+        _define(
+            'ns/I.1.0.uavcan',
+            dedent('''
+            @assert J.1.0._extent_ == 64
+            @assert J.1.0._bit_length_ == {0, 1, 2, 3, 4, 5, 6, 7, 8} * 8 + 32
+            @assert K.1.0._extent_ == 8
+            @assert K.1.0._bit_length_ == {8}
+            ''')
+        ),
+        [
+            _define('ns/J.1.0.uavcan', 'uint8 foo\n@extent 64'),
+            _define('ns/K.1.0.uavcan', 'uint8 foo\n@sealed'),
+        ]
+    )
+
+    # Alignment
+    _parse_definition(
+        _define(
+            'ns/L.1.0.uavcan',
+            dedent('''
+            @assert _offset_ == {0}
+            uint3 a
+            @assert _offset_ == {3}
+            N.1.0 nothing
+            @print _offset_
+            @assert _offset_ == {8}   # Aligned!
+            uint5 b
+            @assert _offset_ == {13}
+            N.1.0[3] array_of_nothing
+            @assert _offset_ == {16}  # Aligned!
+            bool c
+            @assert _offset_ == {17}
+            M.1.0 variable
+            @assert _offset_ == 32 + {24, 32, 40}  # Aligned; variability due to extensibility (non-sealing)
+            ''')
+        ),
+        [
+            _define('ns/M.1.0.uavcan', '@extent 16'),
+            _define('ns/N.1.0.uavcan', '@sealed'),
+        ]
+    )
+
 
 def _unittest_parse_namespace() -> None:
     from pytest import raises
@@ -690,6 +868,7 @@ def _unittest_parse_namespace() -> None:
         uint8[<256] a
         @assert _offset_.min == 8
         @assert _offset_.max == 2048
+        @sealed
         """)
     )
 
@@ -699,6 +878,7 @@ def _unittest_parse_namespace() -> None:
         zubax.First.1.0[<=2] a
         @assert _offset_.min == 8
         @assert _offset_.max == 4104
+        @extent _offset_.max * 8
         """)
     )
 
@@ -710,8 +890,10 @@ def _unittest_parse_namespace() -> None:
         float16 small
         float32 just_right
         float64 woah
+        @extent _offset_.max * 8
         ---
         @print _offset_     # Will print zero {0}
+        @sealed
         """)
     )
 
@@ -738,7 +920,9 @@ def _unittest_parse_namespace() -> None:
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
         dedent("""
+        @extent 1024
         ---
+        @extent 1024
         """)
     )
 
@@ -753,17 +937,20 @@ def _unittest_parse_namespace() -> None:
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'), b'/my/path')  # type: ignore
 
     with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
+        # noinspection PyTypeChecker
         _namespace.read_namespace(os.path.join(directory.name, 'zubax'), [b'/my/path'])  # type: ignore
 
     assert print_output is not None
     assert '300.Spartans' in print_output[0]
-    assert print_output[1] == 8
+    assert print_output[1] == 9
     assert print_output[2] == '{0}'
 
     _define(
         'zubax/colliding/iceberg/300.Ice.30.0.uavcan',
         dedent("""
+        @sealed
         ---
+        @sealed
         """)
     )
     with raises(_namespace.DataTypeNameCollisionError):
@@ -781,7 +968,9 @@ def _unittest_parse_namespace() -> None:
         _define(
             'zubax/COLLIDING/300.Iceberg.30.0.uavcan',
             dedent("""
+            @extent 1024
             ---
+            @extent 1024
             """)
         )
         with raises(_namespace.DataTypeNameCollisionError, match='.*letter case.*'):
@@ -817,7 +1006,9 @@ def _unittest_parse_namespace_versioning() -> None:
         float16 small
         float32 just_right
         float64 woah
+        @extent 1024
         ---
+        @extent 1024
         """)
     )
 
@@ -829,7 +1020,9 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         int32 just_right
         float64[1] woah
+        @extent 1024
         ---
+        @extent 1024
         """)
     )
 
@@ -848,6 +1041,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         int32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -867,6 +1061,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -885,6 +1080,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         int64 woah
+        @extent 1024
         """)
     )
 
@@ -896,6 +1092,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         int32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -919,6 +1116,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -934,6 +1132,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -952,6 +1151,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -968,6 +1168,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -984,6 +1185,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -1008,6 +1210,14 @@ def _unittest_parse_namespace_versioning() -> None:
         'ns.Spartans.30.0',
         'ns.Spartans.0.1',
     ]
+
+    _define('ns/ExtentConsistency.1.0.uavcan', 'uint8 a\n@extent 128')
+    _define('ns/ExtentConsistency.1.1.uavcan', 'uint8 a\nuint8 b\n@extent 128')
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
+    assert len(parsed) == 10
+    _define('ns/ExtentConsistency.1.2.uavcan', 'uint8 a\nuint8 b\nuint8 c\n@extent 256')  # Extent is different
+    with raises(_namespace.ExtentConsistencyError, match='(?i).*extent.*128.*version.*'):
+        _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
 
 
 def _unittest_parse_namespace_faults() -> None:
@@ -1130,6 +1340,30 @@ def _unittest_repeated_directives() -> None:
                     @union
                     int8 a
                     float16 b
+                    ''')),
+            []
+        )
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*sealed.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    dedent('''
+                    @sealed
+                    @sealed
+                    int8 a
+                    float16 b
+                    ''')),
+            []
+        )
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*already set.*'):
+        _parse_definition(
+            _define('ns/A.1.0.uavcan',
+                    dedent('''
+                    int8 a
+                    float16 b
+                    @extent 256
+                    @extent 800
                     ''')),
             []
         )

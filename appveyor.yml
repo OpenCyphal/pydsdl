@@ -4,15 +4,15 @@ environment:
       PYTHON: "C:\\Python38-x64"
       PYTHON_ARCH: "64"
 
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
-      PYTHON: "3.6"
-
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
-      PYTHON: "3.7"
-
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.8"
       coverage: 1
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.7"
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.6"
 
 stack: python %PYTHON%
 
@@ -36,9 +36,9 @@ test_script:
   # MS Windows test.
   - cmd: python -m pytest
 
-  # Shared test for all platforms. TODO: re-enable when releasing.
-#  - git clone https://github.com/UAVCAN/public_regulated_data_types dsdl-test
-#  - python demo.py dsdl-test/uavcan
+  # Shared test for all platforms.
+  - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
+  - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
 
 after_test:
   # Publish the coverage. The deps are not listed in the requirements file because they are only useful in the CI.

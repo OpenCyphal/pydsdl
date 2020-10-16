@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
 # This software is distributed under the terms of the MIT License.
 #
 
@@ -46,7 +46,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
             line = pr.current_line_number
         # Treat as internal because all intentional errors are not wrapped into VisitationError.
         assert line > 0
-        raise _error.InternalError(str(ex), line=line)
+        raise _error.InternalError(str(ex), line=line) from ex
 
 
 class StatementStreamProcessor:
