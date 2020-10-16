@@ -557,13 +557,14 @@ def _unittest_print() -> None:
         '# line number 2\n'
         '@print 2 + 2 == 4   # line number 3\n'
         '# line number 4\n'
+        '@sealed\n'
     ).read([], print_handler, False)
 
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == 'true'
 
-    _define('ns/B.1.0.uavcan', '@print false').read([], print_handler, False)
+    _define('ns/B.1.0.uavcan', '@print false\n@sealed').read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 1
     assert printed_items[1] == 'false'
@@ -573,10 +574,77 @@ def _unittest_print() -> None:
         '@print _offset_    # Not recorded\n'
         'uint8 a\n'
         '@print _offset_\n'
+        '@extent 800\n'
     ).read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == "{8}"
+
+
+@_in_n_out
+def _unittest_explicit_extent_diagnostic() -> None:
+    printed_items = None  # type: typing.Optional[typing.Tuple[int, str]]
+
+    def print_handler(line_number: int, text: str) -> None:
+        nonlocal printed_items
+        printed_items = line_number, text
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+    ).read([], print_handler, False)
+    assert printed_items
+    assert 1 <= printed_items[0] <= 2
+    assert '@extent 12 * 8' in printed_items[1]
+    printed_items = None
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '---\n'
+        'uint64 x\n'
+    ).read([], print_handler, False)
+    assert printed_items
+    assert 1 <= printed_items[0] <= 2
+    assert 'Response' in printed_items[1]
+    assert '@extent 12 * 8' in printed_items[1]
+    printed_items = None
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '---\n'
+        '@sealed\n'
+    ).read([], print_handler, False)
+    assert printed_items
+    assert 1 <= printed_items[0] <= 2
+    assert 'Request' in printed_items[1]
+    assert '@extent 12 * 8' in printed_items[1]
+    printed_items = None
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '@extent 1024\n'
+        '---\n'
+        'uint64 x\n'
+        '@sealed\n'
+    ).read([], print_handler, False)
+    assert not printed_items
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '@sealed\n'
+    ).read([], print_handler, False)
+    assert not printed_items
+
+    _define(
+        'ns/A.1.0.uavcan',
+        'uint64 x\n'
+        '@extent 1024\n'
+    ).read([], print_handler, False)
+    assert not printed_items
 
 
 # noinspection PyProtectedMember
@@ -810,6 +878,7 @@ def _unittest_parse_namespace() -> None:
         zubax.First.1.0[<=2] a
         @assert _offset_.min == 8
         @assert _offset_.max == 4104
+        @extent _offset_.max * 8
         """)
     )
 
@@ -821,8 +890,10 @@ def _unittest_parse_namespace() -> None:
         float16 small
         float32 just_right
         float64 woah
+        @extent _offset_.max * 8
         ---
         @print _offset_     # Will print zero {0}
+        @sealed
         """)
     )
 
@@ -849,7 +920,9 @@ def _unittest_parse_namespace() -> None:
     _define(
         'zubax/colliding/300.Iceberg.30.0.uavcan',
         dedent("""
+        @extent 1024
         ---
+        @extent 1024
         """)
     )
 
@@ -869,13 +942,15 @@ def _unittest_parse_namespace() -> None:
 
     assert print_output is not None
     assert '300.Spartans' in print_output[0]
-    assert print_output[1] == 8
+    assert print_output[1] == 9
     assert print_output[2] == '{0}'
 
     _define(
         'zubax/colliding/iceberg/300.Ice.30.0.uavcan',
         dedent("""
+        @sealed
         ---
+        @sealed
         """)
     )
     with raises(_namespace.DataTypeNameCollisionError):
@@ -893,7 +968,9 @@ def _unittest_parse_namespace() -> None:
         _define(
             'zubax/COLLIDING/300.Iceberg.30.0.uavcan',
             dedent("""
+            @extent 1024
             ---
+            @extent 1024
             """)
         )
         with raises(_namespace.DataTypeNameCollisionError, match='.*letter case.*'):
@@ -929,7 +1006,9 @@ def _unittest_parse_namespace_versioning() -> None:
         float16 small
         float32 just_right
         float64 woah
+        @extent 1024
         ---
+        @extent 1024
         """)
     )
 
@@ -941,7 +1020,9 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         int32 just_right
         float64[1] woah
+        @extent 1024
         ---
+        @extent 1024
         """)
     )
 
@@ -960,6 +1041,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         int32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -979,6 +1061,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -997,6 +1080,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         int64 woah
+        @extent 1024
         """)
     )
 
@@ -1008,6 +1092,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         int32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -1031,6 +1116,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -1046,6 +1132,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -1064,6 +1151,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -1080,6 +1168,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 
@@ -1096,6 +1185,7 @@ def _unittest_parse_namespace_versioning() -> None:
         uint16 small
         float32 just_right
         float64[1] woah
+        @extent 1024
         """)
     )
 

@@ -70,9 +70,13 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             if not struct.sealed:
                 out = _serializable.DelimitedType(fin, extent=struct.extent)  # type: _serializable.CompositeType
                 _logger.debug('%r wrapped into %r', fin, out)
+                if struct.extent is None:
+                    assert isinstance(out, _serializable.DelimitedType)
+                    self._print_output_handler(1, self._render_explicit_extent_recommendation(out))
             else:
                 assert struct.extent is None, 'Internal constraint violation'
                 out = fin
+
         else:  # Service type
             request, response = self._structs
             assert isinstance(request, _data_schema_builder.DataSchemaBuilder)
@@ -87,6 +91,13 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 fixed_port_id=self._definition.fixed_port_id,
                 source_file_path=self._definition.file_path,
             )
+            assert isinstance(out, _serializable.ServiceType)
+            req_ty, resp_ty = out.request_type, out.response_type
+            if isinstance(req_ty, _serializable.DelimitedType) and request.extent is None:
+                self._print_output_handler(1, 'Request: ' + self._render_explicit_extent_recommendation(req_ty))
+            if isinstance(resp_ty, _serializable.DelimitedType) and response.extent is None:
+                self._print_output_handler(1, 'Response: ' + self._render_explicit_extent_recommendation(resp_ty))
+
         assert isinstance(out, _serializable.CompositeType)
         if not self._allow_unregulated_fixed_port_id:
             port_id = out.fixed_port_id
@@ -265,3 +276,14 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError('The deprecated directive must be placed before the first '
                                         'attribute definition')
         self._is_deprecated = True
+
+    @staticmethod
+    def _render_explicit_extent_recommendation(model: _serializable.DelimitedType) -> str:
+        assert model.extent % 8 == 0, 'Internal error: Extent is expected to be an integer multiple of 8 bits'
+        e_bytes = model.extent // 8
+        return (
+            'Extent is not specified explicitly, defaulting to {e_bytes} bytes. '
+            'To accept the default extent and silence this diagnostic, '
+            'add the following line near the end of the definition: '
+            '`@extent {e_bytes} * 8`'
+        ).format(e_bytes=e_bytes)
