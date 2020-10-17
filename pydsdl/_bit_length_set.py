@@ -43,7 +43,6 @@ class BitLengthSet:
             raise ValueError('Bit length set elements cannot be negative: %r' % values)
 
         assert isinstance(values, set)
-        assert all(map(lambda x: isinstance(x, int) and x >= 0, values))
         self._value = values  # type: typing.Set[int]
 
     def is_aligned_at(self, bit_length: int) -> bool:
