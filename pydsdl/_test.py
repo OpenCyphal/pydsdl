@@ -1218,9 +1218,10 @@ def _unittest_parse_namespace_versioning() -> None:
     assert len(parsed) == 10
     _define('ns/Consistency.1.2.uavcan', 'uint8 a\nuint8 b\nuint8 c\n@extent 256')
     with raises(_namespace.ExtentConsistencyError,
-                match=r'(?i).*extent of ns\.Consistency\.1\.2 is 256 bits.*') as exc_info:
+                match=r'(?i).*extent of ns\.Consistency\.1\.2 is 256 bits.*') as ei_extent:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
-    print(exc_info.value)
+    print(ei_extent.value)
+    assert ei_extent.value.path and 'Consistency.1' in ei_extent.value.path
     _undefine_glob('ns/Consistency*')
 
     # Extent consistency -- request
@@ -1253,9 +1254,10 @@ def _unittest_parse_namespace_versioning() -> None:
             @extent 128
             '''))
     with raises(_namespace.ExtentConsistencyError,
-                match=r'(?i).*extent of ns\.Consistency.* is 256 bits.*') as exc_info:
+                match=r'(?i).*extent of ns\.Consistency.* is 256 bits.*') as ei_extent:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
-    print(exc_info.value)
+    print(ei_extent.value)
+    assert ei_extent.value.path and 'Consistency.1' in ei_extent.value.path
     _undefine_glob('ns/Consistency*')
 
     # Extent consistency -- response
@@ -1287,9 +1289,10 @@ def _unittest_parse_namespace_versioning() -> None:
             @extent 256
             '''))
     with raises(_namespace.ExtentConsistencyError,
-                match=r'(?i).*extent of ns\.Consistency.* is 256 bits.*') as exc_info:
+                match=r'(?i).*extent of ns\.Consistency.* is 256 bits.*') as ei_extent:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
-    print(exc_info.value)
+    print(ei_extent.value)
+    assert ei_extent.value.path and 'Consistency.1' in ei_extent.value.path
     _undefine_glob('ns/Consistency*')
 
     # Sealing consistency -- non-service type
@@ -1298,9 +1301,10 @@ def _unittest_parse_namespace_versioning() -> None:
     parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
     assert len(parsed) == 10
     _define('ns/Consistency.1.2.uavcan', 'uint64 a\n@sealed')
-    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency\.1\.2 is sealed.*') as exc_info:
+    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency\.1\.2 is sealed.*') as ei_sealing:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
-    print(exc_info.value)
+    print(ei_sealing.value)
+    assert ei_sealing.value.path and 'Consistency.1' in ei_sealing.value.path
     _undefine_glob('ns/Consistency*')
 
     # Sealing consistency -- request
@@ -1330,9 +1334,10 @@ def _unittest_parse_namespace_versioning() -> None:
             uint64 a
             @extent 64
             '''))
-    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency.* is sealed.*') as exc_info:
+    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency.* is sealed.*') as ei_sealing:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
-    print(exc_info.value)
+    print(ei_sealing.value)
+    assert ei_sealing.value.path and 'Consistency.1' in ei_sealing.value.path
     _undefine_glob('ns/Consistency*')
 
     # Sealing consistency -- response
@@ -1362,9 +1367,10 @@ def _unittest_parse_namespace_versioning() -> None:
             uint64 a
             @sealed
             '''))
-    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency.* is sealed.*') as exc_info:
+    with raises(_namespace.SealingConsistencyError, match=r'(?i).*ns\.Consistency.* is sealed.*') as ei_sealing:
         _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
-    print(exc_info.value)
+    print(ei_sealing.value)
+    assert ei_sealing.value.path and 'Consistency.1' in ei_sealing.value.path
     _undefine_glob('ns/Consistency*')
 
 
