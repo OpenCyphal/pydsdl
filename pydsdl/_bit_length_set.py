@@ -36,7 +36,7 @@ class BitLengthSet:
             values = set()
         elif isinstance(values, int):
             values = {values}
-        else:
+        elif not isinstance(values, set):
             values = set(map(int, values))
 
         if values and min(values) < 0:
