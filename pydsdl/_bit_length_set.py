@@ -36,15 +36,13 @@ class BitLengthSet:
         BitLengthSet({1, 2, 3})
         """
         if isinstance(values, set):
-            pass  # Do not convert if already a set
+            self._value = values  # Do not convert if already a set
         elif values is None:
-            values = set()
+            self._value = set()
         elif isinstance(values, int):
-            values = {values}
+            self._value = {values}
         else:
-            values = set(map(int, values))
-
-        self._value = values  # type: typing.Set[int]
+            self._value = set(map(int, values))
 
     def is_aligned_at(self, bit_length: int) -> bool:
         """
