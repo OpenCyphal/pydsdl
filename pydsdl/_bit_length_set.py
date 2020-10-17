@@ -39,7 +39,7 @@ class BitLengthSet:
         else:
             values = set(map(int, values))
 
-        if not all(map(lambda x: x >= 0, values)):
+        if values and min(values) < 0:
             raise ValueError('Bit length set elements cannot be negative: %r' % values)
 
         assert isinstance(values, set)
