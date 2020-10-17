@@ -15,6 +15,9 @@ class BitLengthSet:
     Instances are comparable between each other, with plain integers, and with native sets of integers.
     The methods do not mutate the instance they are invoked on; instead, the result is returned as a new instance,
     excepting the in-place ``__ixx__()`` operator overloads.
+
+    This class performs very intensive computations that largely define the data type processing time
+    so it has been carefully optimized for speed. For details, see https://github.com/UAVCAN/pydsdl/issues/49.
     """
 
     def __init__(self, values: typing.Optional[typing.Union[typing.Iterable[int], int]] = None):
@@ -32,19 +35,14 @@ class BitLengthSet:
         >>> BitLengthSet({1, 2, 3})
         BitLengthSet({1, 2, 3})
         """
-        if values is None:
-            values = set()
+        if isinstance(values, set):
+            self._value = values  # Do not convert if already a set
+        elif values is None:
+            self._value = set()
         elif isinstance(values, int):
-            values = {values}
+            self._value = {values}
         else:
-            values = set(map(int, values))
-
-        if not all(map(lambda x: x >= 0, values)):
-            raise ValueError('Bit length set elements cannot be negative: %r' % values)
-
-        assert isinstance(values, set)
-        assert all(map(lambda x: isinstance(x, int) and x >= 0, values))
-        self._value = values  # type: typing.Set[int]
+            self._value = set(map(int, values))
 
     def is_aligned_at(self, bit_length: int) -> bool:
         """
@@ -276,7 +274,9 @@ class BitLengthSet:
         BitLengthSet({1, 2, 3, 4, 5, 6})
         """
         if isinstance(other, _OPERAND_TYPES):
-            return BitLengthSet(self._value | BitLengthSet(other)._value)
+            if not isinstance(other, BitLengthSet):  # Speed optimization
+                other = BitLengthSet(other)
+            return BitLengthSet(self._value | other._value)
         else:
             return NotImplemented
 
@@ -350,8 +350,6 @@ def _unittest_bit_length_set() -> None:
     assert BitLengthSet().is_aligned_at(1024)
     assert BitLengthSet(8).is_aligned_at_byte()
     assert not BitLengthSet(8).is_aligned_at(16)
-    with raises(ValueError):
-        BitLengthSet({-1})
 
     s = BitLengthSet({0, 8})
     s += 8
