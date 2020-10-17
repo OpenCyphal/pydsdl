@@ -155,14 +155,14 @@ class VariableLengthArrayType(ArrayType):
 
     @property
     def bit_length_set(self) -> BitLengthSet:
-        # Please refer to the corresponding implementation for the fixed-length array.
-        # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
-        # different sizes, from zero elements up to the maximum number of elements.
-        output = BitLengthSet()
-        for capacity in range(self.capacity + 1):
-            output |= self.element_type.bit_length_set.elementwise_sum_k_multicombinations(capacity)
-        output += self.length_field_type.bit_length
-        return output.pad_to_alignment(self.alignment_requirement)
+        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
+        # Caching is important because bit length set derivation is a very expensive operation.
+        att = '_8467150963'
+        if not hasattr(self, att):
+            setattr(self, att, self._compute_bit_length_set())
+        out = getattr(self, att)
+        assert isinstance(out, BitLengthSet)
+        return out
 
     @property
     def string_like(self) -> bool:
@@ -178,6 +178,16 @@ class VariableLengthArrayType(ArrayType):
         """
         assert self._length_field_type.bit_length % self.element_type.alignment_requirement == 0
         return self._length_field_type
+
+    def _compute_bit_length_set(self) -> BitLengthSet:
+        # Please refer to the corresponding implementation for the fixed-length array.
+        # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
+        # different sizes, from zero elements up to the maximum number of elements.
+        output = BitLengthSet()
+        for capacity in range(self.capacity + 1):
+            output |= self.element_type.bit_length_set.elementwise_sum_k_multicombinations(capacity)
+        output += self.length_field_type.bit_length
+        return output.pad_to_alignment(self.alignment_requirement)
 
     def __str__(self) -> str:
         return '%s[<=%d]' % (self.element_type, self.capacity)
