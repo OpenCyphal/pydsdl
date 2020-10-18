@@ -120,7 +120,8 @@ def read_namespace(root_namespace_directory:        str,
              The ordering guarantee allows the caller to always find the newest version simply by picking
              the first matching occurrence.
 
-    :raises: :class:`pydsdl.FrontendError`, :class:`OSError` if directories do not exist or inaccessible;
+    :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
+        :class:`OSError` if directories do not exist or inaccessible,
         :class:`ValueError`/:class:`TypeError` if the arguments are invalid.
     """
     # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates.
@@ -233,6 +234,8 @@ def _read_namespace_definitions(target_definitions:              typing.List[_ds
         except _error.FrontendError as ex:    # pragma: no cover
             ex.set_error_location_if_unknown(path=tdd.file_path)
             raise ex
+        except (MemoryError, SystemError):    # pragma: no cover
+            raise
         except Exception as ex:     # pragma: no cover
             raise _error.InternalError(culprit=ex, path=tdd.file_path) from ex
         else:

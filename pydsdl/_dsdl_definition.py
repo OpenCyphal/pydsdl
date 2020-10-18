@@ -147,6 +147,8 @@ class DSDLDefinition:
         except _error.FrontendError as ex:                              # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
+        except (MemoryError, SystemError):                              # pragma: no cover
+            raise
         except Exception as ex:                                         # pragma: no cover
             raise _error.InternalError(culprit=ex, path=self.file_path)
 
