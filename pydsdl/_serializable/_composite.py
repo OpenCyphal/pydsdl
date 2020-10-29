@@ -3,7 +3,6 @@
 # This software is distributed under the terms of the MIT License.
 #
 
-import os
 import abc
 import math
 import typing
