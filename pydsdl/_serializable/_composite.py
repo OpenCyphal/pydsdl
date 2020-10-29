@@ -516,8 +516,8 @@ class DelimitedType(CompositeType):
     @property
     def extent(self) -> int:
         """
-        The extent of a delimited type can be specified explicitly via ``@extent`` (provided that it is not less
-        than the minimum); otherwise, it defaults to ``floor(inner_type.extent * 3/2)`` padded to byte.
+        The extent of a delimited type is specified explicitly via ``@extent EXPRESSION``,
+        where the expression shall yield an integer multiple of 8.
 
         Optional optimization hint: if the objective is to allocate buffer memory for constructing a new
         serialized representation locally, then it may be beneficial to use the extent of the inner type
