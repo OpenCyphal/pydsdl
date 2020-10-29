@@ -52,7 +52,7 @@ class CompositeType(SerializableType):
     This is an abstract class with several specializations.
     """
 
-    MAX_NAME_LENGTH = 50
+    MAX_NAME_LENGTH = 255
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = '.'
 
