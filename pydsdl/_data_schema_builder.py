@@ -13,12 +13,30 @@ class BitLengthAnalysisError(_error.InvalidDefinitionError):
     pass
 
 
+class SerializationMode:
+    """Serialization mode: either delimited (with extent) or sealed."""
+    def __str__(self) -> str:
+        raise NotImplementedError
+
+
+class DelimitedSerializationMode(SerializationMode):
+    def __init__(self, extent: int):
+        self.extent = int(extent)
+
+    def __str__(self) -> str:
+        return 'delimited (extent %d bits)' % self.extent
+
+
+class SealedSerializationMode(SerializationMode):
+    def __str__(self) -> str:
+        return 'sealed'
+
+
 class DataSchemaBuilder:
     def __init__(self) -> None:
-        self._fields = []       # type: typing.List[_serializable.Field]
-        self._constants = []    # type: typing.List[_serializable.Constant]
-        self._extent = None     # type: typing.Optional[int]
-        self._is_sealed = False
+        self._fields = []                   # type: typing.List[_serializable.Field]
+        self._constants = []                # type: typing.List[_serializable.Constant]
+        self._serialization_mode = None     # type: typing.Optional[SerializationMode]
         self._is_union = False
         self._bit_length_computed_at_least_once = False
 
@@ -40,16 +58,8 @@ class DataSchemaBuilder:
         return out
 
     @property
-    def empty(self) -> bool:
-        return not self._fields and not self._constants
-
-    @property
-    def extent(self) -> typing.Optional[int]:
-        return self._extent
-
-    @property
-    def sealed(self) -> bool:
-        return self._is_sealed
+    def serialization_mode(self) -> typing.Optional[SerializationMode]:
+        return self._serialization_mode
 
     @property
     def union(self) -> bool:
@@ -82,24 +92,10 @@ class DataSchemaBuilder:
         assert isinstance(constant, _serializable.Constant)
         self._constants.append(constant)
 
-    def set_extent(self, value: int) -> None:
-        assert self._extent is None
-        assert not self._is_sealed
-        self._extent = int(value)
-
-    def make_sealed(self) -> None:
-        assert not self.sealed
-        assert self._extent is None
-        self._is_sealed = True
+    def set_serialization_mode(self, mode: SerializationMode) -> None:
+        assert self._serialization_mode is None
+        self._serialization_mode = mode
 
     def make_union(self) -> None:
         assert not self.union
         self._is_union = True
-
-    def to_service_schema_params(self) -> _serializable.ServiceType.SchemaParams:
-        return _serializable.ServiceType.SchemaParams(
-            attributes=self.attributes,
-            extent=self.extent,
-            is_sealed=self.sealed,
-            is_union=self.union,
-        )

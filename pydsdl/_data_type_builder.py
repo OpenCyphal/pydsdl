@@ -35,6 +35,10 @@ class UnregulatedFixedPortIDError(_error.InvalidDefinitionError):
     pass
 
 
+class MissingSerializationModeError(_error.InvalidDefinitionError):
+    pass
+
+
 _logger = logging.getLogger(__name__)
 
 
@@ -58,45 +62,46 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._is_deprecated = False
 
     def finalize(self) -> _serializable.CompositeType:
-        if len(self._structs) == 1:     # Message type
-            struct, = self._structs     # type: _data_schema_builder.DataSchemaBuilder,
-            ty = _serializable.UnionType if struct.union else _serializable.StructureType
-            fin = ty(name=self._definition.full_name,
-                     version=self._definition.version,
-                     attributes=struct.attributes,
-                     deprecated=self._is_deprecated,
-                     fixed_port_id=self._definition.fixed_port_id,
-                     source_file_path=self._definition.file_path)  # type: _serializable.CompositeType
-            if not struct.sealed:
-                out = _serializable.DelimitedType(fin, extent=struct.extent)  # type: _serializable.CompositeType
-                _logger.debug('%r wrapped into %r', fin, out)
-                if struct.extent is None:
-                    assert isinstance(out, _serializable.DelimitedType)
-                    self._print_output_handler(1, self._render_explicit_extent_recommendation(out))
-            else:
-                assert struct.extent is None, 'Internal constraint violation'
-                out = fin
-
-        else:  # Service type
-            request, response = self._structs
-            assert isinstance(request, _data_schema_builder.DataSchemaBuilder)
-            assert isinstance(response, _data_schema_builder.DataSchemaBuilder)
-            # noinspection SpellCheckingInspection
-            out = _serializable.ServiceType(
-                name=self._definition.full_name,                        # pozabito vse na svete
-                version=self._definition.version,                       # serdce zamerlo v grudi
-                request_params=request.to_service_schema_params(),      # tolko nebo tolko veter
-                response_params=response.to_service_schema_params(),    # tolko radost vperedi
+        if len(self._structs) == 1:     # Structure type
+            builder, = self._structs     # type: _data_schema_builder.DataSchemaBuilder,
+            out = self._make_composite(
+                builder=builder,
+                name=self._definition.full_name,
+                version=self._definition.version,
                 deprecated=self._is_deprecated,
                 fixed_port_id=self._definition.fixed_port_id,
                 source_file_path=self._definition.file_path,
+                parent_service_getter=None,
             )
-            assert isinstance(out, _serializable.ServiceType)
-            req_ty, resp_ty = out.request_type, out.response_type
-            if isinstance(req_ty, _serializable.DelimitedType) and request.extent is None:
-                self._print_output_handler(1, 'Request: ' + self._render_explicit_extent_recommendation(req_ty))
-            if isinstance(resp_ty, _serializable.DelimitedType) and response.extent is None:
-                self._print_output_handler(1, 'Response: ' + self._render_explicit_extent_recommendation(resp_ty))
+        else:  # Service type
+            request_builder, response_builder = self._structs
+            assert isinstance(request_builder, _data_schema_builder.DataSchemaBuilder)
+            assert isinstance(response_builder, _data_schema_builder.DataSchemaBuilder)
+            sep = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR
+            request = self._make_composite(
+                builder=request_builder,
+                name=sep.join([self._definition.full_name, 'Request']),
+                version=self._definition.version,
+                deprecated=self._is_deprecated,
+                fixed_port_id=None,
+                source_file_path=self._definition.file_path,
+                parent_service_getter=lambda: typing.cast(_serializable.ServiceType, out),
+            )
+            response = self._make_composite(
+                builder=response_builder,
+                name=sep.join([self._definition.full_name, 'Response']),
+                version=self._definition.version,
+                deprecated=self._is_deprecated,
+                fixed_port_id=None,
+                source_file_path=self._definition.file_path,
+                parent_service_getter=lambda: typing.cast(_serializable.ServiceType, out),
+            )
+            # noinspection SpellCheckingInspection
+            out = _serializable.ServiceType(                    # pozabito vse na svete
+                request=request,                                # serdce zamerlo v grudi
+                response=response,                              # tolko nebo tolko veter
+                fixed_port_id=self._definition.fixed_port_id,   # tolko radost vperedi
+            )
 
         assert isinstance(out, _serializable.CompositeType)
         if not self._allow_unregulated_fixed_port_id:
@@ -205,7 +210,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                       allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id)
 
     def _on_attribute(self) -> None:
-        if self._structs[-1].extent is not None:
+        if isinstance(self._structs[-1].serialization_mode, _data_schema_builder.DelimitedSerializationMode):
             raise InvalidDirectiveError(
                 'The extent directive can only be placed after the last attribute definition in the schema. '
                 'This is to prevent errors if the extent is dependent on the bit length set of the data schema.'
@@ -231,36 +236,33 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                         value.TYPE_NAME)
 
     def _on_extent_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
-        if self._structs[-1].sealed:
-            raise InvalidDirectiveError('The extent cannot be specified for a sealed type')
+        if self._structs[-1].serialization_mode is not None:
+            raise InvalidDirectiveError('Misplaced extent directive. The serialization mode is already set to %s' %
+                                        self._structs[-1].serialization_mode)
         if value is None:
             raise InvalidDirectiveError('The extent directive requires an expression')
         elif isinstance(value, _expression.Rational):
             struct = self._structs[-1]
-            if struct.extent is None:
-                struct.set_extent(value.as_native_integer())
-                _logger.debug('The extent is set to %d bits at %s:%d',
-                              struct.extent, self._definition.file_path, line_number)
-            else:
-                raise InvalidDirectiveError('Duplicated extent directive (already set to %d bits)' % struct.extent)
+            bits = value.as_native_integer()
+            struct.set_serialization_mode(_data_schema_builder.DelimitedSerializationMode(bits))
+            _logger.debug('The extent is set to %d bits at %s:%d', bits, self._definition.file_path, line_number)
         else:
             raise InvalidDirectiveError('The extent directive expects a rational, not %s' % value.TYPE_NAME)
 
     def _on_sealed_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
-        if self._structs[-1].extent is not None:
-            raise InvalidDirectiveError('A type whose extent is defined explicitly cannot be made sealed')
+        if self._structs[-1].serialization_mode is not None:
+            raise InvalidDirectiveError('Misplaced sealing directive. The serialization mode is already set to %s' %
+                                        self._structs[-1].serialization_mode)
         if value is not None:
             raise InvalidDirectiveError('The sealed directive does not expect an expression')
-        if self._structs[-1].sealed:
-            raise InvalidDirectiveError('Duplicated sealed directive')
-        self._structs[-1].make_sealed()
+        self._structs[-1].set_serialization_mode(_data_schema_builder.SealedSerializationMode())
 
     def _on_union_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
         if value is not None:
             raise InvalidDirectiveError('The union directive does not expect an expression')
         if self._structs[-1].union:
             raise InvalidDirectiveError('Duplicated union directive')
-        if not self._structs[-1].empty:
+        if self._structs[-1].attributes:
             raise InvalidDirectiveError('The union directive must be placed before the first '
                                         'attribute definition')
         self._structs[-1].make_union()
@@ -272,18 +274,52 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError('Duplicated deprecated directive')
         if len(self._structs) > 1:
             raise InvalidDirectiveError('The deprecated directive cannot be placed in the response section')
-        if not self._structs[-1].empty:
+        if self._structs[-1].attributes:
             raise InvalidDirectiveError('The deprecated directive must be placed before the first '
                                         'attribute definition')
         self._is_deprecated = True
 
     @staticmethod
-    def _render_explicit_extent_recommendation(model: _serializable.DelimitedType) -> str:
-        assert model.extent % 8 == 0, 'Internal error: Extent is expected to be an integer multiple of 8 bits'
-        e_bytes = model.extent // 8
-        return (
-            'Extent is not specified explicitly, defaulting to {e_bytes} bytes. '
-            'To accept the default extent and silence this diagnostic, '
-            'add the following line near the end of the definition: '
-            '`@extent {e_bytes} * 8`'
-        ).format(e_bytes=e_bytes)
+    def _make_composite(
+            builder:                _data_schema_builder.DataSchemaBuilder,
+            name:                   str,
+            version:                _serializable.Version,
+            deprecated:             bool,
+            fixed_port_id:          typing.Optional[int],
+            source_file_path:       str,
+            parent_service_getter:  typing.Optional[typing.Callable[[], _serializable.ServiceType]],
+    ) -> _serializable.CompositeType:
+        ty = _serializable.UnionType if builder.union else _serializable.StructureType
+        inner = ty(
+            name=name,
+            version=version,
+            attributes=builder.attributes,
+            deprecated=deprecated,
+            fixed_port_id=fixed_port_id,
+            source_file_path=source_file_path,
+            parent_service_getter=parent_service_getter,
+        )  # type: _serializable.CompositeType
+        sm = builder.serialization_mode
+        if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):
+            out = _serializable.DelimitedType(inner, extent=sm.extent)  # type: _serializable.CompositeType
+            _logger.debug('%r wrapped into %r', inner, out)
+        elif isinstance(sm, _data_schema_builder.SealedSerializationMode):
+            out = inner
+        else:
+            assert sm is None, 'I wish Python had a strong static type system'
+            raise MissingSerializationModeError(
+                '%s: Either `@sealed` or `@extent ...` are required. '
+                'The smallest valid extent for this type (i.e., its max bit length) is %d bits (%d bytes). '
+                'If you are not sure what this means, add the following line near the end of this definition: '
+                '`@extent %d * 8`'
+                % (inner.short_name, inner.extent, inner.extent // 8, DataTypeBuilder._suggest_extent_in_bytes(inner))
+            )
+        return out
+
+    @staticmethod
+    def _suggest_extent_in_bytes(model: _serializable.CompositeType) -> int:
+        """
+        An implementation-specific heuristic intended to lower the entry barrier.
+        The numbers are subject to change between minor revisions.
+        """
+        return max(64, model.extent * 2 // 8)
