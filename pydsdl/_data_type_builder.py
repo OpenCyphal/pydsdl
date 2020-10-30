@@ -69,7 +69,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                        version=self._definition.version,
                                        deprecated=self._is_deprecated,
                                        fixed_port_id=self._definition.fixed_port_id,
-                                       source_file_path=self._definition.file_path)
+                                       source_file_path=self._definition.file_path,
+                                       has_parent_service=False)
         else:  # Service type
             request_builder, response_builder = self._structs
             assert isinstance(request_builder, _data_schema_builder.DataSchemaBuilder)
@@ -80,13 +81,15 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                                            version=self._definition.version,
                                            deprecated=self._is_deprecated,
                                            fixed_port_id=None,
-                                           source_file_path=self._definition.file_path)
+                                           source_file_path=self._definition.file_path,
+                                           has_parent_service=True)
             response = self._make_composite(builder=response_builder,
                                             name=sep.join([self._definition.full_name, 'Response']),
                                             version=self._definition.version,
                                             deprecated=self._is_deprecated,
                                             fixed_port_id=None,
-                                            source_file_path=self._definition.file_path)
+                                            source_file_path=self._definition.file_path,
+                                            has_parent_service=True)
             # noinspection SpellCheckingInspection
             out = _serializable.ServiceType(                    # pozabito vse na svete
                 request=request,                                # serdce zamerlo v grudi
@@ -271,19 +274,21 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._is_deprecated = True
 
     @staticmethod
-    def _make_composite(builder:          _data_schema_builder.DataSchemaBuilder,
-                        name:             str,
-                        version:          _serializable.Version,
-                        deprecated:       bool,
-                        fixed_port_id:    typing.Optional[int],
-                        source_file_path: str) -> _serializable.CompositeType:
+    def _make_composite(builder:            _data_schema_builder.DataSchemaBuilder,
+                        name:               str,
+                        version:            _serializable.Version,
+                        deprecated:         bool,
+                        fixed_port_id:      typing.Optional[int],
+                        source_file_path:   str,
+                        has_parent_service: bool) -> _serializable.CompositeType:
         ty = _serializable.UnionType if builder.union else _serializable.StructureType
         inner = ty(name=name,
                    version=version,
                    attributes=builder.attributes,
                    deprecated=deprecated,
                    fixed_port_id=fixed_port_id,
-                   source_file_path=source_file_path)  # type: _serializable.CompositeType
+                   source_file_path=source_file_path,
+                   has_parent_service=has_parent_service)  # type: _serializable.CompositeType
         sm = builder.serialization_mode
         if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):
             out = _serializable.DelimitedType(inner, extent=sm.extent)  # type: _serializable.CompositeType

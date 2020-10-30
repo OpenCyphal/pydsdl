@@ -186,9 +186,9 @@ def _unittest_simple() -> None:
     assert res.full_name == 'another.Service.Response'
     assert req is p.request_type
     assert res is p.response_type
-    assert req.parent_service is p
-    assert req.inner_type.parent_service is p
-    assert res.parent_service is p
+    assert req.has_parent_service
+    assert req.inner_type.has_parent_service
+    assert res.has_parent_service
 
     assert len(req.constants) == 0
     assert len(req.fields) == 3
@@ -1635,15 +1635,15 @@ def _unittest_pickle() -> None:
         []
     )
     assert isinstance(p, _serializable.ServiceType)
-    assert p.request_type.parent_service is p
-    assert p.response_type.parent_service is p
-    assert p.parent_service is None
+    assert p.request_type.has_parent_service
+    assert p.response_type.has_parent_service
+    assert not p.has_parent_service
 
     pp = pickle.loads(pickle.dumps(p))
     assert isinstance(pp, _serializable.ServiceType)
-    assert pp.request_type.parent_service is pp
-    assert pp.response_type.parent_service is pp
-    assert pp.parent_service is None
+    assert pp.request_type.has_parent_service
+    assert pp.response_type.has_parent_service
+    assert not pp.has_parent_service
     assert str(pp) == str(p)
     assert repr(pp) == repr(p)
 
