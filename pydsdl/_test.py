@@ -548,6 +548,13 @@ def _unittest_error() -> None:
                    int8 b
                    '''))
 
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):  # Neither extent nor sealed are specified.
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
+                   int8 b
+                   '''))
+
 
 @_in_n_out
 def _unittest_print() -> None:

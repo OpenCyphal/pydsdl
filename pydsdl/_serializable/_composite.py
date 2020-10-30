@@ -324,7 +324,7 @@ class UnionType(CompositeType):
                  deprecated:            bool,
                  fixed_port_id:         typing.Optional[int],
                  source_file_path:      str,
-                 parent_service_getter: typing.Optional[typing.Callable[[], 'ServiceType']] = None):
+                 parent_service_getter: typing.Optional[typing.Callable[[], typing.Optional['ServiceType']]] = None):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
@@ -702,6 +702,7 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert u['c']
     assert hash(u) == hash(u)
+    assert u.parent_service is None
     del u
 
     s = StructureType(name='a.A',
@@ -728,6 +729,7 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert s['']        # Padding fields are not accessible
     assert hash(s) == hash(s)
+    assert s.parent_service is None
 
     d = DelimitedType(s, 2048)
     assert d.inner_type is s
@@ -1063,6 +1065,23 @@ def _unittest_field_iterators() -> None:
                                            source_file_path='',
                                            parent_service_getter=None),
                     fixed_port_id=None).iterate_fields_with_offsets()
+
+    with raises(ValueError):  # Request/response consistency error (internal failure)
+        ServiceType(request=StructureType(name='ns.XX.Request',
+                                          version=Version(2, 0),
+                                          attributes=[],
+                                          deprecated=False,
+                                          fixed_port_id=None,
+                                          source_file_path='',
+                                          parent_service_getter=None),
+                    response=StructureType(name='ns.YY.Response',
+                                           version=Version(3, 0),
+                                           attributes=[],
+                                           deprecated=True,
+                                           fixed_port_id=None,
+                                           source_file_path='',
+                                           parent_service_getter=None),
+                    fixed_port_id=None)
 
     # Check the auto-padding logic.
     e = StructureType(name='e.E',
