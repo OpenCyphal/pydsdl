@@ -61,8 +61,7 @@ class CompositeType(SerializableType):
                  attributes:            typing.Iterable[Attribute],
                  deprecated:            bool,
                  fixed_port_id:         typing.Optional[int],
-                 source_file_path:      str,
-                 parent_service_getter: typing.Optional[typing.Callable[[], typing.Optional['ServiceType']]] = None):
+                 source_file_path:      str):
         super(CompositeType, self).__init__()
 
         self._name = str(name).strip()
@@ -72,7 +71,10 @@ class CompositeType(SerializableType):
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
-        self._parent_service_getter = parent_service_getter if parent_service_getter is not None else lambda: None
+        # The parent service attribute may be set later.
+        # This is not architecturally clean but I couldn't find a better solution.
+        # It can't be set at the construction time because the parent service may be created after its children.
+        self._parent_service = None  # type: typing.Optional['ServiceType']
 
         # Name check
         if not self._name:
@@ -231,7 +233,7 @@ class CompositeType(SerializableType):
         :class:`pydsdl.ServiceType` contains two special fields of this type: ``request`` and ``response``.
         For them this property points to the parent service instance; otherwise it's None.
         """
-        return self._parent_service_getter()
+        return self._parent_service
 
     @abc.abstractmethod
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
@@ -323,8 +325,7 @@ class UnionType(CompositeType):
                  attributes:            typing.Iterable[Attribute],
                  deprecated:            bool,
                  fixed_port_id:         typing.Optional[int],
-                 source_file_path:      str,
-                 parent_service_getter: typing.Optional[typing.Callable[[], typing.Optional['ServiceType']]] = None):
+                 source_file_path:      str):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
@@ -332,8 +333,7 @@ class UnionType(CompositeType):
                                         attributes=attributes,
                                         deprecated=deprecated,
                                         fixed_port_id=fixed_port_id,
-                                        source_file_path=source_file_path,
-                                        parent_service_getter=parent_service_getter)
+                                        source_file_path=source_file_path)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
             raise MalformedUnionError('A tagged union cannot contain fewer than %d variants' %
@@ -482,8 +482,7 @@ class DelimitedType(CompositeType):
                                             attributes=inner.attributes,
                                             deprecated=inner.deprecated,
                                             fixed_port_id=inner.fixed_port_id,
-                                            source_file_path=inner.source_file_path,
-                                            parent_service_getter=lambda: inner.parent_service)
+                                            source_file_path=inner.source_file_path)
         self._extent = int(extent)
         if self._extent % self.alignment_requirement != 0:
             raise InvalidExtentError('The specified extent of %d bits is not a multiple of %d bits' %
@@ -585,7 +584,8 @@ class ServiceType(CompositeType):
             not isinstance(request, ServiceType) and not isinstance(response, ServiceType) and
             request.deprecated == response.deprecated and
             request.source_file_path == response.source_file_path and
-            request.fixed_port_id is None and response.fixed_port_id is None
+            request.fixed_port_id is None and response.fixed_port_id is None and
+            request.parent_service is None and response.parent_service is None
         )
         if not consistent:
             raise ValueError('Internal error: service request/response type consistency error')
@@ -602,6 +602,11 @@ class ServiceType(CompositeType):
                                           deprecated=request.deprecated,
                                           fixed_port_id=fixed_port_id,
                                           source_file_path=request.source_file_path)
+        # Late linking -- the children types are constructed first, so we have to modify them later.
+        self._request_type._parent_service = self
+        self._response_type._parent_service = self
+        assert self._request_type.parent_service is self
+        assert self._response_type.parent_service is self
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -1055,15 +1060,13 @@ def _unittest_field_iterators() -> None:
                                           attributes=[],
                                           deprecated=False,
                                           fixed_port_id=None,
-                                          source_file_path='',
-                                          parent_service_getter=None),
+                                          source_file_path=''),
                     response=StructureType(name='ns.S.Response',
                                            version=Version(1, 0),
                                            attributes=[],
                                            deprecated=False,
                                            fixed_port_id=None,
-                                           source_file_path='',
-                                           parent_service_getter=None),
+                                           source_file_path=''),
                     fixed_port_id=None).iterate_fields_with_offsets()
 
     with raises(ValueError):  # Request/response consistency error (internal failure)
@@ -1072,15 +1075,13 @@ def _unittest_field_iterators() -> None:
                                           attributes=[],
                                           deprecated=False,
                                           fixed_port_id=None,
-                                          source_file_path='',
-                                          parent_service_getter=None),
+                                          source_file_path=''),
                     response=StructureType(name='ns.YY.Response',
                                            version=Version(3, 0),
                                            attributes=[],
                                            deprecated=True,
                                            fixed_port_id=None,
-                                           source_file_path='',
-                                           parent_service_getter=None),
+                                           source_file_path=''),
                     fixed_port_id=None)
 
     # Check the auto-padding logic.
