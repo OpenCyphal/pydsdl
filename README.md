@@ -1,6 +1,5 @@
 # PyDSDL
 
-[![Travis CI](https://travis-ci.org/UAVCAN/pydsdl.svg?branch=master)](https://travis-ci.org/UAVCAN/pydsdl)
 [![Build status](https://ci.appveyor.com/api/projects/status/lurx5gihhcl9wq1w/branch/master?svg=true)](https://ci.appveyor.com/project/Zubax/pydsdl/branch/master)
 [![Documentation Status](https://readthedocs.org/projects/pydsdl/badge/?version=latest)](https://pydsdl.readthedocs.io/en/latest/?badge=latest)
 [![Coverage Status](https://coveralls.io/repos/github/UAVCAN/pydsdl/badge.svg)](https://coveralls.io/github/UAVCAN/pydsdl)

@@ -5,8 +5,11 @@ environment:
       PYTHON_ARCH: "64"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
-      PYTHON: "3.8"
+      PYTHON: "3.9"
       coverage: 1
+
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.8"
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.7"
