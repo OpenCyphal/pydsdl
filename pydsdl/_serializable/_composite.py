@@ -71,9 +71,7 @@ class CompositeType(SerializableType):
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
-        # The parent service attribute may be set later.
-        # This is not architecturally clean but I couldn't find a better solution.
-        # It can't be set at the construction time because the parent service may be created after its children.
+        # See _link_parent_service()
         self._parent_service = None  # type: typing.Optional['ServiceType']
 
         # Name check
@@ -283,6 +281,16 @@ class CompositeType(SerializableType):
             return _expression.Rational(self.extent)
 
         return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+
+    def _link_parent_service(self, parent: 'ServiceType') -> None:
+        """
+        The parent service attribute may be set later.
+        This is not architecturally clean but I couldn't find a better solution.
+        It can't be set at the construction time because the parent service may be created after its children.
+        """
+        assert isinstance(parent, ServiceType)
+        assert self.parent_service is None
+        self._parent_service = parent
 
     def __getitem__(self, attribute_name: str) -> Attribute:
         """
@@ -563,6 +571,10 @@ class DelimitedType(CompositeType):
         base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
+    def _link_parent_service(self, parent: 'ServiceType') -> None:
+        super(DelimitedType, self)._link_parent_service(parent)
+        self.inner_type._link_parent_service(parent)
+
     def __repr__(self) -> str:
         return '%s(inner=%r, extent=%r)' % (self.__class__.__name__, self.inner_type, self.extent)
 
@@ -603,10 +615,12 @@ class ServiceType(CompositeType):
                                           fixed_port_id=fixed_port_id,
                                           source_file_path=request.source_file_path)
         # Late linking -- the children types are constructed first, so we have to modify them later.
-        self._request_type._parent_service = self
-        self._response_type._parent_service = self
+        self._request_type._link_parent_service(self)
+        self._response_type._link_parent_service(self)
         assert self._request_type.parent_service is self
         assert self._response_type.parent_service is self
+        assert not isinstance(request, DelimitedType) or request.inner_type.parent_service is self
+        assert not isinstance(response, DelimitedType) or response.inner_type.parent_service is self
 
     @property
     def bit_length_set(self) -> BitLengthSet:

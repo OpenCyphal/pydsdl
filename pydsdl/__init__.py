@@ -6,7 +6,7 @@
 import os as _os
 import sys as _sys
 
-__version__ = '1.8.1'
+__version__ = '1.8.2'
 __version_info__ = tuple(map(int, __version__.split('.')))
 __license__ = 'MIT'
 __author__ = 'UAVCAN Development Team'

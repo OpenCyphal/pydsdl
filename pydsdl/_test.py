@@ -187,6 +187,7 @@ def _unittest_simple() -> None:
     assert req is p.request_type
     assert res is p.response_type
     assert req.parent_service is p
+    assert req.inner_type.parent_service is p
     assert res.parent_service is p
 
     assert len(req.constants) == 0
