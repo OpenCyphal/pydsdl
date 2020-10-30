@@ -96,7 +96,7 @@ def read_namespace(root_namespace_directory:        str,
     It reads all DSDL definitions from the specified root namespace directory and produces the annotated AST.
 
     :param root_namespace_directory: The path of the root namespace directory that will be read.
-        For example, "dsdl/uavcan" to read the "uavcan" namespace.
+        For example, ``dsdl/uavcan`` to read the ``uavcan`` namespace.
 
     :param lookup_directories: List of other namespace directories containing data type definitions that are
         referred to from the target root namespace. For example, if you are reading a vendor-specific namespace,

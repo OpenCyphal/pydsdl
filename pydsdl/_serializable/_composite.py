@@ -7,7 +7,6 @@ import abc
 import math
 import typing
 import itertools
-import fractions
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
@@ -57,13 +56,13 @@ class CompositeType(SerializableType):
     NAME_COMPONENT_SEPARATOR = '.'
 
     def __init__(self,
-                 name:             str,
-                 version:          Version,
-                 attributes:       typing.Iterable[Attribute],
-                 deprecated:       bool,
-                 fixed_port_id:    typing.Optional[int],
-                 source_file_path: str,
-                 parent_service:   typing.Optional['ServiceType'] = None):
+                 name:                  str,
+                 version:               Version,
+                 attributes:            typing.Iterable[Attribute],
+                 deprecated:            bool,
+                 fixed_port_id:         typing.Optional[int],
+                 source_file_path:      str,
+                 parent_service_getter: typing.Optional[typing.Callable[[], typing.Optional['ServiceType']]] = None):
         super(CompositeType, self).__init__()
 
         self._name = str(name).strip()
@@ -73,12 +72,7 @@ class CompositeType(SerializableType):
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
         self._source_file_path = str(source_file_path)
-        self._parent_service = parent_service
-
-        if self._parent_service is not None:
-            assert self._name.endswith('.Request') or self._name.endswith('.Response')
-            if not isinstance(self._parent_service, ServiceType):  # pragma: no cover
-                raise ValueError('The parent service reference is invalid: %s' % type(parent_service).__name__)
+        self._parent_service_getter = parent_service_getter if parent_service_getter is not None else lambda: None
 
         # Name check
         if not self._name:
@@ -87,8 +81,13 @@ class CompositeType(SerializableType):
         if self.NAME_COMPONENT_SEPARATOR not in self._name:
             raise InvalidNameError('Root namespace is not specified')
 
-        # Do not check name length for synthesized types.
-        if len(self._name) > self.MAX_NAME_LENGTH and parent_service is None:
+        if len(self._name) > self.MAX_NAME_LENGTH:
+            # TODO
+            # Notice that per the Specification, service request/response types are unnamed,
+            # but we actually name them the same as the parent service plus the ".Request"/".Response" suffix.
+            # This may trigger a name length error for long-named service types where per the Specification
+            # no such error may occur. We expect the Specification to catch up with this behavior in a later
+            # revision where the names for the request and response parts are actually properly specified.
             raise InvalidNameError('Name is too long: %r is longer than %d characters' %
                                    (self._name, self.MAX_NAME_LENGTH))
 
@@ -232,7 +231,7 @@ class CompositeType(SerializableType):
         :class:`pydsdl.ServiceType` contains two special fields of this type: ``request`` and ``response``.
         For them this property points to the parent service instance; otherwise it's None.
         """
-        return self._parent_service
+        return self._parent_service_getter()
 
     @abc.abstractmethod
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
@@ -319,13 +318,13 @@ class UnionType(CompositeType):
     MIN_NUMBER_OF_VARIANTS = 2
 
     def __init__(self,
-                 name:             str,
-                 version:          Version,
-                 attributes:       typing.Iterable[Attribute],
-                 deprecated:       bool,
-                 fixed_port_id:    typing.Optional[int],
-                 source_file_path: str,
-                 parent_service:   typing.Optional['ServiceType'] = None):
+                 name:                  str,
+                 version:               Version,
+                 attributes:            typing.Iterable[Attribute],
+                 deprecated:            bool,
+                 fixed_port_id:         typing.Optional[int],
+                 source_file_path:      str,
+                 parent_service_getter: typing.Optional[typing.Callable[[], typing.Optional['ServiceType']]] = None):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
         super(UnionType, self).__init__(name=name,
@@ -334,7 +333,7 @@ class UnionType(CompositeType):
                                         deprecated=deprecated,
                                         fixed_port_id=fixed_port_id,
                                         source_file_path=source_file_path,
-                                        parent_service=parent_service)
+                                        parent_service_getter=parent_service_getter)
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
             raise MalformedUnionError('A tagged union cannot contain fewer than %d variants' %
@@ -474,14 +473,9 @@ class DelimitedType(CompositeType):
     56 bits long, then version 3 could grow to 96 bits, unpredictable).
     """
 
-    DEFAULT_EXTENT_MULTIPLIER = fractions.Fraction(3, 2)
-    """
-    If the extent is not specified explicitly, it is computed by multiplying the extent of the inner type by this.
-    """
-
     _DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
 
-    def __init__(self, inner: CompositeType, extent: typing.Optional[int]):
+    def __init__(self, inner: CompositeType, extent: int):
         self._inner = inner
         super(DelimitedType, self).__init__(name=inner.full_name,
                                             version=inner.version,
@@ -489,13 +483,8 @@ class DelimitedType(CompositeType):
                                             deprecated=inner.deprecated,
                                             fixed_port_id=inner.fixed_port_id,
                                             source_file_path=inner.source_file_path,
-                                            parent_service=inner.parent_service)
-        if extent is None:
-            unaligned = math.floor(inner.extent * self.DEFAULT_EXTENT_MULTIPLIER)
-            self._extent = max(BitLengthSet(unaligned).pad_to_alignment(self.alignment_requirement))
-        else:
-            self._extent = int(extent)
-
+                                            parent_service_getter=lambda: inner.parent_service)
+        self._extent = int(extent)
         if self._extent % self.alignment_requirement != 0:
             raise InvalidExtentError('The specified extent of %d bits is not a multiple of %d bits' %
                                      (self._extent, self.alignment_requirement))
@@ -507,7 +496,6 @@ class DelimitedType(CompositeType):
                 (self._extent, inner.extent)
             )
 
-        # Invariant checks.
         assert self.extent % self.BITS_PER_BYTE == 0
         assert self.extent % self.alignment_requirement == 0
         assert self.extent >= self.inner_type.extent
@@ -528,8 +516,8 @@ class DelimitedType(CompositeType):
     @property
     def extent(self) -> int:
         """
-        The extent of a delimited type can be specified explicitly via ``@extent`` (provided that it is not less
-        than the minimum); otherwise, it defaults to ``floor(inner_type.extent * 3/2)`` padded to byte.
+        The extent of a delimited type is specified explicitly via ``@extent EXPRESSION``,
+        where the expression shall yield an integer multiple of 8.
 
         Optional optimization hint: if the objective is to allocate buffer memory for constructing a new
         serialized representation locally, then it may be beneficial to use the extent of the inner type
@@ -589,71 +577,31 @@ class ServiceType(CompositeType):
     which contain the request and the response structure of the service type, respectively.
     """
 
-    class SchemaParams:
-        """A trivial helper dataclass used for constructing new instances."""
-        def __init__(self,
-                     attributes: typing.Iterable[Attribute],
-                     extent:     typing.Optional[int],
-                     is_sealed:  bool,
-                     is_union:   bool):
-            self.attributes = list(attributes)
-            self.extent = int(extent) if extent is not None else None
-            self.is_sealed = bool(is_sealed)
-            self.is_union = bool(is_union)
-            if self.is_sealed and self.extent is not None:  # pragma: no cover
-                raise ValueError('API misuse: cannot set the extent on a sealed type')
+    def __init__(self, request: CompositeType, response: CompositeType, fixed_port_id: typing.Optional[int]):
+        name = request.full_namespace
+        consistent = (
+            request.full_name.startswith(name) and response.full_name.startswith(name) and
+            request.version == response.version and
+            not isinstance(request, ServiceType) and not isinstance(response, ServiceType) and
+            request.deprecated == response.deprecated and
+            request.source_file_path == response.source_file_path and
+            request.fixed_port_id is None and response.fixed_port_id is None
+        )
+        if not consistent:
+            raise ValueError('Internal error: service request/response type consistency error')
 
-        def construct_composite(self,
-                                name: str,
-                                version: Version,
-                                deprecated: bool,
-                                parent_service: 'ServiceType',
-                                source_file_path: str) -> CompositeType:
-            request_meta_type = UnionType if self.is_union else StructureType  # type: type
-            ty = request_meta_type(name=name,
-                                   version=version,
-                                   attributes=self.attributes,
-                                   deprecated=deprecated,
-                                   fixed_port_id=None,
-                                   source_file_path=source_file_path,
-                                   parent_service=parent_service)
-            assert isinstance(ty, CompositeType)
-            if self.is_sealed:
-                assert self.extent is None
-                return ty
-            else:
-                return DelimitedType(ty, extent=self.extent)
-
-    def __init__(self,
-                 name:             str,
-                 version:          Version,
-                 request_params:   SchemaParams,
-                 response_params:  SchemaParams,
-                 deprecated:       bool,
-                 fixed_port_id:    typing.Optional[int],
-                 source_file_path: str):
-        self._request_type = request_params.construct_composite(name=name + '.Request',
-                                                                version=version,
-                                                                deprecated=deprecated,
-                                                                parent_service=self,
-                                                                source_file_path=source_file_path)
-        self._response_type = response_params.construct_composite(name=name + '.Response',
-                                                                  version=version,
-                                                                  deprecated=deprecated,
-                                                                  parent_service=self,
-                                                                  source_file_path=source_file_path)
+        self._request_type = request
+        self._response_type = response
         container_attributes = [
             Field(data_type=self._request_type,  name='request'),
             Field(data_type=self._response_type, name='response'),
         ]
         super(ServiceType, self).__init__(name=name,
-                                          version=version,
+                                          version=request.version,
                                           attributes=container_attributes,
-                                          deprecated=deprecated,
+                                          deprecated=request.deprecated,
                                           fixed_port_id=fixed_port_id,
-                                          source_file_path=source_file_path)
-        assert self.request_type.parent_service is self
-        assert self.response_type.parent_service is self
+                                          source_file_path=request.source_file_path)
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -661,12 +609,12 @@ class ServiceType(CompositeType):
 
     @property
     def request_type(self) -> CompositeType:
-        """The type of the request schema."""
+        assert self._request_type.parent_service is self
         return self._request_type
 
     @property
     def response_type(self) -> CompositeType:
-        """The type of the response schema."""
+        assert self._response_type.parent_service is self
         return self._response_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
@@ -717,14 +665,6 @@ def _unittest_composite_types() -> None:
     assert try_name('root.nested.T').root_namespace == 'root'
     assert try_name('root.nested.T').short_name == 'T'
 
-    print(ServiceType(name='a' * 48 + '.T',     # No exception raised
-                      version=Version(0, 1),
-                      request_params=ServiceType.SchemaParams([], None, False, False),
-                      response_params=ServiceType.SchemaParams([], None, False, False),
-                      deprecated=False,
-                      fixed_port_id=None,
-                      source_file_path=''))
-
     with raises(MalformedUnionError, match='.*variants.*'):
         UnionType(name='a.A',
                   version=Version(0, 1),
@@ -762,6 +702,7 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert u['c']
     assert hash(u) == hash(u)
+    assert u.parent_service is None
     del u
 
     s = StructureType(name='a.A',
@@ -788,8 +729,9 @@ def _unittest_composite_types() -> None:
     with raises(KeyError):
         assert s['']        # Padding fields are not accessible
     assert hash(s) == hash(s)
+    assert s.parent_service is None
 
-    d = DelimitedType(s, None)
+    d = DelimitedType(s, 2048)
     assert d.inner_type is s
     assert d.attributes == d.inner_type.attributes
     with raises(KeyError):
@@ -797,7 +739,7 @@ def _unittest_composite_types() -> None:
     assert hash(d) == hash(d)
     assert d.delimiter_header_type.bit_length == 32
     assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
-    assert d.extent == d.inner_type.extent * 3 // 2
+    assert d.extent == 2048
 
     d = DelimitedType(s, 256)
     assert hash(d) == hash(d)
@@ -835,8 +777,8 @@ def _unittest_composite_types() -> None:
     ])
     assert u.bit_length_set == {24}
     assert u.extent == 24
-    assert DelimitedType(u, None).extent == 40
-    assert DelimitedType(u, None).bit_length_set == {32, 40, 48, 56, 64, 72}
+    assert DelimitedType(u, 40).extent == 40
+    assert DelimitedType(u, 40).bit_length_set == {32, 40, 48, 56, 64, 72}
     assert DelimitedType(u, 24).extent == 24
     assert DelimitedType(u, 24).bit_length_set == {32, 40, 48, 56}
     assert DelimitedType(u, 32).extent == 32
@@ -886,8 +828,8 @@ def _unittest_composite_types() -> None:
     ])
     assert s.bit_length_set == {32}
     assert s.extent == 32
-    assert DelimitedType(s, None).extent == 48
-    assert DelimitedType(s, None).bit_length_set == {32, 40, 48, 56, 64, 72, 80}
+    assert DelimitedType(s, 48).extent == 48
+    assert DelimitedType(s, 48).bit_length_set == {32, 40, 48, 56, 64, 72, 80}
     assert DelimitedType(s, 32).extent == 32
     assert DelimitedType(s, 32).bit_length_set == {32, 40, 48, 56, 64}
     assert DelimitedType(s, 40).extent == 40
@@ -953,7 +895,7 @@ def _unittest_field_iterators() -> None:
         }),
     ])
 
-    d = DelimitedType(a, None)
+    d = DelimitedType(a, 472)
     validate_iterator(d, [
         ('a', {32 + 0}),
         ('b', {32 + 10}),
@@ -1108,13 +1050,38 @@ def _unittest_field_iterators() -> None:
     ], BitLengthSet({0, 4, 8}))  # The option 4 is eliminated due to padding to byte, so we're left with {0, 8}.
 
     with raises(TypeError, match='.*request or response.*'):
-        ServiceType(name='ns.S',
-                    version=Version(1, 0),
-                    request_params=ServiceType.SchemaParams([], None, False, False),
-                    response_params=ServiceType.SchemaParams([], None, False, False),
-                    deprecated=False,
-                    fixed_port_id=None,
-                    source_file_path='').iterate_fields_with_offsets()
+        ServiceType(request=StructureType(name='ns.S.Request',
+                                          version=Version(1, 0),
+                                          attributes=[],
+                                          deprecated=False,
+                                          fixed_port_id=None,
+                                          source_file_path='',
+                                          parent_service_getter=None),
+                    response=StructureType(name='ns.S.Response',
+                                           version=Version(1, 0),
+                                           attributes=[],
+                                           deprecated=False,
+                                           fixed_port_id=None,
+                                           source_file_path='',
+                                           parent_service_getter=None),
+                    fixed_port_id=None).iterate_fields_with_offsets()
+
+    with raises(ValueError):  # Request/response consistency error (internal failure)
+        ServiceType(request=StructureType(name='ns.XX.Request',
+                                          version=Version(2, 0),
+                                          attributes=[],
+                                          deprecated=False,
+                                          fixed_port_id=None,
+                                          source_file_path='',
+                                          parent_service_getter=None),
+                    response=StructureType(name='ns.YY.Response',
+                                           version=Version(3, 0),
+                                           attributes=[],
+                                           deprecated=True,
+                                           fixed_port_id=None,
+                                           source_file_path='',
+                                           parent_service_getter=None),
+                    fixed_port_id=None)
 
     # Check the auto-padding logic.
     e = StructureType(name='e.E',

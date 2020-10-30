@@ -88,6 +88,7 @@ def _unittest_simple() -> None:
         uint8 CHARACTER = '#'
         int8 a
         saturated int64[<33] b
+        @extent 1024 * 8
         ''')
     )
     assert abc.fixed_port_id == 7000
@@ -107,7 +108,7 @@ def _unittest_simple() -> None:
     assert min(p.inner_type.bit_length_set) == 16
     assert max(p.inner_type.bit_length_set) == 16 + 64 * 32
     assert min(p.bit_length_set) == 32
-    assert max(p.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
+    assert max(p.bit_length_set) == 32 + 1024 * 8
     assert len(p.attributes) == 3
     assert len(p.fields) == 2
     assert str(p.fields[0].data_type) == 'saturated int8'
@@ -219,7 +220,7 @@ def _unittest_simple() -> None:
     assert res.version == (0, 1)
     # This is a sealed type, so we get the real BLS, but we mustn't forget about the non-sealed nested field!
     assert min(res.bit_length_set) == 32                                            # Just the delimiter header
-    assert max(res.bit_length_set) == 32 + (16 + 64 * 32) * 3 // 2
+    assert max(res.bit_length_set) == 32 + 1024 * 8
 
     t = res.fields[0].data_type
     assert isinstance(t, _serializable.StructureType)
@@ -286,111 +287,112 @@ def _unittest_error() -> None:
         return _define(rel_path, definition + '\n').read([], lambda *_: None, allow_unregulated)  # pragma: no branch
 
     with raises(_error.InvalidDefinitionError, match='(?i).*port ID.*'):
-        standalone('vendor/1000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
+        standalone('vendor/1000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*port ID.*'):
-        standalone('vendor/10.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
+        standalone('vendor/10.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n@sealed\n---\nint64 v2\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*subject ID.*'):
-        standalone('vendor/100000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value')
+        standalone('vendor/100000.InvalidRegulatedSubjectID.1.0.uavcan', 'uint2 value\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*service ID.*'):
-        standalone('vendor/1000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n---\nint64 v2')
+        standalone('vendor/1000.InvalidRegulatedServiceID.1.0.uavcan', 'uint2 v1\n@sealed\n---\nint64 v2\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*multiple attributes under the same name.*'):
-        standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\nint64 value')
+        standalone('vendor/AttributeNameCollision.1.0.uavcan', 'uint2 value\n@sealed\nint64 value')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*tagged union cannot contain fewer than.*'):
-        standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value')
+        standalone('vendor/SmallUnion.1.0.uavcan', '@union\nuint2 value\n@sealed')
 
     assert standalone('vendor/invalid_constant_value/A.1.0.uavcan',
-                      'bool BOOLEAN = false').constants[0].name == 'BOOLEAN'
+                      'bool BOOLEAN = false\n@sealed').constants[0].name == 'BOOLEAN'
     with raises(_error.InvalidDefinitionError, match='.*Invalid value for boolean constant.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = 0')   # Should be false
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = 0\n@extent 0')   # Should be false
 
     with raises(_error.InvalidDefinitionError, match='.*undefined_identifier.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = undefined_identifier')
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = undefined_identifier\n@extent 0')
 
     with raises(_parser.DSDLSyntaxError):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = -')
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'bool BOOLEAN = -\n@extent 0')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*exceeds the range.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'uint10 INTEGRAL = 2000')
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', 'uint10 INTEGRAL = 2000\n@extent 0')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*character.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint8 CH = '\u0451'")
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint8 CH = '\u0451'\n@extent 0")
 
     with raises(_error.InvalidDefinitionError, match='.*uint8.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint9 CH = 'q'")
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "uint9 CH = 'q'\n@extent 0")
 
     with raises(_error.InvalidDefinitionError, match='.*uint8.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 'q'")
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 'q'\n@extent 0")
 
     with raises(_error.InvalidDefinitionError, match='.*integer constant.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.1")
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "int8 CH = 1.1\n@extent 0")
 
     with raises(_error.InvalidDefinitionError, match='(?i).*type.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = true")
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = true\n@extent 0")
 
     with raises(_error.InvalidDefinitionError, match='(?i).*type.*'):
-        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = 't'")
+        standalone('vendor/invalid_constant_value/A.1.0.uavcan', "float32 CH = 't'\n@extent 0")
 
     with raises(_parser.DSDLSyntaxError):
-        standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]')
+        standalone('vendor/syntax_error/A.1.0.uavcan', 'bool array[10]\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
-        standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array')
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[0] array\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
-        standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array')
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[<1] array\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
-        standalone('vendor/array_size/A.1.0.uavcan', 'bool[true] array')
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool[true] array\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*array capacity.*'):
-        standalone('vendor/array_size/A.1.0.uavcan', 'bool["text"] array')
+        standalone('vendor/array_size/A.1.0.uavcan', 'bool["text"] array\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*service response marker.*'):
-        standalone('vendor/service/A.1.0.uavcan', 'bool request\n---\nbool response\n---\nbool again')
+        standalone('vendor/service/A.1.0.uavcan',
+                   'bool request\n@sealed\n---\nbool response\n@sealed\n---\nbool again\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*unknown directive.*'):
-        standalone('vendor/directive/A.1.0.uavcan', '@sho_tse_take')
+        standalone('vendor/directive/A.1.0.uavcan', '@sho_tse_take\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*requires an expression.*'):
-        standalone('vendor/directive/A.1.0.uavcan', '@assert')
+        standalone('vendor/directive/A.1.0.uavcan', '@assert\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
-        standalone('vendor/directive/A.1.0.uavcan', '@union true || false')
+        standalone('vendor/directive/A.1.0.uavcan', '@union true || false\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*does not expect an expression.*'):
-        standalone('vendor/directive/A.1.0.uavcan', '@deprecated true || false')
+        standalone('vendor/directive/A.1.0.uavcan', '@deprecated true || false\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*version number.*'):
-        standalone('vendor/version/A.0.0.uavcan', '')
+        standalone('vendor/version/A.0.0.uavcan', '@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*version number.*'):
-        standalone('vendor/version/A.0.256.uavcan', '')
+        standalone('vendor/version/A.0.256.uavcan', '@sealed')
 
     with raises(_dsdl_definition.FileNameFormatError):
-        standalone('vendor/version/A.0..256.uavcan', '')
+        standalone('vendor/version/A.0..256.uavcan', '@sealed')
 
     with raises(_error.InvalidDefinitionError, match='(?i).*version number.*'):
-        standalone('vendor/version/A.256.0.uavcan', '')
+        standalone('vendor/version/A.256.0.uavcan', '@sealed')
 
     with raises(_parser.DSDLSyntaxError):
-        standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field')
+        standalone('vendor/types/A.1.0.uavcan', 'truncated uavcan.node.Heartbeat.1.0 field\n@sealed')
 
     with raises(_serializable._primitive.InvalidCastModeError):
-        standalone('vendor/types/A.1.0.uavcan', 'truncated bool foo')
+        standalone('vendor/types/A.1.0.uavcan', 'truncated bool foo\n@sealed')
 
     with raises(_serializable._primitive.InvalidCastModeError):
-        standalone('vendor/types/A.1.0.uavcan', 'truncated int8 foo')
+        standalone('vendor/types/A.1.0.uavcan', 'truncated int8 foo\n@sealed')
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'(?i).*nonexistent.TypeName.*1\.0.*'):
-        standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field')
+        standalone('vendor/types/A.1.0.uavcan', 'nonexistent.TypeName.1.0 field\n@sealed')
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*vendor[/\\]+types' instead of .*vendor'.*"):
-        standalone('vendor/types/A.1.0.uavcan', 'types.Nonexistent.1.0 field')
+        standalone('vendor/types/A.1.0.uavcan', 'types.Nonexistent.1.0 field\n@sealed')
 
     with raises(_error.InvalidDefinitionError, match=r'(?i).*not defined for.*'):
         standalone('vendor/types/A.1.0.uavcan',
@@ -399,6 +401,7 @@ def _unittest_error() -> None:
                    int8 a
                    @assert _offset_.count >= 1
                    int16 b
+                   @sealed
                    '''))
 
     with raises(_error.InvalidDefinitionError, match=r'(?i).*field offset is not defined for unions.*'):
@@ -409,62 +412,64 @@ def _unittest_error() -> None:
                    int16 b
                    @assert _offset_.count >= 1
                    int8 c
+                   @sealed
                    '''))
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r'.*ns.Type_.*1\.0'):
         _parse_definition(
-            _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field'),
+            _define('vendor/types/A.1.0.uavcan', 'ns.Type_.1.0 field\n@sealed'),
             [
-                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', '@sealed'),
             ]
         )
 
     with raises(_error.InvalidDefinitionError, match='(?i).*Bit length cannot exceed.*'):
         _parse_definition(
-            _define('vendor/types/A.1.0.uavcan', 'int128 field'),
+            _define('vendor/types/A.1.0.uavcan', 'int128 field\n@sealed'),
             [
-                _define('ns/Type_.2.0.uavcan', ''),
-                _define('ns/Type_.1.1.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', '@sealed'),
+                _define('ns/Type_.1.1.uavcan', '@sealed'),
             ]
         )
 
     with raises(_error.InvalidDefinitionError, match='(?i).*type.*'):
         _parse_definition(
-            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type_.1.1 VALUE = 123'),
+            _define('vendor/invalid_constant_value/A.1.0.uavcan', 'ns.Type_.1.1 VALUE = 123\n@sealed'),
             [
-                _define('ns/Type_.2.0.uavcan', ''),
-                _define('ns/Type_.1.1.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', '@sealed'),
+                _define('ns/Type_.1.1.uavcan', '@sealed'),
             ]
         )
 
     with raises(_data_type_builder.UndefinedDataTypeError):
         defs = [
-            _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b'),
-            _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b'),
+            _define('vendor/circular_dependency/A.1.0.uavcan', 'B.1.0 b\n@sealed'),
+            _define('vendor/circular_dependency/B.1.0.uavcan', 'A.1.0 b\n@sealed'),
         ]
         _parse_definition(defs[0], defs)
 
     with raises(_error.InvalidDefinitionError, match='(?i).*union directive.*'):
         _parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@union'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@union\n@sealed'),
             [
-                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', '@sealed'),
             ]
         )
 
     with raises(_error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
         _parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@deprecated'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n@deprecated\n@sealed'),
             [
-                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', '@sealed'),
             ]
         )
 
     with raises(_error.InvalidDefinitionError, match='(?i).*deprecated directive.*'):
         _parse_definition(
-            _define('vendor/misplaced_directive/A.1.0.uavcan', 'ns.Type_.2.0 field\n---\n@deprecated'),
+            _define('vendor/misplaced_directive/A.1.0.uavcan',
+                    'ns.Type_.2.0 field\n@sealed\n---\n@deprecated\n@sealed'),
             [
-                _define('ns/Type_.2.0.uavcan', ''),
+                _define('ns/Type_.2.0.uavcan', '@sealed'),
             ]
         )
 
@@ -475,6 +480,7 @@ def _unittest_error() -> None:
                    # Empty
                    @assert false  # Will error here, line number 4
                    # Blank
+                   @sealed
                    '''))
     except _error.FrontendError as ex:
         assert ex.path and ex.path.endswith(os.path.join('vendor', 'types', 'A.1.0.uavcan'))
@@ -482,15 +488,15 @@ def _unittest_error() -> None:
     else:  # pragma: no cover
         assert False
 
-    standalone('vendor/types/1.A.1.0.uavcan', '', allow_unregulated=True)
+    standalone('vendor/types/1.A.1.0.uavcan', '@sealed', allow_unregulated=True)
     with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
-        standalone('vendor/types/1.A.1.0.uavcan', '')
+        standalone('vendor/types/1.A.1.0.uavcan', '@sealed')
 
-    standalone('vendor/types/1.A.1.0.uavcan', '---', allow_unregulated=True)
+    standalone('vendor/types/1.A.1.0.uavcan', '@sealed\n---\n@sealed', allow_unregulated=True)
     with raises(_data_type_builder.UnregulatedFixedPortIDError, match=r'.*allow_unregulated_fixed_port_id.*'):
-        standalone('vendor/types/1.A.1.0.uavcan', '---')
+        standalone('vendor/types/1.A.1.0.uavcan', '@sealed\n---\n@sealed')
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*sealed.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*seal.*'):
         standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int8 a
@@ -498,7 +504,7 @@ def _unittest_error() -> None:
                    @sealed
                    '''))
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*sealed.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
         standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int8 a
@@ -534,11 +540,18 @@ def _unittest_error() -> None:
                    @extent {16}  # Wrong type
                    '''))
 
-    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*attribute.*'):
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):
         standalone('vendor/sealing/A.1.0.uavcan',
                    dedent('''
                    int16 a
                    @extent 64
+                   int8 b
+                   '''))
+
+    with raises(_error.InvalidDefinitionError, match='(?i).*extent.*'):  # Neither extent nor sealed are specified.
+        standalone('vendor/sealing/A.1.0.uavcan',
+                   dedent('''
+                   int16 a
                    int8 b
                    '''))
 
@@ -581,72 +594,6 @@ def _unittest_print() -> None:
     assert printed_items[1] == "{8}"
 
 
-@_in_n_out
-def _unittest_explicit_extent_diagnostic() -> None:
-    printed_items = None  # type: typing.Optional[typing.Tuple[int, str]]
-
-    def print_handler(line_number: int, text: str) -> None:
-        nonlocal printed_items
-        printed_items = line_number, text
-
-    _define(
-        'ns/A.1.0.uavcan',
-        'uint64 x\n'
-    ).read([], print_handler, False)
-    assert printed_items
-    assert 1 <= printed_items[0] <= 2
-    assert '@extent 12 * 8' in printed_items[1]
-    printed_items = None
-
-    _define(
-        'ns/A.1.0.uavcan',
-        'uint64 x\n'
-        '---\n'
-        'uint64 x\n'
-    ).read([], print_handler, False)
-    assert printed_items
-    assert 1 <= printed_items[0] <= 2
-    assert 'Response' in printed_items[1]
-    assert '@extent 12 * 8' in printed_items[1]
-    printed_items = None
-
-    _define(
-        'ns/A.1.0.uavcan',
-        'uint64 x\n'
-        '---\n'
-        '@sealed\n'
-    ).read([], print_handler, False)
-    assert printed_items
-    assert 1 <= printed_items[0] <= 2
-    assert 'Request' in printed_items[1]
-    assert '@extent 12 * 8' in printed_items[1]
-    printed_items = None
-
-    _define(
-        'ns/A.1.0.uavcan',
-        'uint64 x\n'
-        '@extent 1024\n'
-        '---\n'
-        'uint64 x\n'
-        '@sealed\n'
-    ).read([], print_handler, False)
-    assert not printed_items
-
-    _define(
-        'ns/A.1.0.uavcan',
-        'uint64 x\n'
-        '@sealed\n'
-    ).read([], print_handler, False)
-    assert not printed_items
-
-    _define(
-        'ns/A.1.0.uavcan',
-        'uint64 x\n'
-        '@extent 1024\n'
-    ).read([], print_handler, False)
-    assert not printed_items
-
-
 # noinspection PyProtectedMember
 @_in_n_out
 def _unittest_assert() -> None:
@@ -681,6 +628,7 @@ def _unittest_assert() -> None:
             @assert Array.1.0._bit_length_.max == 8 + 8 + 8
             @assert Array.1.0._extent_ == 8 + 8 + 8
             @assert Array.1.0._extent_ == Array.1.0._bit_length_.max
+            @sealed
             ''')),
         [
             _define('ns/Array.1.0.uavcan', 'uint8[<=2] foo\n@sealed')
@@ -694,6 +642,7 @@ def _unittest_assert() -> None:
                 dedent('''
                 uint64 big
                 @assert _offset_ == 64
+                @sealed
                 ''')),
             []
         )
@@ -702,7 +651,7 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define('ns/C.1.0.uavcan', '@print Service.1.0._bit_length_'),
             [
-                _define('ns/Service.1.0.uavcan', 'uint8 a\n---\nuint16 b')
+                _define('ns/Service.1.0.uavcan', 'uint8 a\n@sealed\n---\nuint16 b\n@sealed')
             ]
         )
 
@@ -710,7 +659,7 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
-                '''uint64 LENGTH = uint64.nonexistent_attribute'''),
+                '''uint64 LENGTH = uint64.nonexistent_attribute\n@extent 0'''),
             []
         )
 
@@ -718,18 +667,18 @@ def _unittest_assert() -> None:
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
-                'void2 name'),
+                'void2 name\n@sealed'),
             []
         )
 
     with raises(_serializable._attribute.InvalidConstantValueError):
-        _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true'), [])
+        _parse_definition(_define('ns/C.1.0.uavcan', 'int8 name = true\n@sealed'), [])
 
     with raises(_error.InvalidDefinitionError, match='.*value.*'):
         _parse_definition(
             _define(
                 'ns/C.1.0.uavcan',
-                'int8 name = {1, 2, 3}'),
+                'int8 name = {1, 2, 3}\n@sealed'),
             []
         )
 
@@ -741,6 +690,7 @@ def _unittest_assert() -> None:
             float32 a
             uint64 b
             @assert _offset_ == {40, 72}
+            @sealed
             ''')),
         []
     )
@@ -757,6 +707,7 @@ def _unittest_assert() -> None:
             uint8 C = 2
             @assert _offset_ == {40, 72}
             uint8 D = 3
+            @sealed
             ''')),
         []
     )
@@ -771,6 +722,7 @@ def _unittest_assert() -> None:
                 float32 a
                 uint64 b
                 @assert _offset_ == {40, 72}
+                @sealed
                 ''')),
             []
         )
@@ -782,6 +734,7 @@ def _unittest_assert() -> None:
                 dedent('''
                 float32 a
                 @assert _offset_.min == 8
+                @sealed
                 ''')),
             []
         )
@@ -793,6 +746,7 @@ def _unittest_assert() -> None:
                 dedent('''
                 float32 a
                 @assert _offset_.min
+                @sealed
                 ''')),
             []
         )
@@ -806,6 +760,7 @@ def _unittest_assert() -> None:
             @assert J.1.0._bit_length_ == {0, 1, 2, 3, 4, 5, 6, 7, 8} * 8 + 32
             @assert K.1.0._extent_ == 8
             @assert K.1.0._bit_length_ == {8}
+            @sealed
             ''')
         ),
         [
@@ -833,6 +788,7 @@ def _unittest_assert() -> None:
             @assert _offset_ == {17}
             M.1.0 variable
             @assert _offset_ == 32 + {24, 32, 40}  # Aligned; variability due to extensibility (non-sealing)
+            @sealed
             ''')
         ),
         [
@@ -1190,11 +1146,11 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     # These are needed to ensure full branch coverage, see the checking code.
-    _define('ns/Empty.1.0.uavcan', '')
-    _define('ns/Empty.1.1.uavcan', '')
-    _define('ns/Empty.2.0.uavcan', '')
-    _define('ns/6800.Empty.3.0.uavcan', '')
-    _define('ns/6801.Empty.4.0.uavcan', '')
+    _define('ns/Empty.1.0.uavcan', '@extent 0')
+    _define('ns/Empty.1.1.uavcan', '@extent 0')
+    _define('ns/Empty.2.0.uavcan', '@extent 0')
+    _define('ns/6800.Empty.3.0.uavcan', '@extent 0')
+    _define('ns/6801.Empty.4.0.uavcan', '@extent 0')
 
     parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])     # no error
     assert len(parsed) == 8
@@ -1401,12 +1357,13 @@ def _unittest_inconsistent_deprecation() -> None:
     from pytest import raises
 
     _parse_definition(
-        _define('ns/A.1.0.uavcan', ''),
+        _define('ns/A.1.0.uavcan', '@sealed'),
         [
             _define('ns/B.1.0.uavcan',
                     dedent('''
                     @deprecated
                     A.1.0 a
+                    @sealed
                     '''))
         ]
     )
@@ -1417,10 +1374,11 @@ def _unittest_inconsistent_deprecation() -> None:
                 'ns/C.1.0.uavcan',
                 dedent('''
                 X.1.0 b
+                @sealed
                 ''')
             ),
             [
-                _define('ns/X.1.0.uavcan', '@deprecated')
+                _define('ns/X.1.0.uavcan', '@deprecated\n@sealed')
             ]
         )
 
@@ -1429,9 +1387,10 @@ def _unittest_inconsistent_deprecation() -> None:
                 dedent('''
                 @deprecated
                 X.1.0 b
+                @sealed
                 ''')),
         [
-            _define('ns/X.1.0.uavcan', '@deprecated')
+            _define('ns/X.1.0.uavcan', '@deprecated\n@sealed')
         ]
     )
 
@@ -1447,6 +1406,7 @@ def _unittest_repeated_directives() -> None:
                 @deprecated
                 int8 a
                 float16 b
+                @sealed
                 ''')),
         []
     )
@@ -1457,6 +1417,7 @@ def _unittest_repeated_directives() -> None:
                     dedent('''
                     @deprecated
                     @deprecated
+                    @sealed
                     ''')),
             []
         )
@@ -1466,8 +1427,10 @@ def _unittest_repeated_directives() -> None:
             _define('ns/A.1.0.uavcan',
                     dedent('''
                     @deprecated
+                    @sealed
                     ---
                     @deprecated
+                    @sealed
                     ''')),
             []
         )
@@ -1478,10 +1441,12 @@ def _unittest_repeated_directives() -> None:
                 @union
                 int8 a
                 float16 b
+                @sealed
                 ---
                 @union
                 int8 a
                 float16 b
+                @sealed
                 ''')),
         []
     )
@@ -1494,6 +1459,7 @@ def _unittest_repeated_directives() -> None:
                     @union
                     int8 a
                     float16 b
+                    @sealed
                     ''')),
             []
         )
@@ -1506,6 +1472,7 @@ def _unittest_repeated_directives() -> None:
                     @sealed
                     int8 a
                     float16 b
+                    @sealed
                     ''')),
             []
         )
@@ -1518,6 +1485,7 @@ def _unittest_repeated_directives() -> None:
                     float16 b
                     @extent 256
                     @extent 800
+                    @sealed
                     ''')),
             []
         )
@@ -1545,10 +1513,11 @@ def _unittest_dsdl_parser_basics() -> None:
                 @assert true
                 @assert ns.Foo.1.0.THE_CONSTANT == 42
                 @assert ns.Bar.1.23.B == ns.Bar.1.23.A + 1
+                @extent 32 * 1024 * 8
                 ''')),
         [
-            _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42\n'),
-            _define('ns/Bar.1.23.uavcan', 'int8 the_field\nint8 A = 0xA\nint8 B = 0xB'),
+            _define('ns/Foo.1.0.uavcan', 'int8 THE_CONSTANT = 42\n@extent 1024'),
+            _define('ns/Bar.1.23.uavcan', 'int8 the_field\nint8 A = 0xA\nint8 B = 0xB\n@extent 1024'),
         ]
     )
 
@@ -1559,7 +1528,7 @@ def _unittest_dsdl_parser_expressions() -> None:
 
     def throws(definition: str, exc: typing.Type[Exception] = _expression.InvalidOperandError) -> None:
         with raises(exc):
-            _parse_definition(_define('ns/Throws.0.1.uavcan', dedent(definition)), [])
+            _parse_definition(_define('ns/Throws.0.1.uavcan', dedent(definition + '\n@sealed')), [])
 
     throws('bool R = true && 0')
     throws('bool R = true || 0')
@@ -1641,6 +1610,7 @@ def _unittest_dsdl_parser_expressions() -> None:
                 @assert 0xFF_00 & 0x00_FF == 0x0000
                 @assert 0xFF_00 | 0x00_FF == 0xFFFF
                 @assert 0xFF_00 ^ 0x0F_FF == 0xF0FF
+                @sealed
                 ''')),
         []
     )
