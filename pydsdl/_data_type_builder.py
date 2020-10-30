@@ -64,38 +64,29 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
     def finalize(self) -> _serializable.CompositeType:
         if len(self._structs) == 1:     # Structure type
             builder, = self._structs     # type: _data_schema_builder.DataSchemaBuilder,
-            out = self._make_composite(
-                builder=builder,
-                name=self._definition.full_name,
-                version=self._definition.version,
-                deprecated=self._is_deprecated,
-                fixed_port_id=self._definition.fixed_port_id,
-                source_file_path=self._definition.file_path,
-                parent_service_getter=None,
-            )
+            out = self._make_composite(builder=builder,
+                                       name=self._definition.full_name,
+                                       version=self._definition.version,
+                                       deprecated=self._is_deprecated,
+                                       fixed_port_id=self._definition.fixed_port_id,
+                                       source_file_path=self._definition.file_path)
         else:  # Service type
             request_builder, response_builder = self._structs
             assert isinstance(request_builder, _data_schema_builder.DataSchemaBuilder)
             assert isinstance(response_builder, _data_schema_builder.DataSchemaBuilder)
             sep = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR
-            request = self._make_composite(
-                builder=request_builder,
-                name=sep.join([self._definition.full_name, 'Request']),
-                version=self._definition.version,
-                deprecated=self._is_deprecated,
-                fixed_port_id=None,
-                source_file_path=self._definition.file_path,
-                parent_service_getter=lambda: typing.cast(_serializable.ServiceType, out),
-            )
-            response = self._make_composite(
-                builder=response_builder,
-                name=sep.join([self._definition.full_name, 'Response']),
-                version=self._definition.version,
-                deprecated=self._is_deprecated,
-                fixed_port_id=None,
-                source_file_path=self._definition.file_path,
-                parent_service_getter=lambda: typing.cast(_serializable.ServiceType, out),
-            )
+            request = self._make_composite(builder=request_builder,
+                                           name=sep.join([self._definition.full_name, 'Request']),
+                                           version=self._definition.version,
+                                           deprecated=self._is_deprecated,
+                                           fixed_port_id=None,
+                                           source_file_path=self._definition.file_path)
+            response = self._make_composite(builder=response_builder,
+                                            name=sep.join([self._definition.full_name, 'Response']),
+                                            version=self._definition.version,
+                                            deprecated=self._is_deprecated,
+                                            fixed_port_id=None,
+                                            source_file_path=self._definition.file_path)
             # noinspection SpellCheckingInspection
             out = _serializable.ServiceType(                    # pozabito vse na svete
                 request=request,                                # serdce zamerlo v grudi
@@ -280,25 +271,19 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._is_deprecated = True
 
     @staticmethod
-    def _make_composite(
-            builder:                _data_schema_builder.DataSchemaBuilder,
-            name:                   str,
-            version:                _serializable.Version,
-            deprecated:             bool,
-            fixed_port_id:          typing.Optional[int],
-            source_file_path:       str,
-            parent_service_getter:  typing.Optional[typing.Callable[[], _serializable.ServiceType]],
-    ) -> _serializable.CompositeType:
+    def _make_composite(builder:          _data_schema_builder.DataSchemaBuilder,
+                        name:             str,
+                        version:          _serializable.Version,
+                        deprecated:       bool,
+                        fixed_port_id:    typing.Optional[int],
+                        source_file_path: str) -> _serializable.CompositeType:
         ty = _serializable.UnionType if builder.union else _serializable.StructureType
-        inner = ty(
-            name=name,
-            version=version,
-            attributes=builder.attributes,
-            deprecated=deprecated,
-            fixed_port_id=fixed_port_id,
-            source_file_path=source_file_path,
-            parent_service_getter=parent_service_getter,
-        )  # type: _serializable.CompositeType
+        inner = ty(name=name,
+                   version=version,
+                   attributes=builder.attributes,
+                   deprecated=deprecated,
+                   fixed_port_id=fixed_port_id,
+                   source_file_path=source_file_path)  # type: _serializable.CompositeType
         sm = builder.serialization_mode
         if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):
             out = _serializable.DelimitedType(inner, extent=sm.extent)  # type: _serializable.CompositeType

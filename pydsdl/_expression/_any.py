@@ -30,6 +30,8 @@ class Any(abc.ABC):
 
     Per the DSDL data model, a serializable type is also a value.
     Serializable types have the suffix ``Type`` because their instances represent not DSDL values but DSDL types.
+
+    Instances of this type can be pickled.
     """
 
     TYPE_NAME = None    # type: str

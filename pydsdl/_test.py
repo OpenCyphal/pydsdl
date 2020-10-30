@@ -186,6 +186,8 @@ def _unittest_simple() -> None:
     assert res.full_name == 'another.Service.Response'
     assert req is p.request_type
     assert res is p.response_type
+    assert req.parent_service is p
+    assert res.parent_service is p
 
     assert len(req.constants) == 0
     assert len(req.fields) == 3
@@ -1614,6 +1616,35 @@ def _unittest_dsdl_parser_expressions() -> None:
                 ''')),
         []
     )
+
+
+@_in_n_out
+def _unittest_pickle() -> None:
+    import pickle
+    p = _parse_definition(
+        _define('ns/A.1.0.uavcan',
+                dedent(r'''
+                float64 PI = 3.141592653589793
+                float64 big_pi
+                @sealed
+                ---
+                float16 small_pi
+                @extent 1024 * 8
+                ''')),
+        []
+    )
+    assert isinstance(p, _serializable.ServiceType)
+    assert p.request_type.parent_service is p
+    assert p.response_type.parent_service is p
+    assert p.parent_service is None
+
+    pp = pickle.loads(pickle.dumps(p))
+    assert isinstance(pp, _serializable.ServiceType)
+    assert pp.request_type.parent_service is pp
+    assert pp.response_type.parent_service is pp
+    assert pp.parent_service is None
+    assert str(pp) == str(p)
+    assert repr(pp) == repr(p)
 
 
 def _collect_descendants(cls: typing.Type[object]) -> typing.Iterable[typing.Type[object]]:
