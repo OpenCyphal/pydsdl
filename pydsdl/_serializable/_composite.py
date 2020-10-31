@@ -205,6 +205,17 @@ class CompositeType(SerializableType):
         return [a for a in self.attributes if isinstance(a, Constant)]
 
     @property
+    def inner_type(self) -> 'CompositeType':
+        """
+        If the concrete type is a decorator over another Composite (such as :class:`DelimitedType`),
+        this property provides access to the decorated instance.
+        Otherwise, returns the current instance reference unchanged.
+        This is intended for use in scenarios where the decoration is irrelevant and the user needs to know
+        the concrete type of the decorated instance.
+        """
+        return self
+
+    @property
     def fixed_port_id(self) -> typing.Optional[int]:
         return self._fixed_port_id
 
@@ -741,9 +752,12 @@ def _unittest_composite_types() -> None:
         assert s['']        # Padding fields are not accessible
     assert hash(s) == hash(s)
     assert not s.has_parent_service
+    assert s.inner_type is s
+    assert s.inner_type.inner_type is s
 
     d = DelimitedType(s, 2048)
     assert d.inner_type is s
+    assert d.inner_type.inner_type is s
     assert d.attributes == d.inner_type.attributes
     with raises(KeyError):
         assert d['c']
@@ -787,6 +801,8 @@ def _unittest_composite_types() -> None:
         UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
         SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
     ])
+    assert u.inner_type is u
+    assert u.inner_type.inner_type is u
     assert u.bit_length_set == {24}
     assert u.extent == 24
     assert DelimitedType(u, 40).extent == 40
@@ -796,6 +812,8 @@ def _unittest_composite_types() -> None:
     assert DelimitedType(u, 32).extent == 32
     assert DelimitedType(u, 32).bit_length_set == {32, 40, 48, 56, 64}
     assert DelimitedType(u, 800).extent == 800
+    assert DelimitedType(u, 800).inner_type is u
+    assert DelimitedType(u, 800).inner_type.inner_type is u
 
     assert try_union_fields(
         [
