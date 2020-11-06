@@ -510,6 +510,12 @@ class DelimitedType(CompositeType):
                 (self._extent, inner.extent)
             )
 
+        delimiter_header_bit_length = self._DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
+        # This is to prevent the delimiter header from breaking the alignment of the following composite.
+        delimiter_header_bit_length = max(delimiter_header_bit_length, self.alignment_requirement)
+        self._delimiter_header_type = UnsignedIntegerType(delimiter_header_bit_length,
+                                                          UnsignedIntegerType.CastMode.TRUNCATED)
+
         assert self.extent % self.BITS_PER_BYTE == 0
         assert self.extent % self.alignment_requirement == 0
         assert self.extent >= self.inner_type.extent
@@ -566,10 +572,7 @@ class DelimitedType(CompositeType):
         The type of the integer prefix field that encodes the size of the serialized representation [in bytes]
         of the :attr:`inner_type`.
         """
-        bit_length = self._DEFAULT_DELIMITER_HEADER_BIT_LENGTH  # This may be made configurable later.
-        # This is to prevent the delimiter header from breaking the alignment of the following composite.
-        bit_length = max(bit_length, self.alignment_requirement)
-        return UnsignedIntegerType(bit_length, UnsignedIntegerType.CastMode.SATURATED)
+        return self._delimiter_header_type
 
     def iterate_fields_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
             -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
@@ -764,6 +767,7 @@ def _unittest_composite_types() -> None:
     assert hash(d) == hash(d)
     assert d.delimiter_header_type.bit_length == 32
     assert isinstance(d.delimiter_header_type, UnsignedIntegerType)
+    assert d.delimiter_header_type.cast_mode == PrimitiveType.CastMode.TRUNCATED
     assert d.extent == 2048
 
     d = DelimitedType(s, 256)
