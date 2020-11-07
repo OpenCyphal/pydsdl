@@ -25,8 +25,6 @@ function clean()
 [[ -z "$(git diff)" ]]                                 || die "Please commit all changes, then try again."
 [[ -z "$(git log '@{u}..')" ]]                         || die "Please push all commits, then try again."
 
-./test.sh  || die "Test failed."
-
 python3 -m pip uninstall pydsdl -y &> /dev/null  # Extra precautions.
 
 clean || die "Clean failed. It is required to prevent unnecessary files from being included in the release package."
