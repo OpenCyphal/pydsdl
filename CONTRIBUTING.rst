@@ -73,5 +73,10 @@ Use ``/docs/build.sh`` to generate the documentation locally.
 Releasing
 +++++++++
 
-Use the script ``/release.sh`` to publish new releases on PyPI. Read the source for usage information.
-The script will tag the release automatically.
+The script ``/release.sh`` is automatically invoked by the CI/CD pipeline for all commits pushed to master.
+It can also be used by a developer locally to publish releases manually, should that be necessary,
+although this is obviously discouraged.
+
+The script uploads a new release to PyPI and pushes a new tag upstream.
+It is therefore necessary to ensure that the library version is bumped whenever a new commit is merged into master;
+otherwise, the automation will fail with an explicit tag conflict error instead of deploying the release.

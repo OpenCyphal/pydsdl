@@ -64,8 +64,8 @@ on_success:
   - sh: |
       if ((release)) && [[ "$APPVEYOR_REPO_BRANCH" == "master" ]]
       then
-        git config --global credential.helper store
         echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
+        git config --global credential.helper store
         git config --global user.email "devnull@uavcan.org"
         git config --global user.name  "Release Automation"
         ./release.sh
