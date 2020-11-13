@@ -5,7 +5,7 @@ environment:
   matrix:
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
-      PYTHON: "C:\\Python38-x64"
+      PYTHON: "C:\\Python39-x64"
 
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
@@ -47,7 +47,7 @@ for:
     install:
       # MS Windows config.
       - cmd: 'SET PATH=%PYTHON%;%PATH%'
-      - cmd: 'SET PATH=C:\\Python38-x64\\Scripts;%PATH%'
+      - cmd: 'SET PATH=%PYTHON%\\Scripts;%PATH%'
       - cmd: 'echo %PATH%'
       # Shared config for all platforms.
       - python --version
@@ -76,6 +76,9 @@ for:
     branches:
       only:
         - master
+    install:
+      - git submodule update --init --recursive
+      - pip install -r requirements.txt
     deploy_script:
       - sh: echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
       - sh: git config --global credential.helper store
