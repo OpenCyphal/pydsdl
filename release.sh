@@ -1,8 +1,6 @@
 #!/bin/bash
-#
-# PyPI release automation.
+# PyPI release automation. This script can be invoked manually or from a CI pipeline.
 # https://gist.github.com/boppreh/ac7522b3a4ac46b4f6010eecddc57f21
-#
 
 set -o nounset
 
@@ -21,11 +19,16 @@ function clean()
     rm -rf .*cache      &> /dev/null
 }
 
-[[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]]  || die "Can only release from the master branch."
-[[ -z "$(git diff)" ]]                                 || die "Please commit all changes, then try again."
-[[ -z "$(git log '@{u}..')" ]]                         || die "Please push all commits, then try again."
+python3 -m pip uninstall pydsdl -y &> /dev/null  # Avoid conflicts
 
-python3 -m pip uninstall pydsdl -y &> /dev/null  # Extra precautions.
+export PYTHONPATH=.
+version=$(python3 -c 'import pydsdl; print(pydsdl.__version__)')
+tag=$(git describe --tags --abbrev=0)
+
+[[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]] || die "Can only release from the master branch."
+[[ -z "$(git diff)" ]]                                || die "Commit all changes, then try again."
+[[ -z "$(git log '@{u}..')" ]]                        || die "Push all commits, then try again."
+[[ "$version" != "$tag" ]]                            || die "Bump the version number first (currently $version)."
 
 clean || die "Clean failed. It is required to prevent unnecessary files from being included in the release package."
 
@@ -33,6 +36,4 @@ clean || die "Clean failed. It is required to prevent unnecessary files from bei
 python3 -m twine upload dist/* || die "Twine upload has failed."
 clean  # May fail, we don't care.
 
-export PYTHONPATH=.
-version=$(python3 -c 'import pydsdl; print(pydsdl.__version__)')
 (git tag -a "${version}" -m "${version}" && git push --tags) || die "Could not tag the release. Please do it manually."

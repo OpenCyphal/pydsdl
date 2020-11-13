@@ -7,6 +7,7 @@ environment:
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.9"
       coverage: 1
+      release:  1
 
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.8"
@@ -17,9 +18,16 @@ environment:
     - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.6"
 
-stack: python %PYTHON%
+  # Release automation credentials; see https://www.appveyor.com/docs/how-to/git-push/
+  GIT_TOKEN:
+    secure: +jQhxLpePj6hdDryfET/XpLo7VL9fhDXVHlwLOPp/nRDYe97TJAfd0XCTuPz1qkT
+  TWINE_USERNAME: __token__
+  TWINE_PASSWORD:
+    secure: +ZVhECKV0ESBrvUGXVd9wpt9xhMMHeIXSJalghKMKGCrxqvvg7/yMm9kPO+xH1T310zzMpnDUxknR1Q05mjAX5MU70MiHiWAB2fBjNwrMSTQZP4kCpKtznAIM/iCwVczbNolbB3tsUn4OS3rQjXyz7lUdYnaeM7sqF1IZNj55/spCPsAJUmi5DYj8M+6zkaPdCZEswlH7lARJG1g+l4/tbyiBssuyDdmY0AQxJVXDGBXKeHU8frHrWayEI5holjF+oFwx2b6Fz1zZ7uznrGpDQ==
 
+stack: python %PYTHON%
 build: off
+skip_tags: true
 
 install:
   # MS Windows config.
@@ -43,9 +51,24 @@ test_script:
   - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
   - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
 
-after_test:
+on_success:
   # Publish the coverage. The deps are not listed in the requirements file because they are only useful in the CI.
-  - sh: "if ((coverage)); then
-             pip install pyyaml coveralls;
-             coveralls;
-         fi"
+  - sh: |
+      if ((coverage))
+      then
+        pip install pyyaml coveralls
+        coveralls
+      fi
+
+  # Deploy automatically if we're on master. Docs: https://www.appveyor.com/docs/how-to/git-push/
+  - sh: |
+      if ((release)) && [[ "$APPVEYOR_REPO_BRANCH" == "master" ]]
+      then
+        git config --global credential.helper store
+        echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
+        git config --global user.email "devnull@uavcan.org"
+        git config --global user.name  "Release Automation"
+        ./release.sh
+      else
+        echo "Deployment skipped: release=$release, APPVEYOR_REPO_BRANCH=$APPVEYOR_REPO_BRANCH"
+      fi
