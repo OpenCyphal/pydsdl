@@ -25,10 +25,9 @@ export PYTHONPATH=.
 version=$(python3 -c 'import pydsdl; print(pydsdl.__version__)')
 tag=$(git describe --tags --abbrev=0)
 
-[[ "$(git rev-parse --abbrev-ref HEAD)" = 'master' ]] || die "Can only release from the master branch."
-[[ -z "$(git diff)" ]]                                || die "Commit all changes, then try again."
-[[ -z "$(git log '@{u}..')" ]]                        || die "Push all commits, then try again."
-[[ "$version" != "$tag" ]]                            || die "Bump the version number first (currently $version)."
+[[ -z "$(git diff)" ]]         || die "Commit all changes, then try again"
+[[ -z "$(git log '@{u}..')" ]] || die "Push all commits, then try again"
+[[ "$version" != "$tag" ]]     || die "Bump the version number first (currently $version)"
 
 clean || die "Clean failed. It is required to prevent unnecessary files from being included in the release package."
 

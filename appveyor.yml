@@ -1,22 +1,30 @@
 environment:
   matrix:
-    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
       PYTHON: "C:\\Python38-x64"
       PYTHON_ARCH: "64"
 
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.9"
       coverage: 1
-      release:  1
 
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.8"
 
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.7"
 
-    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.6"
+
+    - job_name: deploy
+      job_depends_on: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
 
   # Release automation credentials; see https://www.appveyor.com/docs/how-to/git-push/
   GIT_TOKEN:
@@ -29,46 +37,48 @@ stack: python %PYTHON%
 build: off
 skip_tags: true
 
-install:
-  # MS Windows config.
-  - cmd: 'SET PATH=%PYTHON%;%PATH%'
-  - cmd: 'SET PATH=C:\\Python38-x64\\Scripts;%PATH%'
-  - cmd: 'echo %PATH%'
-
-  # Shared config for all platforms.
-  - python --version
-  - git submodule update --init --recursive
-  - pip install -r requirements.txt
-
-test_script:
-  # GNU/Linux test.
-  - sh: ./test.sh
-
-  # MS Windows test.
-  - cmd: python -m pytest
-
-  # Shared test for all platforms.
-  - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
-  - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
-
-on_success:
-  # Publish the coverage. The deps are not listed in the requirements file because they are only useful in the CI.
-  - sh: |
-      if ((coverage))
-      then
-        pip install pyyaml coveralls
-        coveralls
-      fi
-
-  # Deploy automatically if we're on master. Docs: https://www.appveyor.com/docs/how-to/git-push/
-  - sh: |
-      if ((release)) && [[ "$APPVEYOR_REPO_BRANCH" == "master" ]]
-      then
-        echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
-        git config --global credential.helper store
-        git config --global user.email "devnull@uavcan.org"
-        git config --global user.name  "Release Automation"
-        ./release.sh
-      else
-        echo "Deployment skipped: release=$release, APPVEYOR_REPO_BRANCH=$APPVEYOR_REPO_BRANCH"
-      fi
+# https://www.appveyor.com/blog/2018/04/25/specialized-build-matrix-configuration-in-appveyor/
+# https://www.appveyor.com/docs/job-workflows/
+for:
+  # TEST PIPELINE
+  - matrix:
+      only:
+        - job_group: tests
+    install:
+      # MS Windows config.
+      - cmd: 'SET PATH=%PYTHON%;%PATH%'
+      - cmd: 'SET PATH=C:\\Python38-x64\\Scripts;%PATH%'
+      - cmd: 'echo %PATH%'
+      # Shared config for all platforms.
+      - python --version
+      - git submodule update --init --recursive
+      - pip install -r requirements.txt
+    test_script:
+      # GNU/Linux test.
+      - sh: ./test.sh
+      # MS Windows test.
+      - cmd: python -m pytest
+      # Shared test for all platforms.
+      - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
+      - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
+    on_success:
+      # Publish the coverage. The deps are not listed in the requirements file because they are only useful in the CI.
+      - sh: |
+          if ((coverage))
+          then
+            pip install pyyaml coveralls
+            coveralls
+          fi
+  # DEPLOY PIPELINE
+  - matrix:
+      only:
+        - job_name: deploy
+    branches:
+      only:
+        - master
+    deploy_script:
+      - sh: echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
+      - sh: git config --global credential.helper store
+      - sh: git config --global user.email "devnull@uavcan.org"
+      - sh: git config --global user.name  "Release Automation"
+      - sh: ./release.sh
