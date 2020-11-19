@@ -149,6 +149,9 @@ def read_namespace(root_namespace_directory:        str,
     for a in lookup_directories_sorted_path_list:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
 
+    # Check for common usage errors and warn the user if anything looks suspicious.
+    _ensure_no_common_usage_errors(root_namespace_directory, lookup_directories_sorted_path_list, _logger.warning)
+
     # Check the namespaces.
     _ensure_no_nested_root_namespaces(lookup_directories_sorted_path_list)
     _ensure_no_namespace_name_collisions(lookup_directories_sorted_path_list)
@@ -367,6 +370,42 @@ def _ensure_minor_version_compatibility_pairwise(a: _serializable.CompositeType,
             )
 
 
+def _ensure_no_common_usage_errors(root_namespace_directory: str,
+                                   lookup_directories: typing.Iterable[str],
+                                   reporter: typing.Callable[[str], None]) -> None:
+    suspicious_base_names = [
+        'public_regulated_data_types',
+        'dsdl',
+    ]
+
+    def base(s: str) -> str:
+        return os.path.basename(os.path.normpath(s))
+
+    def is_valid_name(s: str) -> bool:
+        try:
+            _serializable.check_name(s)
+        except _error.InvalidDefinitionError:
+            return False
+        else:
+            return True
+
+    for p in [root_namespace_directory] + list(lookup_directories):
+        p = os.path.normcase(os.path.abspath(p))
+        try:
+            candidates = [
+                x for x in os.listdir(p)
+                if os.path.isdir(os.path.join(p, x)) and is_valid_name(x)
+            ]
+        except OSError:  # pragma: no cover
+            candidates = []
+        if candidates and base(p) in suspicious_base_names:
+            report = (
+                'Possibly incorrect usage detected: input path %r is likely incorrect because the last path component '
+                'should be the root namespace name rather than its parent directory. You probably meant:\n%s'
+            ) % (p, '\n'.join(('- %s' % os.path.join(p, s)) for s in candidates),)
+            reporter(report)
+
+
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:
     directories = list(sorted([str(os.path.abspath(x)) for x in set(directories)]))
     for a in directories:
@@ -539,3 +578,35 @@ def _unittest_dsdl_definition_constructor() -> None:
         assert False
 
     discard('nested/super.bad/Unreachable.1.0.uavcan')
+
+
+def _unittest_common_usage_errors() -> None:
+    import tempfile
+
+    directory = tempfile.TemporaryDirectory()
+    root_ns_dir = os.path.join(directory.name, 'foo')
+    os.mkdir(root_ns_dir)
+
+    reports = []  # type: typing.List[str]
+
+    _ensure_no_common_usage_errors(root_ns_dir, [], reports.append)
+    assert not reports
+    _ensure_no_common_usage_errors(root_ns_dir, ['/baz'], reports.append)
+    assert not reports
+
+    dir_dsdl = os.path.join(root_ns_dir, 'dsdl')
+    os.mkdir(dir_dsdl)
+    _ensure_no_common_usage_errors(dir_dsdl, ['/baz'], reports.append)
+    assert not reports  # Because empty.
+
+    dir_dsdl_vscode = os.path.join(dir_dsdl, '.vscode')
+    os.mkdir(dir_dsdl_vscode)
+    _ensure_no_common_usage_errors(dir_dsdl, ['/baz'], reports.append)
+    assert not reports  # Because the name is not valid.
+
+    dir_dsdl_uavcan = os.path.join(dir_dsdl, 'uavcan')
+    os.mkdir(dir_dsdl_uavcan)
+    _ensure_no_common_usage_errors(dir_dsdl, ['/baz'], reports.append)
+    rep, = reports
+    reports.clear()
+    assert dir_dsdl_uavcan in rep

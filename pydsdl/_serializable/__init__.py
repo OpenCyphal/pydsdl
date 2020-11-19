@@ -31,3 +31,5 @@ from ._attribute import Attribute as Attribute
 from ._attribute import Field as Field
 from ._attribute import PaddingField as PaddingField
 from ._attribute import Constant as Constant
+
+from ._name import check_name as check_name
