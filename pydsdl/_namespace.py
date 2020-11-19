@@ -609,4 +609,4 @@ def _unittest_common_usage_errors() -> None:
     _ensure_no_common_usage_errors(dir_dsdl, ['/baz'], reports.append)
     rep, = reports
     reports.clear()
-    assert dir_dsdl_uavcan in rep
+    assert os.path.normcase(dir_dsdl_uavcan) in rep
