@@ -389,7 +389,8 @@ def _ensure_no_common_usage_errors(root_namespace_directory: str,
         else:
             return True
 
-    for p in [root_namespace_directory] + list(lookup_directories):
+    all_paths = set([root_namespace_directory] + list(lookup_directories))
+    for p in all_paths:
         p = os.path.normcase(os.path.abspath(p))
         try:
             candidates = [
