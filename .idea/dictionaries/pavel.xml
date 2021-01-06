@@ -2,6 +2,7 @@
   <dictionary name="pavel">
     <words>
       <w>abstractmethods</w>
+      <w>addopts</w>
       <w>allocatee</w>
       <w>antipattern</w>
       <w>apidoc</w>
@@ -40,6 +41,7 @@
       <w>deserializing</w>
       <w>dhcp</w>
       <w>diehard</w>
+      <w>dirnames</w>
       <w>disbalance</w>
       <w>dlen</w>
       <w>docname</w>

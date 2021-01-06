@@ -343,7 +343,7 @@ def _ensure_minor_version_compatibility_pairwise(a: _serializable.CompositeType,
     if isinstance(a, _serializable.ServiceType) and isinstance(b, _serializable.ServiceType):
         _ensure_minor_version_compatibility_pairwise(a.request_type, b.request_type)
         _ensure_minor_version_compatibility_pairwise(a.response_type, b.response_type)
-    else:
+    elif a.version.major > 0:  # Types with major=0 are exempt from compatibility requirements.
         if a.extent != b.extent:
             raise ExtentConsistencyError(
                 'The extent of %s is %d bits, whereas the extent of %s is %d bits. '

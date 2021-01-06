@@ -1183,6 +1183,15 @@ def _unittest_parse_namespace_versioning() -> None:
     assert ei_extent.value.path and 'Consistency.1' in ei_extent.value.path
     _undefine_glob('ns/Consistency*')
 
+    # Extent consistency -- non-service type, zero major version
+    _define('ns/Consistency.0.1.uavcan', 'uint8 a\n@extent 128')
+    _define('ns/Consistency.0.2.uavcan', 'uint8 a\nuint8 b\n@extent 128')
+    parsed = _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])      # no error
+    assert len(parsed) == 10
+    _define('ns/Consistency.0.3.uavcan', 'uint8 a\nuint8 b\nuint8 c\n@extent 256')  # no error
+    _namespace.read_namespace(os.path.join(directory.name, 'ns'), [])
+    _undefine_glob('ns/Consistency*')
+
     # Extent consistency -- request
     _define('ns/Consistency.1.0.uavcan',
             dedent('''
