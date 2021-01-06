@@ -4,7 +4,7 @@ status=0
 
 # Static type checking
 export MYPYPATH="pydsdl/third_party/"
-if ! mypy --strict --strict-equality --no-implicit-reexport --config-file=setup.cfg pydsdl
+if ! mypy --strict --config-file=setup.cfg pydsdl
 then
     status=1
 fi
