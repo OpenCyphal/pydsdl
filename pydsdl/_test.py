@@ -861,7 +861,7 @@ def _unittest_parse_namespace() -> None:
 
     parsed = _namespace.read_namespace(
         os.path.join(directory.name, 'zubax'),
-        [],
+        [os.path.join(directory.name, 'zubax', '.')],  # Intentional duplicate
         print_handler
     )
     print(parsed)
