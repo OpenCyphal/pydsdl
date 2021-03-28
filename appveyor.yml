@@ -49,27 +49,19 @@ for:
       - cmd: 'SET PATH=%PYTHON%;%PATH%'
       - cmd: 'SET PATH=%PYTHON%\\Scripts;%PATH%'
       - cmd: 'echo %PATH%'
-      # Shared config for all platforms.
-      - python --version
-      - git submodule update --init --recursive
-      - pip install -r requirements.txt
+      # Shared config.
+      - python -m pip install --upgrade pip setuptools nox
     test_script:
       # GNU/Linux test.
-      - sh: ./test.sh
+      - sh: nox --non-interactive --error-on-missing-interpreters --session test lint --python $PYTHON
+      - sh: nox --non-interactive --session docs
       # MS Windows test.
-      - cmd: python -m pytest
+      - cmd: nox --forcecolor --non-interactive --error-on-missing-interpreters --session test lint
       # Shared test for all platforms.
       - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
       - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
-    on_success:
-      # Publish the coverage. The deps are not listed in the requirements file because they are only useful in the CI.
-      - sh: |
-          if ((coverage))
-          then
-            pip install pyyaml coveralls
-            coveralls
-          fi
-  # DEPLOY PIPELINE
+
+  # DEPLOYMENT PIPELINE
   - matrix:
       only:
         - job_name: deploy
@@ -77,11 +69,17 @@ for:
       only:
         - master
     install:
-      - git submodule update --init --recursive
-      - pip install -r requirements.txt
+      - python -m pip install --upgrade pip setuptools wheel twine
     deploy_script:
-      - sh: echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
-      - sh: git config --global credential.helper store
-      - sh: git config --global user.email "devnull@uavcan.org"
-      - sh: git config --global user.name  "Release Automation"
-      - sh: ./release.sh
+      # Ensure we deploy only from master, not from PR builds.
+      - '[[ "$APPVEYOR_REPO_BRANCH" == "master" ]] && [[ -z "$APPVEYOR_PULL_REQUEST_HEAD_COMMIT" ]] || exit'
+      # Configure git credentials.
+      - echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
+      - git config --global credential.helper store
+      - git config --global user.email "devnull@uavcan.org"
+      - git config --global user.name  "Release Automation"
+      # Tag and publish this release. Push the tag after the release is out in case it could not be published.
+      - 'git tag "$(python3 -c 'import pydsdl; print(pydsdl.__version__)')"'
+      - 'python setup.py sdist bdist_wheel'
+      - 'python -m twine upload dist/*'
+      - 'git push --tags'

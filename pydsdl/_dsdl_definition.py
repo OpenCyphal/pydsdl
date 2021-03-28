@@ -123,9 +123,9 @@ class DSDLDefinition:
         # infinite recursion on self-referential definitions.
         lookup_definitions = list(filter(lambda d: d != self, lookup_definitions))
 
-        _logger.info('%s: Starting processing with %d lookup definitions located in root namespaces: %s',
-                     log_prefix, len(lookup_definitions),
-                     ', '.join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))))
+        _logger.debug('%s: Starting processing with %d lookup definitions located in root namespaces: %s',
+                      log_prefix, len(lookup_definitions),
+                      ', '.join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))))
         try:
             builder = _data_type_builder.DataTypeBuilder(
                 definition=self,

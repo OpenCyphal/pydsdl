@@ -1,0 +1,3 @@
+sphinx           == 3.5.3
+sphinx_rtd_theme == 0.5.1
+sphinx-computron >= 0.2, < 2.0

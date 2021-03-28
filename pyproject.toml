@@ -1,0 +1,8 @@
+[tool.black]
+line-length = 120
+include = '''
+(pydsdl/.*\.pyi?$)
+'''
+exclude = '''
+(pydsdl/third_party/.*)
+'''
