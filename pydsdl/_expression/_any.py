@@ -13,14 +13,16 @@ class InvalidOperandError(_error.InvalidDefinitionError):
 
 class UndefinedOperatorError(InvalidOperandError):
     """Thrown when there is no matching operator for the supplied arguments."""
+
     def __init__(self) -> None:
-        super(UndefinedOperatorError, self).__init__('The requested operator is not defined for the provided arguments')
+        super(UndefinedOperatorError, self).__init__("The requested operator is not defined for the provided arguments")
 
 
 class UndefinedAttributeError(InvalidOperandError):
     """Thrown when the requested attribute does not exist."""
+
     def __init__(self) -> None:
-        super(UndefinedAttributeError, self).__init__('Invalid attribute name')
+        super(UndefinedAttributeError, self).__init__("Invalid attribute name")
 
 
 class Any(abc.ABC):
@@ -34,7 +36,7 @@ class Any(abc.ABC):
     Instances of this type can be pickled.
     """
 
-    TYPE_NAME = None    # type: str
+    TYPE_NAME = None  # type: str
     """
     The DSDL-name of the data type implemented by the class, as defined in Specification.
     """
@@ -53,14 +55,17 @@ class Any(abc.ABC):
         raise NotImplementedError  # pragma: no cover
 
     def __repr__(self) -> str:
-        return self.TYPE_NAME + '(' + str(self) + ')'
+        return self.TYPE_NAME + "(" + str(self) + ")"
 
     # Unary operators.
-    def _logical_not(self) -> 'Boolean': raise UndefinedOperatorError
+    def _logical_not(self) -> "Boolean":
+        raise UndefinedOperatorError
 
-    def _positive(self) -> 'Any': raise UndefinedOperatorError
+    def _positive(self) -> "Any":
+        raise UndefinedOperatorError
 
-    def _negative(self) -> 'Any': raise UndefinedOperatorError
+    def _negative(self) -> "Any":
+        raise UndefinedOperatorError
 
     # Binary operators.
     # The types of the operators defined here must match the specification.
@@ -106,9 +111,10 @@ class Any(abc.ABC):
     # Attribute access operator. It is a binary operator as well, but its semantics is slightly different.
     # Implementations must invoke super()._attribute() when they encounter an unknown attribute, to allow
     # the parent classes to handle the requested attribute as a fallback option.
-    def _attribute(self, name: 'String') -> 'Any': raise UndefinedAttributeError
+    def _attribute(self, name: "String") -> "Any":
+        raise UndefinedAttributeError
 
 
 # This import must be located at the bottom to break the circular dependency in the type annotations above.
 # We must import specific names as opposed to the whole module because the latter breaks MyPy.
-from ._primitive import Boolean, String    # noqa
+from ._primitive import Boolean, String  # noqa

@@ -16,10 +16,10 @@ class VoidType(SerializableType):
         self._bit_length = int(bit_length)
 
         if self._bit_length < 1:
-            raise InvalidBitLengthError('Bit length must be positive')
+            raise InvalidBitLengthError("Bit length must be positive")
 
         if self._bit_length > self.MAX_BIT_LENGTH:
-            raise InvalidBitLengthError('Bit length cannot exceed %r' % self.MAX_BIT_LENGTH)
+            raise InvalidBitLengthError("Bit length cannot exceed %r" % self.MAX_BIT_LENGTH)
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -38,18 +38,18 @@ class VoidType(SerializableType):
         return 1
 
     def __str__(self) -> str:
-        return 'void%d' % self.bit_length
+        return "void%d" % self.bit_length
 
     def __repr__(self) -> str:
-        return 'VoidType(bit_length=%d)' % self.bit_length
+        return "VoidType(bit_length=%d)" % self.bit_length
 
 
 def _unittest_void() -> None:
     from pytest import raises
 
     assert VoidType(1).bit_length_set == 1
-    assert str(VoidType(13)) == 'void13'
-    assert repr(VoidType(64)) == 'VoidType(bit_length=64)'
+    assert str(VoidType(13)) == "void13"
+    assert repr(VoidType(64)) == "VoidType(bit_length=64)"
     assert VoidType(22).bit_length_set == {22}
     assert VoidType(1) == VoidType(1)
     assert VoidType(1) != VoidType(2)

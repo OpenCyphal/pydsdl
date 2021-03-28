@@ -20,7 +20,7 @@ class DSDLSyntaxError(_error.InvalidDefinitionError):
     pass
 
 
-def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> None:
+def parse(text: str, statement_stream_processor: "StatementStreamProcessor") -> None:
     """
     The entry point of the parser. As the text is being parsed, the parser invokes appropriate
     methods in the statement stream processor.
@@ -36,7 +36,7 @@ def parse(text: str, statement_stream_processor: 'StatementStreamProcessor') -> 
         raise ex
 
     except parsimonious.ParseError as ex:
-        raise DSDLSyntaxError('Syntax error', line=int(ex.line())) from None  # type: ignore
+        raise DSDLSyntaxError("Syntax error", line=int(ex.line())) from None  # type: ignore
 
     except (MemoryError, SystemError):  # pragma: no cover
         raise
@@ -59,10 +59,8 @@ class StatementStreamProcessor:
     processed DSDL definition.
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
-    def on_constant(self,
-                    constant_type: _serializable.SerializableType,
-                    name: str,
-                    value: _expression.Any) -> None:
+
+    def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         raise NotImplementedError  # pragma: no cover
 
     def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
@@ -71,10 +69,9 @@ class StatementStreamProcessor:
     def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
         raise NotImplementedError  # pragma: no cover
 
-    def on_directive(self,
-                     line_number: int,
-                     directive_name: str,
-                     associated_expression_value: typing.Optional[_expression.Any]) -> None:
+    def on_directive(
+        self, line_number: int, directive_name: str, associated_expression_value: typing.Optional[_expression.Any]
+    ) -> None:
         raise NotImplementedError  # pragma: no cover
 
     def on_service_response_marker(self) -> None:
@@ -94,7 +91,7 @@ _logger = logging.getLogger(__name__)
 
 
 _Children = typing.Tuple[typing.Any, ...]
-_VisitorHandler = typing.Callable[['_ParseTreeProcessor', _Node, _Children], typing.Any]
+_VisitorHandler = typing.Callable[["_ParseTreeProcessor", _Node, _Children], typing.Any]
 _PrimitiveTypeConstructor = typing.Callable[[_serializable.PrimitiveType.CastMode], _serializable.PrimitiveType]
 
 
@@ -102,18 +99,22 @@ def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
     """
     Simply logs the resulting transformation upon its completion.
     """
+
     @functools.wraps(fun)
-    def wrapper(self: '_ParseTreeProcessor', node: _Node, children: _Children) -> typing.Any:
+    def wrapper(self: "_ParseTreeProcessor", node: _Node, children: _Children) -> typing.Any:
         return fun(self, node, children)
 
     return wrapper
 
 
 def _make_typesafe_child_lifter(expected_type: typing.Type[object], logged: bool = False) -> _VisitorHandler:
-    def visitor_handler(_self: '_ParseTreeProcessor', _n: _Node, children: _Children) -> typing.Any:
-        sole_child, = children
-        assert isinstance(sole_child, expected_type), \
-            'The child should have been of type %r, not %r: %r' % (expected_type, type(sole_child), sole_child)
+    def visitor_handler(_self: "_ParseTreeProcessor", _n: _Node, children: _Children) -> typing.Any:
+        (sole_child,) = children
+        assert isinstance(sole_child, expected_type), "The child should have been of type %r, not %r: %r" % (
+            expected_type,
+            type(sole_child),
+            sole_child,
+        )
         return sole_child
 
     return _logged_transformation(visitor_handler) if logged else visitor_handler
@@ -134,18 +135,19 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     expression evaluation will be performed at the AST level rather than at the parse tree level, as it is
     done currently.
     """
+
     # Populating the default grammar (see the NodeVisitor API).
-    with open(os.path.join(os.path.dirname(__file__), 'grammar.parsimonious')) as _grammar_file:
+    with open(os.path.join(os.path.dirname(__file__), "grammar.parsimonious")) as _grammar_file:
         grammar = parsimonious.Grammar(_grammar_file.read())  # type: ignore
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = _error.FrontendError,  # type: ignore
+    unwrapped_exceptions = (_error.FrontendError,)  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
-        self._statement_stream_processor = statement_stream_processor   # type: StatementStreamProcessor
-        self._current_line_number = 1   # Lines are numbered from one
+        self._statement_stream_processor = statement_stream_processor  # type: StatementStreamProcessor
+        self._current_line_number = 1  # Lines are numbered from one
 
     @property
     def current_line_number(self) -> int:
@@ -161,7 +163,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # ================================================== Statements ==================================================
 
-    visit_statement           = _make_typesafe_child_lifter(type(None))  # Make sure all sub-nodes have been handled,
+    visit_statement = _make_typesafe_child_lifter(type(None))  # Make sure all sub-nodes have been handled,
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
@@ -187,16 +189,16 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     def visit_statement_directive_with_expression(self, _n: _Node, children: _Children) -> None:
         _at, name, _space, exp = children
         assert isinstance(name, str) and name and isinstance(exp, _expression.Any)
-        self._statement_stream_processor.on_directive(line_number=self.current_line_number,
-                                                      directive_name=name,
-                                                      associated_expression_value=exp)
+        self._statement_stream_processor.on_directive(
+            line_number=self.current_line_number, directive_name=name, associated_expression_value=exp
+        )
 
     def visit_statement_directive_without_expression(self, _n: _Node, children: _Children) -> None:
         _at, name = children
         assert isinstance(name, str) and name
-        self._statement_stream_processor.on_directive(line_number=self.current_line_number,
-                                                      directive_name=name,
-                                                      associated_expression_value=None)
+        self._statement_stream_processor.on_directive(
+            line_number=self.current_line_number, directive_name=name, associated_expression_value=None
+        )
 
     def visit_identifier(self, node: _Node, _c: _Children) -> str:
         assert isinstance(node.text, str) and node.text
@@ -204,20 +206,22 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # ================================================== Data types ==================================================
 
-    visit_type           = _make_typesafe_child_lifter(_serializable.SerializableType)
-    visit_type_array     = _make_typesafe_child_lifter(_serializable.ArrayType, logged=True)
-    visit_type_scalar    = _make_typesafe_child_lifter(_serializable.SerializableType, logged=True)
+    visit_type = _make_typesafe_child_lifter(_serializable.SerializableType)
+    visit_type_array = _make_typesafe_child_lifter(_serializable.ArrayType, logged=True)
+    visit_type_scalar = _make_typesafe_child_lifter(_serializable.SerializableType, logged=True)
     visit_type_primitive = _make_typesafe_child_lifter(_serializable.PrimitiveType)
 
     visit_type_primitive_name = parsimonious.NodeVisitor.lift_child
 
-    def visit_type_array_variable_inclusive(self, _n: _Node, children: _Children) \
-            -> _serializable.VariableLengthArrayType:
+    def visit_type_array_variable_inclusive(
+        self, _n: _Node, children: _Children
+    ) -> _serializable.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
         return _serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length))
 
-    def visit_type_array_variable_exclusive(self, _n: _Node, children: _Children) \
-            -> _serializable.VariableLengthArrayType:
+    def visit_type_array_variable_exclusive(
+        self, _n: _Node, children: _Children
+    ) -> _serializable.VariableLengthArrayType:
         element_type, _s0, _bl, _s1, _op, _s2, length, _s3, _br = children
         return _serializable.VariableLengthArrayType(element_type, _unwrap_array_capacity(length) - 1)
 
@@ -237,8 +241,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     def visit_type_version_specifier(self, _n: _Node, children: _Children) -> _serializable.Version:
         major, _, minor = children
         assert isinstance(major, _expression.Rational) and isinstance(minor, _expression.Rational)
-        return _serializable.Version(major=major.as_native_integer(),
-                                     minor=minor.as_native_integer())
+        return _serializable.Version(major=major.as_native_integer(), minor=minor.as_native_integer())
 
     def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
         _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
@@ -249,7 +252,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return cons(_serializable.PrimitiveType.CastMode.SATURATED)
 
     def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: _serializable.BooleanType(cm)     # lambda is only needed to make mypy shut up
+        return lambda cm: _serializable.BooleanType(cm)  # lambda is only needed to make mypy shut up
 
     def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: _serializable.UnsignedIntegerType(children[-1], cm)
@@ -280,7 +283,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
     def visit_expression_list(self, _n: _Node, children: _Children) -> typing.Tuple[_expression.Any, ...]:
-        out = []    # type: typing.List[_expression.Any]
+        out = []  # type: typing.List[_expression.Any]
         if children:
             children = children[0]
             assert len(children) == 2
@@ -298,12 +301,13 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return exp
 
     def visit_expression_atom(self, _n: _Node, children: _Children) -> _expression.Any:
-        atom, = children
-        if isinstance(atom, str):   # Identifier resolution
+        (atom,) = children
+        if isinstance(atom, str):  # Identifier resolution
             new_atom = self._statement_stream_processor.resolve_top_level_identifier(atom)
             if not isinstance(new_atom, _expression.Any):
-                raise _error.InternalError('Identifier %r resolved as %r, expected expression' %
-                                           (atom, type(new_atom)))  # pragma: no cover
+                raise _error.InternalError(
+                    "Identifier %r resolved as %r, expected expression" % (atom, type(new_atom))
+                )  # pragma: no cover
             atom = new_atom
             del new_atom
 
@@ -321,17 +325,17 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # Operators are handled through different grammar rules for precedence management purposes.
     # At the time of evaluation there is no point keeping them separate.
-    visit_ex_attribute      = _visit_binary_operator_chain
-    visit_ex_exponential    = _visit_binary_operator_chain
+    visit_ex_attribute = _visit_binary_operator_chain
+    visit_ex_exponential = _visit_binary_operator_chain
     visit_ex_multiplicative = _visit_binary_operator_chain
-    visit_ex_additive       = _visit_binary_operator_chain
-    visit_ex_bitwise        = _visit_binary_operator_chain
-    visit_ex_comparison     = _visit_binary_operator_chain
-    visit_ex_logical        = _visit_binary_operator_chain
+    visit_ex_additive = _visit_binary_operator_chain
+    visit_ex_bitwise = _visit_binary_operator_chain
+    visit_ex_comparison = _visit_binary_operator_chain
+    visit_ex_logical = _visit_binary_operator_chain
 
     # These are implemented via unary forms, no handling required.
     visit_ex_logical_not = parsimonious.NodeVisitor.lift_child
-    visit_ex_inversion   = parsimonious.NodeVisitor.lift_child
+    visit_ex_inversion = parsimonious.NodeVisitor.lift_child
 
     def visit_op1_form_log_not(self, _n: _Node, children: _Children) -> _expression.Any:
         _op, _, exp = children
@@ -348,7 +352,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         assert isinstance(_op, _Node) and isinstance(exp, _expression.Any)
         return _expression.negative(exp)
 
-    visit_op2_log_or  = _make_binary_operator_handler(_expression.logical_or)
+    visit_op2_log_or = _make_binary_operator_handler(_expression.logical_or)
     visit_op2_log_and = _make_binary_operator_handler(_expression.logical_and)
     visit_op2_cmp_equ = _make_binary_operator_handler(_expression.equal)
     visit_op2_cmp_neq = _make_binary_operator_handler(_expression.not_equal)
@@ -356,7 +360,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_cmp_geq = _make_binary_operator_handler(_expression.greater_or_equal)
     visit_op2_cmp_lss = _make_binary_operator_handler(_expression.less)
     visit_op2_cmp_grt = _make_binary_operator_handler(_expression.greater)
-    visit_op2_bit_or  = _make_binary_operator_handler(_expression.bitwise_or)
+    visit_op2_bit_or = _make_binary_operator_handler(_expression.bitwise_or)
     visit_op2_bit_xor = _make_binary_operator_handler(_expression.bitwise_xor)
     visit_op2_bit_and = _make_binary_operator_handler(_expression.bitwise_and)
     visit_op2_add_add = _make_binary_operator_handler(_expression.add)
@@ -371,9 +375,9 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # ================================================== Literals ==================================================
 
-    visit_literal         = _make_typesafe_child_lifter(_expression.Any, logged=True)
+    visit_literal = _make_typesafe_child_lifter(_expression.Any, logged=True)
     visit_literal_boolean = _make_typesafe_child_lifter(_expression.Boolean)
-    visit_literal_string  = _make_typesafe_child_lifter(_expression.String)
+    visit_literal_string = _make_typesafe_child_lifter(_expression.String)
 
     def visit_literal_set(self, _n: _Node, children: _Children) -> _expression.Set:
         _, _, exp_list, _, _ = children
@@ -381,13 +385,13 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return _expression.Set(exp_list)
 
     def visit_literal_real(self, node: _Node, _c: _Children) -> _expression.Rational:
-        return _expression.Rational(fractions.Fraction(node.text.replace('_', '')))
+        return _expression.Rational(fractions.Fraction(node.text.replace("_", "")))
 
     def visit_literal_integer(self, node: _Node, _c: _Children) -> _expression.Rational:
-        return _expression.Rational(int(node.text.replace('_', ''), base=0))
+        return _expression.Rational(int(node.text.replace("_", ""), base=0))
 
     def visit_literal_integer_decimal(self, node: _Node, _c: _Children) -> _expression.Rational:
-        return _expression.Rational(int(node.text.replace('_', '')))
+        return _expression.Rational(int(node.text.replace("_", "")))
 
     def visit_literal_boolean_true(self, _n: _Node, _c: _Children) -> _expression.Boolean:
         return _expression.Boolean(True)
@@ -409,16 +413,15 @@ def _unwrap_array_capacity(ex: _expression.Any) -> int:
     assert isinstance(ex, _expression.Any)
     if isinstance(ex, _expression.Rational):
         out = ex.as_native_integer()
-        assert isinstance(out, int)     # Oh mypy, why are you so weird
+        assert isinstance(out, int)  # Oh mypy, why are you so weird
         return out
     else:
-        raise _error.InvalidDefinitionError('Array capacity expression must yield a rational, not %s' %
-                                            ex.TYPE_NAME)
+        raise _error.InvalidDefinitionError("Array capacity expression must yield a rational, not %s" % ex.TYPE_NAME)
 
 
 def _parse_string_literal(literal: str) -> _expression.String:
     assert literal[0] == literal[-1]
-    assert literal[0] in '\'\"'
+    assert literal[0] in "'\""
     assert len(literal) >= 2
 
     quote_symbol = literal[0]
@@ -428,42 +431,42 @@ def _parse_string_literal(literal: str) -> _expression.String:
         try:
             s = next(iterator)  # type: str
         except StopIteration:
-            return ''
+            return ""
 
-        if s != '\\':
-            assert s != quote_symbol, 'Unescaped quotes cannot appear inside string literals. Bad grammar?'
+        if s != "\\":
+            assert s != quote_symbol, "Unescaped quotes cannot appear inside string literals. Bad grammar?"
             return s
 
         s = next(iterator)
-        if s in 'uU':
-            h = ''
+        if s in "uU":
+            h = ""
             for _ in range(4 if s.islower() else 8):
                 s = next(iterator).lower()
-                if s not in '0123456789abcdef':
-                    raise DSDLSyntaxError('Invalid hex character: %r' % s)
+                if s not in "0123456789abcdef":
+                    raise DSDLSyntaxError("Invalid hex character: %r" % s)
                 h += s
             return chr(int(h, 16))
 
         try:
             return {
-                'r':  '\r',
-                'n':  '\n',
-                't':  '\t',
-                '"':  '"',
-                "'":  "'",
-                '\\': '\\',
+                "r": "\r",
+                "n": "\n",
+                "t": "\t",
+                '"': '"',
+                "'": "'",
+                "\\": "\\",
             }[s.lower()]
         except KeyError:
-            raise DSDLSyntaxError('Invalid escape sequence') from None
+            raise DSDLSyntaxError("Invalid escape sequence") from None
 
-    out = ''
+    out = ""
     for index in itertools.count():  # pragma: no branch
         try:
             symbol = _next_symbol()
         except DSDLSyntaxError as ex:
-            raise DSDLSyntaxError('The string literal is malformed after index %d: %s' % (index, ex.text))
+            raise DSDLSyntaxError("The string literal is malformed after index %d: %s" % (index, ex.text))
         except StopIteration:
-            raise DSDLSyntaxError('Unexpected end of string literal after index %d' % index) from None
+            raise DSDLSyntaxError("Unexpected end of string literal after index %d" % index) from None
         else:
             if len(symbol) == 0:
                 break
@@ -483,41 +486,41 @@ def _unittest_parse_string_literal() -> None:
     def auto_repr(text: str) -> None:
         r = repr(text)
         for x in range(256):
-            r = r.replace(r'\x%02x' % x, r'\u00%02x' % x)
+            r = r.replace(r"\x%02x" % x, r"\u00%02x" % x)
         once(r, text)
 
-    auto_repr('')
-    auto_repr('123')
+    auto_repr("")
+    auto_repr("123")
     auto_repr('"')
     auto_repr('"')
-    auto_repr('\n')
-    auto_repr('\u0000\u0001\U000000ff')
+    auto_repr("\n")
+    auto_repr("\u0000\u0001\U000000ff")
 
     for a in range(256):
-        as_hex = '%02x' % a
-        auto_repr('\\u' + as_hex * 2)
-        auto_repr('\"\'\\u' + as_hex * 2)
-        auto_repr('\\U' + as_hex * 4)
+        as_hex = "%02x" % a
+        auto_repr("\\u" + as_hex * 2)
+        auto_repr("\"'\\u" + as_hex * 2)
+        auto_repr("\\U" + as_hex * 4)
 
-        if chr(a).lower() not in '0123456789abcdef':
-            with raises(DSDLSyntaxError, match='.*hex character.*'):
+        if chr(a).lower() not in "0123456789abcdef":
+            with raises(DSDLSyntaxError, match=".*hex character.*"):
                 _parse_string_literal('"\\U0000000%s"' % chr(a))
 
-            with raises(DSDLSyntaxError, match='.*hex character.*'):
+            with raises(DSDLSyntaxError, match=".*hex character.*"):
                 _parse_string_literal("'\\u00%s0'" % chr(a))
         else:
-            with raises(DSDLSyntaxError, match='.*expected.*'):
+            with raises(DSDLSyntaxError, match=".*expected.*"):
                 _parse_string_literal("'\\u%s'" % chr(a))
 
-    with raises(DSDLSyntaxError, match='.*expected.*'):
+    with raises(DSDLSyntaxError, match=".*expected.*"):
         _parse_string_literal("'\\u'")
 
-    with raises(DSDLSyntaxError, match='.*expected.*'):
+    with raises(DSDLSyntaxError, match=".*expected.*"):
         _parse_string_literal("'\\'")
 
-    with raises(DSDLSyntaxError, match='.*escape.*'):
+    with raises(DSDLSyntaxError, match=".*escape.*"):
         _parse_string_literal("'\\z'")
 
-    once('"evening"', 'evening')    # okay we support English, cool
-    once('"вечер"', 'вечер')        # and Russian too
-    once('"õhtust"', 'õhtust')      # heck, even Estonian
+    once('"evening"', "evening")  # okay we support English, cool
+    once('"вечер"', "вечер")  # and Russian too
+    once('"õhtust"', "õhtust")  # heck, even Estonian

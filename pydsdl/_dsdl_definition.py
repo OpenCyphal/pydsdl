@@ -19,6 +19,7 @@ class FileNameFormatError(_error.InvalidDefinitionError):
     """
     Raised when a DSDL definition file is named incorrectly.
     """
+
     def __init__(self, text: str, path: str):
         super(FileNameFormatError, self).__init__(text=text, path=str(path))
 
@@ -30,9 +31,7 @@ class DSDLDefinition:
     Upper layers that operate on top of this abstraction do not concern themselves with the file system at all.
     """
 
-    def __init__(self,
-                 file_path: str,
-                 root_namespace_path: str):
+    def __init__(self, file_path: str, root_namespace_path: str):
         # Normalizing the path and reading the definition text
         self._file_path = os.path.abspath(file_path)
         del file_path
@@ -43,32 +42,36 @@ class DSDLDefinition:
 
         # Checking the sanity of the root directory path - can't contain separators
         if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(self._root_namespace_path)[-1]:
-            raise FileNameFormatError('Invalid namespace name', path=self._root_namespace_path)
+            raise FileNameFormatError("Invalid namespace name", path=self._root_namespace_path)
 
         # Determining the relative path within the root namespace directory
-        relative_path = str(os.path.join(os.path.split(self._root_namespace_path)[-1],
-                                         os.path.relpath(self._file_path, self._root_namespace_path)))
+        relative_path = str(
+            os.path.join(
+                os.path.split(self._root_namespace_path)[-1],
+                os.path.relpath(self._file_path, self._root_namespace_path),
+            )
+        )
 
-        relative_directory, basename = [str(x) for x in os.path.split(relative_path)]   # type: str, str
+        relative_directory, basename = [str(x) for x in os.path.split(relative_path)]  # type: str, str
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.uavcan
-        basename_components = basename.split('.')[:-1]
-        str_fixed_port_id = None    # type: typing.Optional[str]
+        basename_components = basename.split(".")[:-1]
+        str_fixed_port_id = None  # type: typing.Optional[str]
         if len(basename_components) == 4:
             str_fixed_port_id, short_name, str_major_version, str_minor_version = basename_components
         elif len(basename_components) == 3:
             short_name, str_major_version, str_minor_version = basename_components
         else:
-            raise FileNameFormatError('Invalid file name', path=self._file_path)
+            raise FileNameFormatError("Invalid file name", path=self._file_path)
 
         # Parsing the fixed port ID, if specified; None if not
         if str_fixed_port_id is not None:
             try:
-                self._fixed_port_id = int(str_fixed_port_id)    # type: typing.Optional[int]
+                self._fixed_port_id = int(str_fixed_port_id)  # type: typing.Optional[int]
             except ValueError:
                 raise FileNameFormatError(
-                    'Not a valid fixed port-ID: %r. '
-                    'Namespaces are defined as directories; putting the namespace name in the file name will not work. '
+                    "Not a valid fixed port-ID: %r. "
+                    "Namespaces are defined as directories; putting the namespace name in the file name will not work. "
                     'For example: "foo/Bar.1.0.uavcan" is OK (where "foo" is a directory); "foo.Bar.1.0.uavcan" is not.'
                     % str_fixed_port_id,
                     path=self._file_path,
@@ -78,26 +81,28 @@ class DSDLDefinition:
 
         # Parsing the version numbers
         try:
-            self._version = _serializable.Version(major=int(str_major_version),
-                                                  minor=int(str_minor_version))
+            self._version = _serializable.Version(major=int(str_major_version), minor=int(str_minor_version))
         except ValueError:
-            raise FileNameFormatError('Could not parse the version numbers', path=self._file_path) from None
+            raise FileNameFormatError("Could not parse the version numbers", path=self._file_path) from None
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
         for nc in namespace_components:
             if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in nc:
-                raise FileNameFormatError('Invalid name for namespace component', path=self._file_path)
+                raise FileNameFormatError("Invalid name for namespace component", path=self._file_path)
 
-        self._name = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR\
-            .join(namespace_components + [str(short_name)])  # type: str
+        self._name = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join(
+            namespace_components + [str(short_name)]
+        )  # type: str
 
-        self._cached_type = None    # type: typing.Optional[_serializable.CompositeType]
+        self._cached_type = None  # type: typing.Optional[_serializable.CompositeType]
 
-    def read(self,
-             lookup_definitions:              typing.Iterable['DSDLDefinition'],
-             print_output_handler:            typing.Callable[[int, str], None],
-             allow_unregulated_fixed_port_id: bool) -> _serializable.CompositeType:
+    def read(
+        self,
+        lookup_definitions: typing.Iterable["DSDLDefinition"],
+        print_output_handler: typing.Callable[[int, str], None],
+        allow_unregulated_fixed_port_id: bool,
+    ) -> _serializable.CompositeType:
         """
         Reads the data type definition and returns its high-level data type representation.
         The output is cached; all following invocations will read from the cache.
@@ -112,9 +117,9 @@ class DSDLDefinition:
         :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
         :return: The data type representation.
         """
-        log_prefix = '%s.%d.%d' % (self.full_name, self.version.major, self.version.minor)
+        log_prefix = "%s.%d.%d" % (self.full_name, self.version.major, self.version.minor)
         if self._cached_type is not None:
-            _logger.debug('%s: Cache hit', log_prefix)
+            _logger.debug("%s: Cache hit", log_prefix)
             return self._cached_type
 
         started_at = time.monotonic()
@@ -123,33 +128,38 @@ class DSDLDefinition:
         # infinite recursion on self-referential definitions.
         lookup_definitions = list(filter(lambda d: d != self, lookup_definitions))
 
-        _logger.debug('%s: Starting processing with %d lookup definitions located in root namespaces: %s',
-                      log_prefix, len(lookup_definitions),
-                      ', '.join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))))
+        _logger.debug(
+            "%s: Starting processing with %d lookup definitions located in root namespaces: %s",
+            log_prefix,
+            len(lookup_definitions),
+            ", ".join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))),
+        )
         try:
             builder = _data_type_builder.DataTypeBuilder(
                 definition=self,
                 lookup_definitions=lookup_definitions,
                 print_output_handler=print_output_handler,
-                allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id
+                allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
             )
             with open(self.file_path) as f:
                 _parser.parse(f.read(), builder)
 
             self._cached_type = builder.finalize()
 
-            _logger.info('%s: Processed in %.0f ms; category: %s, fixed port ID: %s',
-                         log_prefix,
-                         (time.monotonic() - started_at) * 1e3,
-                         type(self._cached_type).__name__,
-                         self._cached_type.fixed_port_id)
+            _logger.info(
+                "%s: Processed in %.0f ms; category: %s, fixed port ID: %s",
+                log_prefix,
+                (time.monotonic() - started_at) * 1e3,
+                type(self._cached_type).__name__,
+                self._cached_type.fixed_port_id,
+            )
             return self._cached_type
-        except _error.FrontendError as ex:                              # pragma: no cover
+        except _error.FrontendError as ex:  # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
-        except (MemoryError, SystemError):                              # pragma: no cover
+        except (MemoryError, SystemError):  # pragma: no cover
             raise
-        except Exception as ex:                                         # pragma: no cover
+        except Exception as ex:  # pragma: no cover
             raise _error.InternalError(culprit=ex, path=self.file_path)
 
     @property
@@ -214,8 +224,12 @@ class DSDLDefinition:
             return NotImplemented
 
     def __str__(self) -> str:
-        return 'DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%r)' % \
-            (self.full_name, self.version, self.fixed_port_id, self.file_path)
+        return "DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%r)" % (
+            self.full_name,
+            self.version,
+            self.fixed_port_id,
+            self.file_path,
+        )
 
     __repr__ = __str__
 

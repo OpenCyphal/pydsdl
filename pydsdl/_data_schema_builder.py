@@ -15,6 +15,7 @@ class BitLengthAnalysisError(_error.InvalidDefinitionError):
 
 class SerializationMode:
     """Serialization mode: either delimited (with extent) or sealed."""
+
     def __str__(self) -> str:
         raise NotImplementedError
 
@@ -24,19 +25,19 @@ class DelimitedSerializationMode(SerializationMode):
         self.extent = int(extent)
 
     def __str__(self) -> str:
-        return 'delimited (extent %d bits)' % self.extent
+        return "delimited (extent %d bits)" % self.extent
 
 
 class SealedSerializationMode(SerializationMode):
     def __str__(self) -> str:
-        return 'sealed'
+        return "sealed"
 
 
 class DataSchemaBuilder:
     def __init__(self) -> None:
-        self._fields = []                   # type: typing.List[_serializable.Field]
-        self._constants = []                # type: typing.List[_serializable.Constant]
-        self._serialization_mode = None     # type: typing.Optional[SerializationMode]
+        self._fields = []  # type: typing.List[_serializable.Field]
+        self._constants = []  # type: typing.List[_serializable.Constant]
+        self._serialization_mode = None  # type: typing.Optional[SerializationMode]
         self._is_union = False
         self._bit_length_computed_at_least_once = False
 
@@ -83,8 +84,9 @@ class DataSchemaBuilder:
     def add_field(self, field: _serializable.Field) -> None:
         if self.union and self._bit_length_computed_at_least_once:
             # Refer to the DSDL specification for the background information.
-            raise BitLengthAnalysisError('Inter-field offset is not defined for unions; '
-                                         'previously performed bit length analysis is invalid')
+            raise BitLengthAnalysisError(
+                "Inter-field offset is not defined for unions; " "previously performed bit length analysis is invalid"
+            )
         assert isinstance(field, _serializable.Field)
         self._fields.append(field)
 

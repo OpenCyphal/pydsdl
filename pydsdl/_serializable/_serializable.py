@@ -20,7 +20,7 @@ class SerializableType(_expression.Any):
     ``uavcan.node.Heartbeat.1.0[<=36]``, ``truncated float16[<=36]``.
     """
 
-    TYPE_NAME = 'metaserializable'
+    TYPE_NAME = "metaserializable"
 
     BITS_PER_BYTE = 8
     """
@@ -58,7 +58,7 @@ class SerializableType(_expression.Any):
         raise NotImplementedError
 
     def _attribute(self, name: _expression.String) -> _expression.Any:
-        if name.native_value == '_bit_length_':  # Experimental non-standard extension
+        if name.native_value == "_bit_length_":  # Experimental non-standard extension
             try:
                 return _expression.Set(map(_expression.Rational, self.bit_length_set))
             except TypeError:
@@ -67,7 +67,7 @@ class SerializableType(_expression.Any):
         return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
 
     @abc.abstractmethod
-    def __str__(self) -> str:   # pragma: no cover
+    def __str__(self) -> str:  # pragma: no cover
         # Implementations must return a DSDL spec-compatible textual representation of the type.
         # The string representation is used for determining equivalency by the comparison operator __eq__().
         raise NotImplementedError
@@ -75,16 +75,16 @@ class SerializableType(_expression.Any):
     def __hash__(self) -> int:
         try:
             bls = self.bit_length_set
-        except TypeError:   # If the type is non-serializable.
+        except TypeError:  # If the type is non-serializable.
             bls = BitLengthSet()
         return hash(str(self) + str(bls))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SerializableType):
             same_type = isinstance(other, type(self)) and isinstance(self, type(other))
-            try:    # Ensure equality of the bit length sets, otherwise, different types like voids may compare equal.
+            try:  # Ensure equality of the bit length sets, otherwise, different types like voids may compare equal.
                 same_bls = self.bit_length_set == other.bit_length_set
-            except TypeError:   # If the type is non-serializable, assume equality.
+            except TypeError:  # If the type is non-serializable, assume equality.
                 same_bls = same_type
             return same_type and same_bls and str(self) == str(other)
         else:

@@ -8,10 +8,10 @@
 import os as _os
 import sys as _sys
 
-__version__ = '1.10.1'
-__version_info__ = tuple(map(int, __version__.split('.')))
-__license__ = 'MIT'
-__author__ = 'UAVCAN Development Team'
+__version__ = "1.10.1"
+__version_info__ = tuple(map(int, __version__.split(".")))
+__license__ = "MIT"
+__author__ = "UAVCAN Development Team"
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.
 # Here, the objective is to allow our library to import stuff from its third-party dependency directory,
@@ -21,7 +21,7 @@ __author__ = 'UAVCAN Development Team'
 # to import stuff dynamically after the initialization is finished (e.g., function-local imports won't be
 # able to reach the third-party stuff), but we don't care.
 _original_sys_path = _sys.path
-_sys.path = [_os.path.join(_os.path.dirname(__file__), 'third_party')] + _sys.path
+_sys.path = [_os.path.join(_os.path.dirname(__file__), "third_party")] + _sys.path
 
 # Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
 from ._namespace import read_namespace as read_namespace
