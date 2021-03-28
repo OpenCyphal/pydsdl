@@ -70,7 +70,7 @@ class BitLengthSet:
         >>> BitLengthSet(33).is_aligned_at_byte()
         False
         """
-        from ._serializable import SerializableType
+        from .._serializable import SerializableType
 
         return self.is_aligned_at(SerializableType.BITS_PER_BYTE)
 
