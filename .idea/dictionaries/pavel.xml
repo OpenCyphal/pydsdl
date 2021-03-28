@@ -111,8 +111,10 @@
       <w>noqa</w>
       <w>norecursedirs</w>
       <w>nosignatures</w>
+      <w>noxfile</w>
       <w>octothorp</w>
       <w>onboard</w>
+      <w>overgeneral</w>
       <w>packbits</w>
       <w>parseltongue</w>
       <w>pathlib</w>

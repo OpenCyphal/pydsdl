@@ -1,15 +1,18 @@
-#
-# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# Copyright (c) 2018 UAVCAN Consortium
 # This software is distributed under the terms of the MIT License.
-#
+# Author: Pavel Kirienko <pavel@uavcan.org>
+
+# pylint: disable=wrong-import-position
 
 import os as _os
 import sys as _sys
 
-__version__ = '1.10.1'
-__version_info__ = tuple(map(int, __version__.split('.')))
-__license__ = 'MIT'
-__author__ = 'UAVCAN Development Team'
+__version__ = "1.10.2"
+__version_info__ = tuple(map(int, __version__.split(".")))
+__license__ = "MIT"
+__author__ = "UAVCAN Consortium"
+__copyright__ = "Copyright (c) 2018 UAVCAN Consortium"
+__email__ = "consortium@uavcan.org"
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.
 # Here, the objective is to allow our library to import stuff from its third-party dependency directory,
@@ -19,54 +22,54 @@ __author__ = 'UAVCAN Development Team'
 # to import stuff dynamically after the initialization is finished (e.g., function-local imports won't be
 # able to reach the third-party stuff), but we don't care.
 _original_sys_path = _sys.path
-_sys.path = [_os.path.join(_os.path.dirname(__file__), 'third_party')] + _sys.path
+_sys.path = [_os.path.join(_os.path.dirname(__file__), "third_party")] + _sys.path
 
 # Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
-from ._namespace import read_namespace as read_namespace                            # noqa
-from ._namespace import PrintOutputHandler as PrintOutputHandler                    # noqa
+from ._namespace import read_namespace as read_namespace
+from ._namespace import PrintOutputHandler as PrintOutputHandler
 
 # Error model.
-from ._error import FrontendError as FrontendError                                  # noqa
-from ._error import InvalidDefinitionError as InvalidDefinitionError                # noqa
-from ._error import InternalError as InternalError                                  # noqa
+from ._error import FrontendError as FrontendError
+from ._error import InvalidDefinitionError as InvalidDefinitionError
+from ._error import InternalError as InternalError
 
 # Data type model - meta types.
-from ._serializable import SerializableType as SerializableType                     # noqa
-from ._serializable import PrimitiveType as PrimitiveType                           # noqa
-from ._serializable import BooleanType as BooleanType                               # noqa
-from ._serializable import ArithmeticType as ArithmeticType                         # noqa
-from ._serializable import IntegerType as IntegerType                               # noqa
-from ._serializable import SignedIntegerType as SignedIntegerType                   # noqa
-from ._serializable import UnsignedIntegerType as UnsignedIntegerType               # noqa
-from ._serializable import FloatType as FloatType                                   # noqa
-from ._serializable import VoidType as VoidType                                     # noqa
-from ._serializable import ArrayType as ArrayType                                   # noqa
-from ._serializable import FixedLengthArrayType as FixedLengthArrayType             # noqa
-from ._serializable import VariableLengthArrayType as VariableLengthArrayType       # noqa
-from ._serializable import CompositeType as CompositeType                           # noqa
-from ._serializable import UnionType as UnionType                                   # noqa
-from ._serializable import StructureType as StructureType                           # noqa
-from ._serializable import DelimitedType as DelimitedType                           # noqa
-from ._serializable import ServiceType as ServiceType                               # noqa
+from ._serializable import SerializableType as SerializableType
+from ._serializable import PrimitiveType as PrimitiveType
+from ._serializable import BooleanType as BooleanType
+from ._serializable import ArithmeticType as ArithmeticType
+from ._serializable import IntegerType as IntegerType
+from ._serializable import SignedIntegerType as SignedIntegerType
+from ._serializable import UnsignedIntegerType as UnsignedIntegerType
+from ._serializable import FloatType as FloatType
+from ._serializable import VoidType as VoidType
+from ._serializable import ArrayType as ArrayType
+from ._serializable import FixedLengthArrayType as FixedLengthArrayType
+from ._serializable import VariableLengthArrayType as VariableLengthArrayType
+from ._serializable import CompositeType as CompositeType
+from ._serializable import UnionType as UnionType
+from ._serializable import StructureType as StructureType
+from ._serializable import DelimitedType as DelimitedType
+from ._serializable import ServiceType as ServiceType
 
 # Data type model - attributes.
-from ._serializable import Attribute as Attribute                                   # noqa
-from ._serializable import Field as Field                                           # noqa
-from ._serializable import PaddingField as PaddingField                             # noqa
-from ._serializable import Constant as Constant                                     # noqa
+from ._serializable import Attribute as Attribute
+from ._serializable import Field as Field
+from ._serializable import PaddingField as PaddingField
+from ._serializable import Constant as Constant
 
 # Expression model.
-from ._expression import Any as Any                                                 # noqa
-from ._expression import Primitive as Primitive                                     # noqa
-from ._expression import Boolean as Boolean                                         # noqa
-from ._expression import Rational as Rational                                       # noqa
-from ._expression import String as String                                           # noqa
-from ._expression import Container as Container                                     # noqa
-from ._expression import Set as Set                                                 # noqa
+from ._expression import Any as Any
+from ._expression import Primitive as Primitive
+from ._expression import Boolean as Boolean
+from ._expression import Rational as Rational
+from ._expression import String as String
+from ._expression import Container as Container
+from ._expression import Set as Set
 
 # Auxiliary.
-from ._serializable import ValueRange as ValueRange                                 # noqa
-from ._serializable import Version as Version                                       # noqa
-from ._bit_length_set import BitLengthSet as BitLengthSet                           # noqa
+from ._serializable import ValueRange as ValueRange
+from ._serializable import Version as Version
+from ._bit_length_set import BitLengthSet as BitLengthSet
 
 _sys.path = _original_sys_path

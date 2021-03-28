@@ -1,7 +1,6 @@
-#
-# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# Copyright (c) 2018 UAVCAN Consortium
 # This software is distributed under the terms of the MIT License.
-#
+# Author: Pavel Kirienko <pavel@uavcan.org>
 
 import abc
 import math
@@ -16,14 +15,12 @@ class InvalidNumberOfElementsError(TypeParameterError):
 
 
 class ArrayType(SerializableType):
-    def __init__(self,
-                 element_type: SerializableType,
-                 capacity: int):
-        super(ArrayType, self).__init__()
+    def __init__(self, element_type: SerializableType, capacity: int):
+        super().__init__()
         self._element_type = element_type
         self._capacity = int(capacity)
         if self._capacity < 1:
-            raise InvalidNumberOfElementsError('Array capacity cannot be less than 1')
+            raise InvalidNumberOfElementsError("Array capacity cannot be less than 1")
 
     @property
     def element_type(self) -> SerializableType:
@@ -55,15 +52,13 @@ class ArrayType(SerializableType):
         return self.element_type.alignment_requirement
 
     @abc.abstractmethod
-    def __str__(self) -> str:   # pragma: no cover
+    def __str__(self) -> str:  # pragma: no cover
         raise NotImplementedError
 
 
 class FixedLengthArrayType(ArrayType):
-    def __init__(self,
-                 element_type: SerializableType,
-                 capacity: int):
-        super(FixedLengthArrayType, self).__init__(element_type, capacity)
+    def __init__(self, element_type: SerializableType, capacity: int):
+        super().__init__(element_type, capacity)
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -71,11 +66,13 @@ class FixedLengthArrayType(ArrayType):
         # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
         # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
         # performance measured on the standard data type set was about tenfold.
-        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).\
-            pad_to_alignment(self.alignment_requirement)
+        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).pad_to_alignment(
+            self.alignment_requirement
+        )
 
-    def enumerate_elements_with_offsets(self, base_offset: typing.Optional[BitLengthSet] = None) \
-            -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
+    def enumerate_elements_with_offsets(
+        self, base_offset: typing.Optional[BitLengthSet] = None
+    ) -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
         """
         This is a convenience method for code generation.
         Its behavior mimics that of :meth:`pydsdl.StructureType.iterate_fields_with_offsets`,
@@ -90,9 +87,10 @@ class FixedLengthArrayType(ArrayType):
         base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
         _self_test_base_offset = BitLengthSet(0)
         for index in range(self.capacity):
-            assert base_offset.is_aligned_at(self.element_type.alignment_requirement),\
-                'The bit length set of the element type computed incorrectly: length % alignment = 0 does not hold.'
-            yield index, BitLengthSet(base_offset)      # We yield a copy of the offset to prevent mutation
+            assert base_offset.is_aligned_at(
+                self.element_type.alignment_requirement
+            ), "The bit length set of the element type computed incorrectly: length % alignment = 0 does not hold."
+            yield index, BitLengthSet(base_offset)  # We yield a copy of the offset to prevent mutation
             base_offset += self.element_type.bit_length_set
 
             # This is only for ensuring that the logic is functioning as intended.
@@ -101,10 +99,10 @@ class FixedLengthArrayType(ArrayType):
             _self_test_base_offset += self.element_type.bit_length_set
 
     def __str__(self) -> str:
-        return '%s[%d]' % (self.element_type, self.capacity)
+        return "%s[%d]" % (self.element_type, self.capacity)
 
     def __repr__(self) -> str:
-        return 'FixedLengthArrayType(element_type=%r, capacity=%r)' % (self.element_type, self.capacity)
+        return "FixedLengthArrayType(element_type=%r, capacity=%r)" % (self.element_type, self.capacity)
 
 
 def _unittest_fixed_array() -> None:
@@ -114,8 +112,8 @@ def _unittest_fixed_array() -> None:
     su8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     ti64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.SATURATED)
 
-    assert str(FixedLengthArrayType(su8, 4)) == 'truncated uint8[4]'
-    assert str(FixedLengthArrayType(ti64, 1)) == 'saturated int64[1]'
+    assert str(FixedLengthArrayType(su8, 4)) == "truncated uint8[4]"
+    assert str(FixedLengthArrayType(ti64, 1)) == "saturated int64[1]"
 
     assert not FixedLengthArrayType(su8, 4).string_like
     assert not FixedLengthArrayType(ti64, 1).string_like
@@ -127,9 +125,11 @@ def _unittest_fixed_array() -> None:
     with raises(InvalidNumberOfElementsError):
         FixedLengthArrayType(ti64, 0)
 
-    assert repr(FixedLengthArrayType(ti64, 128)) == \
-        'FixedLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
-        'capacity=128)'
+    assert (
+        repr(FixedLengthArrayType(ti64, 128))
+        == "FixedLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), "
+        "capacity=128)"
+    )
 
     small = FixedLengthArrayType(su8, 2)
     assert small.bit_length_set == {16}
@@ -137,10 +137,8 @@ def _unittest_fixed_array() -> None:
 
 
 class VariableLengthArrayType(ArrayType):
-    def __init__(self,
-                 element_type: SerializableType,
-                 capacity: int):
-        super(VariableLengthArrayType, self).__init__(element_type, capacity)
+    def __init__(self, element_type: SerializableType, capacity: int):
+        super().__init__(element_type, capacity)
 
         # Construct the implicit array length prefix type.
         length_field_length = 2 ** math.ceil(math.log2(max(self.BITS_PER_BYTE, self.capacity.bit_length())))
@@ -157,7 +155,7 @@ class VariableLengthArrayType(ArrayType):
     def bit_length_set(self) -> BitLengthSet:
         # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
         # Caching is important because bit length set derivation is a very expensive operation.
-        att = '_8467150963'
+        att = "_8467150963"
         if not hasattr(self, att):
             setattr(self, att, self._compute_bit_length_set())
         out = getattr(self, att)
@@ -167,7 +165,7 @@ class VariableLengthArrayType(ArrayType):
     @property
     def string_like(self) -> bool:
         """See the base class."""
-        et = self.element_type      # Without this temporary MyPy yields a false positive type error
+        et = self.element_type  # Without this temporary MyPy yields a false positive type error
         return isinstance(et, UnsignedIntegerType) and (et.bit_length == self.BITS_PER_BYTE)
 
     @property
@@ -190,10 +188,10 @@ class VariableLengthArrayType(ArrayType):
         return output.pad_to_alignment(self.alignment_requirement)
 
     def __str__(self) -> str:
-        return '%s[<=%d]' % (self.element_type, self.capacity)
+        return "%s[<=%d]" % (self.element_type, self.capacity)
 
     def __repr__(self) -> str:
-        return 'VariableLengthArrayType(element_type=%r, capacity=%r)' % (self.element_type, self.capacity)
+        return "VariableLengthArrayType(element_type=%r, capacity=%r)" % (self.element_type, self.capacity)
 
 
 def _unittest_variable_array() -> None:
@@ -203,8 +201,8 @@ def _unittest_variable_array() -> None:
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     si64 = SignedIntegerType(64, cast_mode=PrimitiveType.CastMode.SATURATED)
 
-    assert str(VariableLengthArrayType(tu8, 4)) == 'truncated uint8[<=4]'
-    assert str(VariableLengthArrayType(si64, 255)) == 'saturated int64[<=255]'
+    assert str(VariableLengthArrayType(tu8, 4)) == "truncated uint8[<=4]"
+    assert str(VariableLengthArrayType(si64, 255)) == "saturated int64[<=255]"
 
     assert VariableLengthArrayType(tu8, 4).string_like
     assert not VariableLengthArrayType(si64, 1).string_like
@@ -220,9 +218,11 @@ def _unittest_variable_array() -> None:
     with raises(InvalidNumberOfElementsError):
         VariableLengthArrayType(si64, 0)
 
-    assert repr(VariableLengthArrayType(si64, 128)) == \
-        'VariableLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), ' \
-        'capacity=128)'
+    assert (
+        repr(VariableLengthArrayType(si64, 128))
+        == "VariableLengthArrayType(element_type=SignedIntegerType(bit_length=64, cast_mode=<CastMode.SATURATED: 0>), "
+        "capacity=128)"
+    )
 
     small = VariableLengthArrayType(tu8, 2)
     assert small.bit_length_set == {8, 16, 24}

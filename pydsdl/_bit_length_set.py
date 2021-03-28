@@ -1,7 +1,6 @@
-#
-# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# Copyright (c) 2018 UAVCAN Consortium
 # This software is distributed under the terms of the MIT License.
-#
+# Author: Pavel Kirienko <pavel@uavcan.org>
 
 import typing
 import itertools
@@ -60,8 +59,7 @@ class BitLengthSet:
         """
         if self:
             return set(map(lambda x: x % bit_length, self._value)) == {0}
-        else:
-            return True     # An empty set is always aligned.
+        return True  # An empty set is always aligned.
 
     def is_aligned_at_byte(self) -> bool:
         """
@@ -73,9 +71,10 @@ class BitLengthSet:
         False
         """
         from ._serializable import SerializableType
+
         return self.is_aligned_at(SerializableType.BITS_PER_BYTE)
 
-    def pad_to_alignment(self, bit_length: int) -> 'BitLengthSet':
+    def pad_to_alignment(self, bit_length: int) -> "BitLengthSet":
         """
         Pad each element in the set such that the set becomes aligned at the specified alignment goal.
         After this transformation is applied, elements may become up to ``bit_length-1`` bits larger.
@@ -100,16 +99,15 @@ class BitLengthSet:
         """
         r = int(bit_length)
         if r < 1:
-            raise ValueError('Invalid alignment: %r bits' % r)
-        else:
-            assert r >= 1
-            out = BitLengthSet(((x + r - 1) // r) * r for x in self)
-            assert not out or 0 <= min(out) - min(self) < r
-            assert not out or 0 <= max(out) - max(self) < r
-            assert len(out) <= len(self)
-            return out
+            raise ValueError("Invalid alignment: %r bits" % r)
+        assert r >= 1
+        out = BitLengthSet(((x + r - 1) // r) * r for x in self)
+        assert not out or 0 <= min(out) - min(self) < r
+        assert not out or 0 <= max(out) - max(self) < r
+        assert len(out) <= len(self)
+        return out
 
-    def elementwise_sum_k_multicombinations(self, k: int) -> 'BitLengthSet':
+    def elementwise_sum_k_multicombinations(self, k: int) -> "BitLengthSet":
         """
         This is a special case of :meth:`elementwise_sum_cartesian_product`.
         The original object is not modified.
@@ -131,8 +129,9 @@ class BitLengthSet:
         return BitLengthSet(elementwise_sums)  # type: ignore
 
     @staticmethod
-    def elementwise_sum_cartesian_product(sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]) \
-            -> 'BitLengthSet':
+    def elementwise_sum_cartesian_product(
+        sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]
+    ) -> "BitLengthSet":
         """
         This operation is fundamental for bit length and bit offset (which are, generally, the same thing) computation.
 
@@ -187,8 +186,7 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return self._value == BitLengthSet(other)._value
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __bool__(self) -> bool:
         """
@@ -201,7 +199,7 @@ class BitLengthSet:
         """
         return bool(self._value)
 
-    def __add__(self, other: typing.Any) -> 'BitLengthSet':
+    def __add__(self, other: typing.Any) -> "BitLengthSet":
         """
         This operation models the addition of a new object to a serialized representation;
         i.e., it is an alias for ``elementwise_sum_cartesian_product([self, other])``.
@@ -227,10 +225,9 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return BitLengthSet.elementwise_sum_cartesian_product([self or BitLengthSet(0), BitLengthSet(other)])
-        else:
-            return NotImplemented
+        return NotImplemented
 
-    def __radd__(self, other: typing.Any) -> 'BitLengthSet':
+    def __radd__(self, other: typing.Any) -> "BitLengthSet":
         """
         See :meth:`__add__`.
 
@@ -241,10 +238,9 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return BitLengthSet(other) + self
-        else:
-            return NotImplemented
+        return NotImplemented
 
-    def __iadd__(self, other: typing.Any) -> 'BitLengthSet':
+    def __iadd__(self, other: typing.Any) -> "BitLengthSet":
         """
         See :meth:`__add__`.
 
@@ -256,10 +252,9 @@ class BitLengthSet:
         if isinstance(other, _OPERAND_TYPES):
             self._value = (self + other)._value
             return self
-        else:
-            return NotImplemented
+        return NotImplemented
 
-    def __or__(self, other: typing.Any) -> 'BitLengthSet':
+    def __or__(self, other: typing.Any) -> "BitLengthSet":
         """
         Creates and returns a new set that is a union of this set with another bit length set.
 
@@ -277,10 +272,9 @@ class BitLengthSet:
             if not isinstance(other, BitLengthSet):  # Speed optimization
                 other = BitLengthSet(other)
             return BitLengthSet(self._value | other._value)
-        else:
-            return NotImplemented
+        return NotImplemented
 
-    def __ror__(self, other: typing.Any) -> 'BitLengthSet':
+    def __ror__(self, other: typing.Any) -> "BitLengthSet":
         """
         See :meth:`__or__`.
 
@@ -291,10 +285,9 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return BitLengthSet(other) | self
-        else:
-            return NotImplemented
+        return NotImplemented
 
-    def __ior__(self, other: typing.Any) -> 'BitLengthSet':
+    def __ior__(self, other: typing.Any) -> "BitLengthSet":
         """
         See :meth:`__or__`.
 
@@ -306,8 +299,7 @@ class BitLengthSet:
         if isinstance(other, _OPERAND_TYPES):
             self._value = (self | other)._value
             return self
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __str__(self) -> str:
         """
@@ -318,7 +310,7 @@ class BitLengthSet:
         >>> str(BitLengthSet({918, 16, 7, 42}))
         '{7, 16, 42, 918}'
         """
-        return '{' + ', '.join(map(str, sorted(self._value))) + '}'
+        return "{" + ", ".join(map(str, sorted(self._value))) + "}"
 
     def __repr__(self) -> str:
         """
@@ -327,7 +319,7 @@ class BitLengthSet:
         >>> BitLengthSet({918, 16, 7, 42})
         BitLengthSet({7, 16, 42, 918})
         """
-        return type(self).__name__ + '(' + str(self or '') + ')'
+        return type(self).__name__ + "(" + str(self or "") + ")"
 
 
 _OPERAND_TYPES = BitLengthSet, set, int
@@ -335,17 +327,18 @@ _OPERAND_TYPES = BitLengthSet, set, int
 
 def _unittest_bit_length_set() -> None:
     from pytest import raises
+
     assert not BitLengthSet()
     assert BitLengthSet() == BitLengthSet()
-    assert not (BitLengthSet() != BitLengthSet())
+    assert not (BitLengthSet() != BitLengthSet())  # pylint: disable=unneeded-not
     assert BitLengthSet(123) == BitLengthSet([123])
     assert BitLengthSet(123) != BitLengthSet(124)
     assert BitLengthSet(123) == 123
     assert BitLengthSet(123) != 124
-    assert not (BitLengthSet(123) == '123')  # not implemented
-    assert str(BitLengthSet()) == '{}'
-    assert str(BitLengthSet(123)) == '{123}'
-    assert str(BitLengthSet((123, 0, 456, 12))) == '{0, 12, 123, 456}'  # Always sorted!
+    assert not (BitLengthSet(123) == "123")  # pylint: disable=unneeded-not
+    assert str(BitLengthSet()) == "{}"
+    assert str(BitLengthSet(123)) == "{123}"
+    assert str(BitLengthSet((123, 0, 456, 12))) == "{0, 12, 123, 456}"  # Always sorted!
     assert BitLengthSet().is_aligned_at(1)
     assert BitLengthSet().is_aligned_at(1024)
     assert BitLengthSet(8).is_aligned_at_byte()
@@ -364,24 +357,24 @@ def _unittest_bit_length_set() -> None:
     assert {1, 2, 3} + BitLengthSet([4, 5, 6]) == {5, 6, 7, 8, 9}
 
     with raises(TypeError):
-        assert BitLengthSet([4, 5, 6]) + '1'
+        assert BitLengthSet([4, 5, 6]) + "1"
 
     with raises(TypeError):
-        assert '1' + BitLengthSet([4, 5, 6])
-
-    with raises(TypeError):
-        s = BitLengthSet([4, 5, 6])
-        s += '1'
-
-    with raises(TypeError):
-        assert '1' | BitLengthSet([4, 5, 6])
-
-    with raises(TypeError):
-        assert BitLengthSet([4, 5, 6]) | '1'
+        assert "1" + BitLengthSet([4, 5, 6])
 
     with raises(TypeError):
         s = BitLengthSet([4, 5, 6])
-        s |= '1'
+        s += "1"
+
+    with raises(TypeError):
+        assert "1" | BitLengthSet([4, 5, 6])
+
+    with raises(TypeError):
+        assert BitLengthSet([4, 5, 6]) | "1"
+
+    with raises(TypeError):
+        s = BitLengthSet([4, 5, 6])
+        s |= "1"
 
     with raises(ValueError):
         BitLengthSet([4, 5, 6]).pad_to_alignment(0)

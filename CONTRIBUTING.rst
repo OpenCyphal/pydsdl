@@ -6,51 +6,16 @@ Development guide
 This document is intended for library developers only.
 If you just want to use the library, you don't need to read it.
 
-
-Dependencies
-++++++++++++
-
-Despite the fact that the library itself is dependency-free,
-some additional packages are needed for development and testing.
-They are listed in ``/requirements.txt``.
-
-External runtime dependencies are not allowed in this project --
-if you can't bundle it with the library, you can't use it.
-
-
-Coding conventions
-++++++++++++++++++
-
-Follow `PEP8 <https://www.python.org/dev/peps/pep-0008/>`_ with one exception:
-the line length limit is 120 characters (not 79).
-
-All functions and methods shall be type-annotated. This is enforced statically with MyPy.
-
-Ensure compatibility with all versions of Python that have not yet reached the end-of-life.
-
-Try not to import specific entities; instead, import only the package itself and then use verbose references,
-as shown below.
-If you really need to import a specific entity, consider prefixing it with an underscore to prevent
-scope leakage, unless you really want it to be externally visible (usually you don't).
-Exception applies to well-encapsulated submodules which are not part of the library API
-(i.e., prefixed with an underscore).
-
-.. code-block:: python
-
-    from . import _serializable               # Good
-    from ._serializable import CompositeType  # Pls no
+Development automation is managed by Nox; please see ``noxfile.py``.
 
 
 Writing tests
 +++++++++++++
 
-100% branch coverage is required.
-
 Write unit tests as functions without arguments prefixed with ``_unittest_``.
-Test functions should be located as close as possible to the tested code,
+Test functions should be located close to the tested code,
 preferably at the end of the same Python module.
 
-Make assertions using the standard ``assert`` statement.
 For extra functionality, import ``pytest`` in your test function locally.
 **Never import PyTest outside of your test functions** because it will break the library
 outside of test-enabled environments.
@@ -61,22 +26,22 @@ outside of test-enabled environments.
         import pytest  # OK to import inside test functions only (rarely useful)
         assert get_the_answer() == 42
 
-For more information refer to the PyTest documentation.
 
+Supporting newer versions of Python
++++++++++++++++++++++++++++++++++++
 
-Generating the docs
-+++++++++++++++++++
+Normally, this should be done a few months after a new version of CPython is released:
 
-Use ``/docs/build.sh`` to generate the documentation locally.
+1. Update the CI/CD pipelines to enable the new Python version.
+2. Update the CD configuration to make sure that the library is released using the newest version of Python.
+3. Bump the version number using the ``.dev`` suffix to indicate that it is not release-ready until tested.
+
+When the CI/CD pipelines pass, you are all set.
 
 
 Releasing
 +++++++++
 
-The script ``/release.sh`` is automatically invoked by the CI/CD pipeline for all commits pushed to master.
-It can also be used by a developer locally to publish releases manually, should that be necessary,
-although this is obviously discouraged.
-
-The script uploads a new release to PyPI and pushes a new tag upstream.
+A CI/CD pipeline automatically uploads a new release to PyPI and adds a new tag upstream for every push to ``master``.
 It is therefore necessary to ensure that the library version is bumped whenever a new commit is merged into master;
 otherwise, the automation will fail with an explicit tag conflict error instead of deploying the release.
