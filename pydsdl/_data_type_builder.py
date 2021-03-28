@@ -148,7 +148,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 "deprecated": self._on_deprecated_directive,
             }[directive_name]
         except KeyError:
-            raise InvalidDirectiveError("Unknown directive %r" % directive_name)
+            raise InvalidDirectiveError("Unknown directive %r" % directive_name) from None
         else:
             assert callable(handler)
             return handler(line_number, associated_expression_value)
@@ -170,8 +170,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             bls = self._structs[-1].offset
             assert len(bls) > 0 and all(map(lambda x: isinstance(x, int), bls))
             return _expression.Set(map(_expression.Rational, bls))
-        else:
-            raise UndefinedIdentifierError("Undefined identifier: %r" % name)
+        raise UndefinedIdentifierError("Undefined identifier: %r" % name)
 
     def resolve_versioned_data_type(self, name: str, version: _serializable.Version) -> _serializable.CompositeType:
         if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in name:
@@ -240,8 +239,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 raise AssertionCheckFailureError(
                     "Assertion check has failed", path=self._definition.file_path, line=line_number
                 )
-            else:
-                _logger.debug("Assertion check successful at %s:%d", self._definition.file_path, line_number)
+            _logger.debug("Assertion check successful at %s:%d", self._definition.file_path, line_number)
         elif value is None:
             raise InvalidDirectiveError("Assert directive requires an expression")
         else:
@@ -255,7 +253,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             )
         if value is None:
             raise InvalidDirectiveError("The extent directive requires an expression")
-        elif isinstance(value, _expression.Rational):
+        if isinstance(value, _expression.Rational):
             struct = self._structs[-1]
             bits = value.as_native_integer()
             struct.set_serialization_mode(_data_schema_builder.DelimitedSerializationMode(bits))
@@ -296,7 +294,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._is_deprecated = True
 
     @staticmethod
-    def _make_composite(
+    def _make_composite(  # pylint: disable=too-many-arguments
         builder: _data_schema_builder.DataSchemaBuilder,
         name: str,
         version: _serializable.Version,

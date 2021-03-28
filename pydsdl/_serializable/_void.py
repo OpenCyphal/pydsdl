@@ -12,7 +12,7 @@ class VoidType(SerializableType):
     MAX_BIT_LENGTH = 64
 
     def __init__(self, bit_length: int):
-        super(VoidType, self).__init__()
+        super().__init__()
         self._bit_length = int(bit_length)
 
         if self._bit_length < 1:

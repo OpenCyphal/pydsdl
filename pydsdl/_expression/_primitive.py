@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=protected-access
+
 import abc
 import typing
 import operator
@@ -43,8 +45,7 @@ class Boolean(Primitive):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Boolean):
             return self._value == other._value
-        else:  # pragma: no cover
-            return NotImplemented
+        return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         return "true" if self._value else "false"
@@ -58,20 +59,17 @@ class Boolean(Primitive):
     def _logical_and(self, right: _any.Any) -> "Boolean":
         if isinstance(right, Boolean):
             return Boolean(self._value and right._value)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _logical_or(self, right: _any.Any) -> "Boolean":
         if isinstance(right, Boolean):
             return Boolean(self._value or right._value)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _equal(self, right: _any.Any) -> "Boolean":
         if isinstance(right, Boolean):
             return Boolean(self._value == right._value)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
 
 class Rational(Primitive):
@@ -95,8 +93,7 @@ class Rational(Primitive):
         """
         if self.is_integer():
             return self._value.numerator
-        else:
-            raise _any.InvalidOperandError("Rational %s is not an integer" % self._value)
+        raise _any.InvalidOperandError("Rational %s is not an integer" % self._value)
 
     def is_integer(self) -> bool:
         """Whether the demonimator equals one."""
@@ -108,8 +105,7 @@ class Rational(Primitive):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Rational):
             return self._value == other._value
-        else:  # pragma: no cover
-            return NotImplemented
+        return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         return str(self._value)
@@ -129,8 +125,7 @@ class Rational(Primitive):
     def _generic_compare(self, right: _any.Any, impl: typing.Callable[[typing.Any, typing.Any], bool]) -> Boolean:
         if isinstance(right, Rational):
             return Boolean(impl(self._value, right._value))
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _equal(self, right: _any.Any) -> "Boolean":
         return self._generic_compare(right, operator.eq)
@@ -155,8 +150,7 @@ class Rational(Primitive):
     ) -> "Rational":
         if isinstance(right, Rational):
             return Rational(impl(self.as_native_integer(), right.as_native_integer()))  # Throws if not an integer.
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _bitwise_or(self, right: _any.Any) -> "Rational":
         return self._generic_bitwise(right, operator.or_)
@@ -177,7 +171,7 @@ class Rational(Primitive):
             try:
                 result = impl(self._value, right._value)
             except ZeroDivisionError:
-                raise _any.InvalidOperandError("Cannot divide %s by zero" % self._value)
+                raise _any.InvalidOperandError("Cannot divide %s by zero" % self._value) from None
             else:
                 return Rational(result)
         else:
@@ -220,8 +214,7 @@ class String(Primitive):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, String):
             return self._value == other._value
-        else:  # pragma: no cover
-            return NotImplemented
+        return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         return repr(self._value)
@@ -229,8 +222,7 @@ class String(Primitive):
     def _add(self, right: _any.Any) -> "String":
         if isinstance(right, String):
             return String(self._value + right._value)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _equal(self, right: _any.Any) -> Boolean:
         if isinstance(right, String):
@@ -239,5 +231,5 @@ class String(Primitive):
                 return unicodedata.normalize("NFC", s)
 
             return Boolean(normalized(self._value) == normalized(right._value))
-        else:
-            raise _any.UndefinedOperatorError
+
+        raise _any.UndefinedOperatorError

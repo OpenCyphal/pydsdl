@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=broad-except
+
 import typing
 import urllib.parse
 
@@ -94,7 +96,7 @@ class InternalError(FrontendError):
         if not text:
             text = ""
 
-        super(InternalError, self).__init__(text=text, path=path, line=line)
+        super().__init__(text=text, path=path, line=line)
 
 
 class InvalidDefinitionError(FrontendError):
@@ -103,8 +105,6 @@ class InvalidDefinitionError(FrontendError):
     This type is inherited by a dozen of specialized exception types; however, the class hierarchy beneath
     this type may be unstable and should not be relied upon by the application directly.
     """
-
-    pass
 
 
 def _unittest_error() -> None:

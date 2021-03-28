@@ -28,7 +28,7 @@ class SerializableType(_expression.Any):
     """
 
     def __init__(self) -> None:
-        super(SerializableType, self).__init__()
+        super().__init__()
 
     @property
     @abc.abstractmethod
@@ -64,7 +64,7 @@ class SerializableType(_expression.Any):
             except TypeError:
                 pass
 
-        return super(SerializableType, self)._attribute(name)  # Hand over up the inheritance chain, important
+        return super()._attribute(name)  # Hand over up the inheritance chain, important
 
     @abc.abstractmethod
     def __str__(self) -> str:  # pragma: no cover
@@ -87,5 +87,4 @@ class SerializableType(_expression.Any):
             except TypeError:  # If the type is non-serializable, assume equality.
                 same_bls = same_type
             return same_type and same_bls and str(self) == str(other)
-        else:
-            return NotImplemented
+        return NotImplemented

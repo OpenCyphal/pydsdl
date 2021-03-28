@@ -15,14 +15,14 @@ class UndefinedOperatorError(InvalidOperandError):
     """Thrown when there is no matching operator for the supplied arguments."""
 
     def __init__(self) -> None:
-        super(UndefinedOperatorError, self).__init__("The requested operator is not defined for the provided arguments")
+        super().__init__("The requested operator is not defined for the provided arguments")
 
 
 class UndefinedAttributeError(InvalidOperandError):
     """Thrown when the requested attribute does not exist."""
 
     def __init__(self) -> None:
-        super(UndefinedAttributeError, self).__init__("Invalid attribute name")
+        super().__init__("Invalid attribute name")
 
 
 class Any(abc.ABC):
@@ -117,4 +117,4 @@ class Any(abc.ABC):
 
 # This import must be located at the bottom to break the circular dependency in the type annotations above.
 # We must import specific names as opposed to the whole module because the latter breaks MyPy.
-from ._primitive import Boolean, String  # noqa
+from ._primitive import Boolean, String  # pylint: disable=wrong-import-position,unused-import

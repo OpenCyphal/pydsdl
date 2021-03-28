@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=global-statement,protected-access,too-many-statements
+
 import os
 import typing
 import tempfile
@@ -177,7 +179,7 @@ def _unittest_simple() -> None:
     assert p.deprecated
     assert p.version == (0, 1)
     assert not p.constants
-    assert p == p
+    assert p == p  # pylint: disable=comparison-with-itself
     assert p != empty_new
 
     assert len(p.fields) == 2

@@ -60,8 +60,7 @@ class BitLengthSet:
         """
         if self:
             return set(map(lambda x: x % bit_length, self._value)) == {0}
-        else:
-            return True  # An empty set is always aligned.
+        return True  # An empty set is always aligned.
 
     def is_aligned_at_byte(self) -> bool:
         """
@@ -102,13 +101,12 @@ class BitLengthSet:
         r = int(bit_length)
         if r < 1:
             raise ValueError("Invalid alignment: %r bits" % r)
-        else:
-            assert r >= 1
-            out = BitLengthSet(((x + r - 1) // r) * r for x in self)
-            assert not out or 0 <= min(out) - min(self) < r
-            assert not out or 0 <= max(out) - max(self) < r
-            assert len(out) <= len(self)
-            return out
+        assert r >= 1
+        out = BitLengthSet(((x + r - 1) // r) * r for x in self)
+        assert not out or 0 <= min(out) - min(self) < r
+        assert not out or 0 <= max(out) - max(self) < r
+        assert len(out) <= len(self)
+        return out
 
     def elementwise_sum_k_multicombinations(self, k: int) -> "BitLengthSet":
         """
@@ -189,8 +187,7 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return self._value == BitLengthSet(other)._value
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __bool__(self) -> bool:
         """
@@ -229,8 +226,7 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return BitLengthSet.elementwise_sum_cartesian_product([self or BitLengthSet(0), BitLengthSet(other)])
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __radd__(self, other: typing.Any) -> "BitLengthSet":
         """
@@ -243,8 +239,7 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return BitLengthSet(other) + self
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __iadd__(self, other: typing.Any) -> "BitLengthSet":
         """
@@ -258,8 +253,7 @@ class BitLengthSet:
         if isinstance(other, _OPERAND_TYPES):
             self._value = (self + other)._value
             return self
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __or__(self, other: typing.Any) -> "BitLengthSet":
         """
@@ -279,8 +273,7 @@ class BitLengthSet:
             if not isinstance(other, BitLengthSet):  # Speed optimization
                 other = BitLengthSet(other)
             return BitLengthSet(self._value | other._value)
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __ror__(self, other: typing.Any) -> "BitLengthSet":
         """
@@ -293,8 +286,7 @@ class BitLengthSet:
         """
         if isinstance(other, _OPERAND_TYPES):
             return BitLengthSet(other) | self
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __ior__(self, other: typing.Any) -> "BitLengthSet":
         """
@@ -308,8 +300,7 @@ class BitLengthSet:
         if isinstance(other, _OPERAND_TYPES):
             self._value = (self | other)._value
             return self
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __str__(self) -> str:
         """
@@ -340,12 +331,12 @@ def _unittest_bit_length_set() -> None:
 
     assert not BitLengthSet()
     assert BitLengthSet() == BitLengthSet()
-    assert not (BitLengthSet() != BitLengthSet())
+    assert not (BitLengthSet() != BitLengthSet())  # pylint: disable=unneeded-not
     assert BitLengthSet(123) == BitLengthSet([123])
     assert BitLengthSet(123) != BitLengthSet(124)
     assert BitLengthSet(123) == 123
     assert BitLengthSet(123) != 124
-    assert not (BitLengthSet(123) == "123")  # not implemented
+    assert not (BitLengthSet(123) == "123")  # pylint: disable=unneeded-not
     assert str(BitLengthSet()) == "{}"
     assert str(BitLengthSet(123)) == "{123}"
     assert str(BitLengthSet((123, 0, 456, 12))) == "{0, 12, 123, 456}"  # Always sorted!

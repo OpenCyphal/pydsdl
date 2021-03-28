@@ -38,14 +38,11 @@ def parse(text: str, statement_stream_processor: "StatementStreamProcessor") -> 
     except parsimonious.ParseError as ex:
         raise DSDLSyntaxError("Syntax error", line=int(ex.line())) from None  # type: ignore
 
-    except (MemoryError, SystemError):  # pragma: no cover
-        raise
-
     except parsimonious.VisitationError as ex:  # pragma: no cover
         # noinspection PyBroadException
         try:
             line = int(ex.original_class.line())
-        except Exception:
+        except Exception:  # pylint: disable=broad-except
             line = pr.current_line_number
         # Treat as internal because all intentional errors are not wrapped into VisitationError.
         assert line > 0
@@ -125,7 +122,7 @@ def _make_binary_operator_handler(operator: _expression.BinaryOperator[_expressi
 
 
 # noinspection PyMethodMayBeStatic
-class _ParseTreeProcessor(parsimonious.NodeVisitor):
+class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many-public-methods
     """
     This class processes the parse tree, evaluates the expressions and emits a high-level representation
     of the processed description. Essentially it does most of the ground work related to supporting the DSDL
@@ -148,6 +145,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
         self._statement_stream_processor = statement_stream_processor  # type: StatementStreamProcessor
         self._current_line_number = 1  # Lines are numbered from one
+        super().__init__()
 
     @property
     def current_line_number(self) -> int:
@@ -252,7 +250,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return cons(_serializable.PrimitiveType.CastMode.SATURATED)
 
     def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:
-        return lambda cm: _serializable.BooleanType(cm)  # lambda is only needed to make mypy shut up
+        return typing.cast(_PrimitiveTypeConstructor, _serializable.BooleanType)
 
     def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: _serializable.UnsignedIntegerType(children[-1], cm)
@@ -415,8 +413,7 @@ def _unwrap_array_capacity(ex: _expression.Any) -> int:
         out = ex.as_native_integer()
         assert isinstance(out, int)  # Oh mypy, why are you so weird
         return out
-    else:
-        raise _error.InvalidDefinitionError("Array capacity expression must yield a rational, not %s" % ex.TYPE_NAME)
+    raise _error.InvalidDefinitionError("Array capacity expression must yield a rational, not %s" % ex.TYPE_NAME)
 
 
 def _parse_string_literal(literal: str) -> _expression.String:
@@ -464,15 +461,14 @@ def _parse_string_literal(literal: str) -> _expression.String:
         try:
             symbol = _next_symbol()
         except DSDLSyntaxError as ex:
-            raise DSDLSyntaxError("The string literal is malformed after index %d: %s" % (index, ex.text))
+            raise DSDLSyntaxError("The string literal is malformed after index %d: %s" % (index, ex.text)) from None
         except StopIteration:
             raise DSDLSyntaxError("Unexpected end of string literal after index %d" % index) from None
         else:
             if len(symbol) == 0:
                 break
-            else:
-                assert len(symbol) == 1
-                out += symbol
+            assert len(symbol) == 1
+            out += symbol
 
     return _expression.String(out)
 

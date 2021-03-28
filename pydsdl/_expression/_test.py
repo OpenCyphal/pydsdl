@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=consider-using-in,protected-access,too-many-statements
+
 import fractions
 from . import _any, _primitive, _container, _operator
 

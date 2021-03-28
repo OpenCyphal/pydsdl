@@ -44,8 +44,7 @@ class Attribute(_expression.Any):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Attribute):
             return (self._data_type == other._data_type) and (self._name == other.name)
-        else:
-            return NotImplemented  # pragma: no cover
+        return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         """Returns the normalized DSDL representation of the attribute."""
@@ -64,12 +63,12 @@ class PaddingField(Field):
         if not isinstance(data_type, VoidType):
             raise TypeParameterError("Padding fields must be of the void type")
 
-        super(PaddingField, self).__init__(data_type, "")
+        super().__init__(data_type, "")
 
 
 class Constant(Attribute):
     def __init__(self, data_type: SerializableType, name: str, value: _expression.Any):
-        super(Constant, self).__init__(data_type, name)
+        super().__init__(data_type, name)
 
         if not isinstance(value, _expression.Primitive):
             raise InvalidConstantValueError("The constant value must be a primitive expression value")
@@ -136,9 +135,8 @@ class Constant(Attribute):
     def __eq__(self, other: object) -> bool:
         """Constants are equal if their type, name, and value are equal."""
         if isinstance(other, Constant):
-            return super(Constant, self).__eq__(other) and (self._value == other._value)
-        else:
-            return NotImplemented  # pragma: no cover
+            return super().__eq__(other) and (self._value == other._value)
+        return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         """Returns the normalized DSDL representation of the constant and its value."""

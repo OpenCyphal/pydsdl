@@ -34,7 +34,7 @@ class PrimitiveType(SerializableType):
         TRUNCATED = 1
 
     def __init__(self, bit_length: int, cast_mode: "PrimitiveType.CastMode"):
-        super(PrimitiveType, self).__init__()
+        super().__init__()
         self._bit_length = int(bit_length)
         self._cast_mode = cast_mode
 
@@ -98,7 +98,7 @@ class PrimitiveType(SerializableType):
 
 class BooleanType(PrimitiveType):
     def __init__(self, cast_mode: PrimitiveType.CastMode):
-        super(BooleanType, self).__init__(bit_length=1, cast_mode=cast_mode)
+        super().__init__(bit_length=1, cast_mode=cast_mode)
 
         if cast_mode != PrimitiveType.CastMode.SATURATED:
             raise InvalidCastModeError("Invalid cast mode for boolean: %r" % cast_mode)
@@ -109,7 +109,7 @@ class BooleanType(PrimitiveType):
 
 class ArithmeticType(PrimitiveType):
     def __init__(self, bit_length: int, cast_mode: PrimitiveType.CastMode):
-        super(ArithmeticType, self).__init__(bit_length, cast_mode)
+        super().__init__(bit_length, cast_mode)
 
     @property
     @abc.abstractmethod
@@ -123,7 +123,7 @@ class ArithmeticType(PrimitiveType):
 
 class IntegerType(ArithmeticType):
     def __init__(self, bit_length: int, cast_mode: PrimitiveType.CastMode):
-        super(IntegerType, self).__init__(bit_length, cast_mode)
+        super().__init__(bit_length, cast_mode)
 
     @property
     @abc.abstractmethod
@@ -137,7 +137,7 @@ class IntegerType(ArithmeticType):
 
 class SignedIntegerType(IntegerType):
     def __init__(self, bit_length: int, cast_mode: PrimitiveType.CastMode):
-        super(SignedIntegerType, self).__init__(bit_length, cast_mode)
+        super().__init__(bit_length, cast_mode)
 
         if self._bit_length < 2:
             raise InvalidBitLengthError("Bit length of signed integer types cannot be less than 2")
@@ -156,7 +156,7 @@ class SignedIntegerType(IntegerType):
 
 class UnsignedIntegerType(IntegerType):
     def __init__(self, bit_length: int, cast_mode: PrimitiveType.CastMode):
-        super(UnsignedIntegerType, self).__init__(bit_length, cast_mode)
+        super().__init__(bit_length, cast_mode)
 
     @property
     def inclusive_value_range(self) -> ValueRange:
@@ -168,7 +168,7 @@ class UnsignedIntegerType(IntegerType):
 
 class FloatType(ArithmeticType):
     def __init__(self, bit_length: int, cast_mode: PrimitiveType.CastMode):
-        super(FloatType, self).__init__(bit_length, cast_mode)
+        super().__init__(bit_length, cast_mode)
 
         try:
             frac = fractions.Fraction
@@ -202,8 +202,8 @@ def _unittest_primitive() -> None:
 
     assert str(UnsignedIntegerType(15, PrimitiveType.CastMode.TRUNCATED)) == "truncated uint15"
     assert UnsignedIntegerType(53, PrimitiveType.CastMode.SATURATED).bit_length_set == {53}
-    assert UnsignedIntegerType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (
-        0,  # type: ignore
+    assert UnsignedIntegerType(32, PrimitiveType.CastMode.SATURATED).inclusive_value_range == (  # type: ignore
+        0,
         0xFFFFFFFF,
     )
 

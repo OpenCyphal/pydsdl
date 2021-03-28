@@ -17,7 +17,7 @@ class InvalidNumberOfElementsError(TypeParameterError):
 
 class ArrayType(SerializableType):
     def __init__(self, element_type: SerializableType, capacity: int):
-        super(ArrayType, self).__init__()
+        super().__init__()
         self._element_type = element_type
         self._capacity = int(capacity)
         if self._capacity < 1:
@@ -59,7 +59,7 @@ class ArrayType(SerializableType):
 
 class FixedLengthArrayType(ArrayType):
     def __init__(self, element_type: SerializableType, capacity: int):
-        super(FixedLengthArrayType, self).__init__(element_type, capacity)
+        super().__init__(element_type, capacity)
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -139,7 +139,7 @@ def _unittest_fixed_array() -> None:
 
 class VariableLengthArrayType(ArrayType):
     def __init__(self, element_type: SerializableType, capacity: int):
-        super(VariableLengthArrayType, self).__init__(element_type, capacity)
+        super().__init__(element_type, capacity)
 
         # Construct the implicit array length prefix type.
         length_field_length = 2 ** math.ceil(math.log2(max(self.BITS_PER_BYTE, self.capacity.bit_length())))

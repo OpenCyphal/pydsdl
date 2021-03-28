@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=protected-access
+
 import abc
 import typing
 import functools
@@ -37,12 +39,11 @@ class Set(Container):
                 assert isinstance(self, Set) and isinstance(other, Set)
                 if self.element_type == other.element_type:
                     return inferior(self, other)
-                else:
-                    raise _any.InvalidOperandError(
-                        "The requested binary operator is defined only for sets "
-                        "that share the same element type. The different types are: %r, %r"
-                        % (self.element_type.TYPE_NAME, other.element_type.TYPE_NAME)
-                    )
+                raise _any.InvalidOperandError(
+                    "The requested binary operator is defined only for sets "
+                    "that share the same element type. The different types are: %r, %r"
+                    % (self.element_type.TYPE_NAME, other.element_type.TYPE_NAME)
+                )
 
             return wrapper
 
@@ -80,8 +81,7 @@ class Set(Container):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Set):
             return self._value == other._value
-        else:
-            return NotImplemented
+        return NotImplemented
 
     def __str__(self) -> str:
         return "{%s}" % ", ".join(map(str, self._value))  # This is recursive.
@@ -127,32 +127,27 @@ class Set(Container):
     def _equal(self, right: _any.Any) -> _primitive.Boolean:
         if isinstance(right, Set):
             return _primitive.Boolean(self._is_equal_to(right))
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _less_or_equal(self, right: _any.Any) -> _primitive.Boolean:
         if isinstance(right, Set):
             return _primitive.Boolean(self._is_subset_of(right))
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _greater_or_equal(self, right: _any.Any) -> _primitive.Boolean:
         if isinstance(right, Set):
             return _primitive.Boolean(self._is_superset_of(right))
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _less(self, right: _any.Any) -> _primitive.Boolean:
         if isinstance(right, Set):
             return _primitive.Boolean(self._is_proper_subset_of(right))
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _greater(self, right: _any.Any) -> _primitive.Boolean:
         if isinstance(right, Set):
             return _primitive.Boolean(self._is_proper_superset_of(right))
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     #
     # Set algebra operators that yield a new set.
@@ -160,20 +155,17 @@ class Set(Container):
     def _bitwise_or(self, right: _any.Any) -> "Set":
         if isinstance(right, Set):
             return self._create_union_with(right)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _bitwise_xor(self, right: _any.Any) -> "Set":
         if isinstance(right, Set):
             return self._create_disjunctive_union_with(right)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _bitwise_and(self, right: _any.Any) -> "Set":
         if isinstance(right, Set):
             return self._create_intersection_with(right)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     #
     # Elementwise application.
@@ -184,8 +176,7 @@ class Set(Container):
     ) -> "Set":
         if not isinstance(other, Set):
             return Set((impl(other, x) if swap else impl(x, other)) for x in self)
-        else:
-            raise _any.UndefinedOperatorError
+        raise _any.UndefinedOperatorError
 
     def _add(self, right: _any.Any) -> "Set":
         return self._elementwise(_operator.add, right)
@@ -236,7 +227,7 @@ class Set(Container):
         elif name.native_value == "count":  # "size" and "length" can be ambiguous, "cardinality" is long
             out = _primitive.Rational(len(self._value))
         else:
-            out = super(Set, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+            out = super()._attribute(name)  # Hand over up the inheritance chain, this is important
 
         assert isinstance(out, _any.Any)
         return out

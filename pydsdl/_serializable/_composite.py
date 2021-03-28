@@ -55,7 +55,7 @@ class CompositeType(SerializableType):
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = "."
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         name: str,
         version: Version,
@@ -65,7 +65,7 @@ class CompositeType(SerializableType):
         source_file_path: str,
         has_parent_service: bool,
     ):
-        super(CompositeType, self).__init__()
+        super().__init__()
 
         self._name = str(name).strip()
         self._version = version
@@ -112,8 +112,7 @@ class CompositeType(SerializableType):
         for a in self._attributes:
             if a.name and a.name in used_names:
                 raise AttributeNameCollisionError("Multiple attributes under the same name: %r" % a.name)
-            else:
-                used_names.add(a.name)
+            used_names.add(a.name)
 
         # Port ID check
         port_id = self._fixed_port_id
@@ -301,7 +300,7 @@ class CompositeType(SerializableType):
         if name.native_value == "_extent_":  # Experimental non-standard extension
             return _expression.Rational(self.extent)
 
-        return super(CompositeType, self)._attribute(name)  # Hand over up the inheritance chain, this is important
+        return super()._attribute(name)  # Hand over up the inheritance chain, this is important
 
     def __getitem__(self, attribute_name: str) -> Attribute:
         """
@@ -338,7 +337,7 @@ class UnionType(CompositeType):
 
     MIN_NUMBER_OF_VARIANTS = 2
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         name: str,
         version: Version,
@@ -350,7 +349,7 @@ class UnionType(CompositeType):
     ):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
-        super(UnionType, self).__init__(
+        super().__init__(
             name=name,
             version=version,
             attributes=attributes,
@@ -506,7 +505,7 @@ class DelimitedType(CompositeType):
 
     def __init__(self, inner: CompositeType, extent: int):
         self._inner = inner
-        super(DelimitedType, self).__init__(
+        super().__init__(
             name=inner.full_name,
             version=inner.version,
             attributes=inner.attributes,
@@ -642,7 +641,7 @@ class ServiceType(CompositeType):
             Field(data_type=self._request_type, name="request"),
             Field(data_type=self._response_type, name="response"),
         ]
-        super(ServiceType, self).__init__(
+        super().__init__(
             name=name,
             version=request.version,
             attributes=container_attributes,
@@ -673,7 +672,7 @@ class ServiceType(CompositeType):
         raise TypeError("Service types do not have serializable fields. Use either request or response.")
 
 
-def _unittest_composite_types() -> None:
+def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     from pytest import raises
     from ._primitive import SignedIntegerType, FloatType
     from ._array import FixedLengthArrayType, VariableLengthArrayType
@@ -946,7 +945,7 @@ def _unittest_composite_types() -> None:
     assert try_struct_fields([outer]).bit_length_set == {16, 24, 32, 40, 48}
 
 
-def _unittest_field_iterators() -> None:
+def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
     from pytest import raises
     from ._primitive import BooleanType, FloatType
     from ._array import FixedLengthArrayType, VariableLengthArrayType

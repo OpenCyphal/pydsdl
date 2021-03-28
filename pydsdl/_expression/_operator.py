@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=protected-access
+
 import typing
 import functools
 from . import _any, _primitive
@@ -40,7 +42,7 @@ def _auto_swap(
             try:
                 result = direct_operator(left, right)
             except _any.UndefinedOperatorError:
-                if type(left) != type(right):
+                if type(left) != type(right):  # pylint: disable=unidiomatic-typecheck
                     result = getattr(right, alternative_method_name)(left)  # Left and Right are swapped.
                 else:
                     raise
@@ -177,8 +179,8 @@ def attribute(value: _any.Any, name: typing.Union[str, _primitive.String]) -> _a
 
     if isinstance(value, _any.Any) and isinstance(name, _primitive.String):  # noinspection PyProtectedMember
         return value._attribute(name)
-    else:  # pragma: no cover
-        raise ValueError(
-            "The argument types of the attribute operator are (Any, String), got (%r, %r)"
-            % (type(value).__name__, type(name).__name__)
-        )
+
+    raise ValueError(  # pragma: no cover
+        "The argument types of the attribute operator are (Any, String), got (%r, %r)"
+        % (type(value).__name__, type(name).__name__)
+    )

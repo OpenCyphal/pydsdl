@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# pylint: disable=logging-not-lazy
+
 import os
 import typing
 import logging
@@ -19,15 +21,11 @@ class RootNamespaceNameCollisionError(_error.InvalidDefinitionError):
     This may occur if there are identically named namespaces located in different directories.
     """
 
-    pass
-
 
 class DataTypeNameCollisionError(_error.InvalidDefinitionError):
     """
     Raised when there are conflicting data type names.
     """
-
-    pass
 
 
 class NestedRootNamespaceError(_error.InvalidDefinitionError):
@@ -35,16 +33,12 @@ class NestedRootNamespaceError(_error.InvalidDefinitionError):
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
     """
 
-    pass
-
 
 class FixedPortIDCollisionError(_error.InvalidDefinitionError):
     """
     Raised when there is more than one data type, or different major versions of the same data type
     using the same fixed port ID.
     """
-
-    pass
 
 
 class MultipleDefinitionsUnderSameVersionError(_error.InvalidDefinitionError):
@@ -56,15 +50,11 @@ class MultipleDefinitionsUnderSameVersionError(_error.InvalidDefinitionError):
         2801.Type.1.0.uavcan
     """
 
-    pass
-
 
 class VersionsOfDifferentKindError(_error.InvalidDefinitionError):
     """
     Definitions that share the same name but are of different kinds.
     """
-
-    pass
 
 
 class MinorVersionFixedPortIDError(_error.InvalidDefinitionError):
@@ -72,23 +62,17 @@ class MinorVersionFixedPortIDError(_error.InvalidDefinitionError):
     Different fixed port-ID under the same major version, or a fixed port ID was removed under the same major version.
     """
 
-    pass
-
 
 class ExtentConsistencyError(_error.InvalidDefinitionError):
     """
     Different extent under the same major version.
     """
 
-    pass
-
 
 class SealingConsistencyError(_error.InvalidDefinitionError):
     """
     Different sealing status under the same major version.
     """
-
-    pass
 
 
 PrintOutputHandler = typing.Callable[[str, int, str], None]

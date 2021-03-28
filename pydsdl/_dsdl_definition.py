@@ -21,7 +21,7 @@ class FileNameFormatError(_error.InvalidDefinitionError):
     """
 
     def __init__(self, text: str, path: str):
-        super(FileNameFormatError, self).__init__(text=text, path=str(path))
+        super().__init__(text=text, path=str(path))
 
 
 class DSDLDefinition:
@@ -220,8 +220,7 @@ class DSDLDefinition:
         """
         if isinstance(other, DSDLDefinition):
             return self.full_name == other.full_name and self.version == other.version
-        else:  # pragma: no cover
-            return NotImplemented
+        return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
         return "DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%r)" % (
@@ -236,4 +235,4 @@ class DSDLDefinition:
 
 # Moved this import here to break recursive dependency.
 # Maybe I have messed up the architecture? Should think about it later.
-from . import _data_type_builder  # noqa: E402
+from . import _data_type_builder  # pylint: disable=wrong-import-position
