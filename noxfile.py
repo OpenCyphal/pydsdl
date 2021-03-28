@@ -49,14 +49,14 @@ def test(session):
         "coverage        ~= 5.5",
     )
     session.run("coverage", "run", "-m", "pytest")
-    session.run("coverage", "report", "--fail-under=99")
+    session.run("coverage", "report", "--fail-under=95")
     if session.interactive:
         session.run("coverage", "html")
         report_file = Path.cwd().resolve() / "htmlcov" / "index.html"
         session.log(f"OPEN IN WEB BROWSER: file://{report_file}")
 
 
-@nox.session(python=PYTHONS)
+@nox.session(python=PYTHONS, reuse_venv=True)
 def lint(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install(

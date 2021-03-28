@@ -3,6 +3,8 @@
 # This software is distributed under the terms of the MIT License.
 #
 
+# mypy: warn_unused_ignores=False
+
 import abc
 import enum
 import math

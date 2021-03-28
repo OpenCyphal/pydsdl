@@ -30,7 +30,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
             raise TypeError('The following alternative operator method is not defined: %r' % alternative_method_name)
 
         @functools.wraps(direct_operator)
-        def wrapper(left: _any.Any, right: _any.Any) -> _any.Any:
+        def wrapper(left: _any.Any, right: _any.Any) -> OperatorOutput:
             if not isinstance(left, _any.Any) or not isinstance(right, _any.Any):  # pragma: no cover
                 raise ValueError('Operators are only defined for implementations of Any; found this: %r, %r' %
                                  (type(left).__name__, type(right).__name__))
@@ -43,7 +43,7 @@ def _auto_swap(alternative_operator_name: typing.Optional[str] = None) -> \
                     raise
 
             assert isinstance(result, _any.Any)
-            return result
+            return typing.cast(OperatorOutput, result)
         return wrapper
     return decorator
 

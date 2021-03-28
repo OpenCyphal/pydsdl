@@ -65,41 +65,43 @@ class Any(abc.ABC):
     # Binary operators.
     # The types of the operators defined here must match the specification.
     # Make sure to use least generic types in the derived classes - Python allows covariant return types.
-    def _logical_or(self, right: 'Any')  -> 'Boolean': raise UndefinedOperatorError
-    def _logical_and(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
+    # fmt: off
+    def _logical_or(self, right: 'Any')         -> 'Boolean': raise UndefinedOperatorError
+    def _logical_and(self, right: 'Any')        -> 'Boolean': raise UndefinedOperatorError
 
-    def _equal(self, right: 'Any')            -> 'Boolean': raise UndefinedOperatorError  # pragma: no branch
-    def _less_or_equal(self, right: 'Any')    -> 'Boolean': raise UndefinedOperatorError
-    def _greater_or_equal(self, right: 'Any') -> 'Boolean': raise UndefinedOperatorError
-    def _less(self, right: 'Any')             -> 'Boolean': raise UndefinedOperatorError
-    def _greater(self, right: 'Any')          -> 'Boolean': raise UndefinedOperatorError
+    def _equal(self, right: 'Any')              -> 'Boolean': raise UndefinedOperatorError  # pragma: no branch
+    def _less_or_equal(self, right: 'Any')      -> 'Boolean': raise UndefinedOperatorError
+    def _greater_or_equal(self, right: 'Any')   -> 'Boolean': raise UndefinedOperatorError
+    def _less(self, right: 'Any')               -> 'Boolean': raise UndefinedOperatorError
+    def _greater(self, right: 'Any')            -> 'Boolean': raise UndefinedOperatorError
 
-    def _bitwise_or(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _bitwise_or_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _bitwise_or(self, right: 'Any')         -> 'Any': raise UndefinedOperatorError
+    def _bitwise_or_right(self, left: 'Any')    -> 'Any': raise UndefinedOperatorError
 
-    def _bitwise_xor(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _bitwise_xor_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _bitwise_xor(self, right: 'Any')        -> 'Any': raise UndefinedOperatorError
+    def _bitwise_xor_right(self, left: 'Any')   -> 'Any': raise UndefinedOperatorError
 
-    def _bitwise_and(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _bitwise_and_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _bitwise_and(self, right: 'Any')        -> 'Any': raise UndefinedOperatorError
+    def _bitwise_and_right(self, left: 'Any')   -> 'Any': raise UndefinedOperatorError
 
-    def _add(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _add_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _add(self, right: 'Any')                -> 'Any': raise UndefinedOperatorError
+    def _add_right(self, left: 'Any')           -> 'Any': raise UndefinedOperatorError
 
-    def _subtract(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _subtract_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _subtract(self, right: 'Any')           -> 'Any': raise UndefinedOperatorError
+    def _subtract_right(self, left: 'Any')      -> 'Any': raise UndefinedOperatorError
 
-    def _multiply(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _multiply_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _multiply(self, right: 'Any')           -> 'Any': raise UndefinedOperatorError
+    def _multiply_right(self, left: 'Any')      -> 'Any': raise UndefinedOperatorError
 
-    def _divide(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _divide_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _divide(self, right: 'Any')             -> 'Any': raise UndefinedOperatorError
+    def _divide_right(self, left: 'Any')        -> 'Any': raise UndefinedOperatorError
 
-    def _modulo(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _modulo_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _modulo(self, right: 'Any')             -> 'Any': raise UndefinedOperatorError
+    def _modulo_right(self, left: 'Any')        -> 'Any': raise UndefinedOperatorError
 
-    def _power(self, right: 'Any')      -> 'Any': raise UndefinedOperatorError
-    def _power_right(self, left: 'Any') -> 'Any': raise UndefinedOperatorError
+    def _power(self, right: 'Any')              -> 'Any': raise UndefinedOperatorError
+    def _power_right(self, left: 'Any')         -> 'Any': raise UndefinedOperatorError
+    # fmt: on
 
     # Attribute access operator. It is a binary operator as well, but its semantics is slightly different.
     # Implementations must invoke super()._attribute() when they encounter an unknown attribute, to allow

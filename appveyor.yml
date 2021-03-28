@@ -10,7 +10,6 @@ environment:
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.9"
-      coverage: 1
 
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
