@@ -32,11 +32,15 @@ def clean(session):
         "*.log",
         "*.tmp",
         ".nox",
+        ".dsdl-test",
     ]
     for w in wildcards:
         for f in Path.cwd().glob(w):
             session.log(f"Removing: {f}")
-            shutil.rmtree(f, ignore_errors=True)
+            if f.is_dir():
+                shutil.rmtree(f, ignore_errors=True)
+            else:
+                f.unlink(missing_ok=True)
 
 
 @nox.session(python=PYTHONS)
