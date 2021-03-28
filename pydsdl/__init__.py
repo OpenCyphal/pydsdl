@@ -1,7 +1,6 @@
-#
-# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# Copyright (c) 2018 UAVCAN Consortium
 # This software is distributed under the terms of the MIT License.
-#
+# Author: Pavel Kirienko <pavel@uavcan.org>
 
 # pylint: disable=wrong-import-position
 
@@ -11,7 +10,9 @@ import sys as _sys
 __version__ = "1.10.2"
 __version_info__ = tuple(map(int, __version__.split(".")))
 __license__ = "MIT"
-__author__ = "UAVCAN Development Team"
+__author__ = "UAVCAN Consortium"
+__copyright__ = "Copyright (c) 2018 UAVCAN Consortium"
+__email__ = "consortium@uavcan.org"
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.
 # Here, the objective is to allow our library to import stuff from its third-party dependency directory,

@@ -1,7 +1,6 @@
-#
-# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# Copyright (c) 2018 UAVCAN Consortium
 # This software is distributed under the terms of the MIT License.
-#
+# Author: Pavel Kirienko <pavel@uavcan.org>
 
 MAX_SUBJECT_ID = 8191
 MAX_SERVICE_ID = 511
