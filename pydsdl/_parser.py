@@ -26,17 +26,14 @@ def parse(text: str, statement_stream_processor: "StatementStreamProcessor") -> 
     """
     pr = _ParseTreeProcessor(statement_stream_processor)
     try:
-        pr.parse(text)  # type: ignore
-
+        pr.visit(_get_grammar().parse(text))  # type: ignore
     except _error.FrontendError as ex:
         # Inject error location. If this exception is being propagated from a recursive instance, it already has
         # its error location populated, so nothing will happen here.
         ex.set_error_location_if_unknown(line=pr.current_line_number)
         raise ex
-
     except parsimonious.ParseError as ex:
         raise DSDLSyntaxError("Syntax error", line=int(ex.line())) from None  # type: ignore
-
     except parsimonious.VisitationError as ex:  # pragma: no cover
         # noinspection PyBroadException
         try:
@@ -83,6 +80,12 @@ class StatementStreamProcessor:
         raise NotImplementedError  # pragma: no cover
 
 
+@functools.lru_cache(None)
+def _get_grammar() -> parsimonious.Grammar:
+    with open(os.path.join(os.path.dirname(__file__), "grammar.parsimonious")) as _grammar_file:
+        return parsimonious.Grammar(_grammar_file.read())  # type: ignore
+
+
 _logger = logging.getLogger(__name__)
 
 
@@ -91,19 +94,7 @@ _VisitorHandler = typing.Callable[["_ParseTreeProcessor", _Node, _Children], typ
 _PrimitiveTypeConstructor = typing.Callable[[_serializable.PrimitiveType.CastMode], _serializable.PrimitiveType]
 
 
-def _logged_transformation(fun: _VisitorHandler) -> _VisitorHandler:
-    """
-    Simply logs the resulting transformation upon its completion.
-    """
-
-    @functools.wraps(fun)
-    def wrapper(self: "_ParseTreeProcessor", node: _Node, children: _Children) -> typing.Any:
-        return fun(self, node, children)
-
-    return wrapper
-
-
-def _make_typesafe_child_lifter(expected_type: typing.Type[object], logged: bool = False) -> _VisitorHandler:
+def _make_typesafe_child_lifter(expected_type: typing.Type[object]) -> _VisitorHandler:
     def visitor_handler(_self: "_ParseTreeProcessor", _n: _Node, children: _Children) -> typing.Any:
         (sole_child,) = children
         assert isinstance(sole_child, expected_type), "The child should have been of type %r, not %r: %r" % (
@@ -113,7 +104,7 @@ def _make_typesafe_child_lifter(expected_type: typing.Type[object], logged: bool
         )
         return sole_child
 
-    return _logged_transformation(visitor_handler) if logged else visitor_handler
+    return visitor_handler
 
 
 def _make_binary_operator_handler(operator: _expression.BinaryOperator[_expression.OperatorOutput]) -> _VisitorHandler:
@@ -132,13 +123,9 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
     done currently.
     """
 
-    # Populating the default grammar (see the NodeVisitor API).
-    with open(os.path.join(os.path.dirname(__file__), "grammar.parsimonious")) as _grammar_file:
-        grammar = parsimonious.Grammar(_grammar_file.read())  # type: ignore
-
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = (_error.FrontendError,)  # type: ignore
+    unwrapped_exceptions = (_error.FrontendError, SystemError, MemoryError, SystemExit)  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
@@ -204,8 +191,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
     # ================================================== Data types ==================================================
 
     visit_type = _make_typesafe_child_lifter(_serializable.SerializableType)
-    visit_type_array = _make_typesafe_child_lifter(_serializable.ArrayType, logged=True)
-    visit_type_scalar = _make_typesafe_child_lifter(_serializable.SerializableType, logged=True)
+    visit_type_array = _make_typesafe_child_lifter(_serializable.ArrayType)
+    visit_type_scalar = _make_typesafe_child_lifter(_serializable.SerializableType)
     visit_type_primitive = _make_typesafe_child_lifter(_serializable.PrimitiveType)
 
     visit_type_primitive_name = parsimonious.NodeVisitor.lift_child
@@ -291,7 +278,6 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         assert all(map(lambda x: isinstance(x, _expression.Any), out))
         return tuple(out)
 
-    @_logged_transformation
     def visit_expression_parenthesized(self, _n: _Node, children: _Children) -> _expression.Any:
         _, _, exp, _, _ = children
         assert isinstance(exp, _expression.Any)
@@ -372,7 +358,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
 
     # ================================================== Literals ==================================================
 
-    visit_literal = _make_typesafe_child_lifter(_expression.Any, logged=True)
+    visit_literal = _make_typesafe_child_lifter(_expression.Any)
     visit_literal_boolean = _make_typesafe_child_lifter(_expression.Boolean)
     visit_literal_string = _make_typesafe_child_lifter(_expression.String)
 
