@@ -36,9 +36,11 @@ class DataSchemaBuilder:
     def __init__(self) -> None:
         self._fields = []  # type: typing.List[_serializable.Field]
         self._constants = []  # type: typing.List[_serializable.Constant]
+        self._last_attribute = None # type: typing.Optional[_serializable.Attribute]
         self._serialization_mode = None  # type: typing.Optional[SerializationMode]
         self._is_union = False
         self._bit_length_computed_at_least_once = False
+        self.doc = ""
 
     @property
     def fields(self) -> typing.List[_serializable.Field]:
@@ -80,6 +82,24 @@ class DataSchemaBuilder:
         assert isinstance(out, _bit_length_set.BitLengthSet) and len(out) > 0
         return out
 
+    def add_comment(self, comment: str, last_line_was_empty: bool) -> None:
+        # TODO: Clean up, kind of hacky; better parsing solution?
+        if self._last_attribute == None:
+            # No attributes yet; this is the toplevel composite type documentation
+            if self.doc != "":
+                self.doc += "\n"
+            self.doc += comment
+        else:
+            # Append comment to attribute
+            if last_line_was_empty:
+                # For now, we throw away floating comments not attached to attributes
+                return
+
+            if self._last_attribute.doc != "":
+                self._last_attribute.doc += "\n"
+            self._last_attribute.doc += comment
+
+
     def add_field(self, field: _serializable.Field) -> None:
         if self.union and self._bit_length_computed_at_least_once:
             # Refer to the DSDL specification for the background information.
@@ -87,10 +107,12 @@ class DataSchemaBuilder:
                 "Inter-field offset is not defined for unions; " "previously performed bit length analysis is invalid"
             )
         assert isinstance(field, _serializable.Field)
+        self._last_attribute = field
         self._fields.append(field)
 
     def add_constant(self, constant: _serializable.Constant) -> None:
         assert isinstance(constant, _serializable.Constant)
+        self._last_attribute = constant
         self._constants.append(constant)
 
     def set_serialization_mode(self, mode: SerializationMode) -> None:

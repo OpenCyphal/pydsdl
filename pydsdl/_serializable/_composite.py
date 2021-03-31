@@ -75,6 +75,8 @@ class CompositeType(SerializableType):
         self._source_file_path = str(source_file_path)
         self._has_parent_service = bool(has_parent_service)
 
+        self.doc = ""
+
         # Name check
         if not self._name:
             raise InvalidNameError("Composite type name cannot be empty")

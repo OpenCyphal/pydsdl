@@ -52,6 +52,8 @@ class StatementStreamProcessor:
     processed DSDL definition.
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
+    def on_comment(self, comment: str, last_line_was_empty: bool = False) -> None:
+        raise NotImplementedError  # pragma: no cover
 
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         raise NotImplementedError  # pragma: no cover
@@ -131,6 +133,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
         self._statement_stream_processor = statement_stream_processor  # type: StatementStreamProcessor
         self._current_line_number = 1  # Lines are numbered from one
+        self._last_line_was_empty = False
         super().__init__()
 
     @property
@@ -142,6 +145,9 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         """If the node has children, replace the node with them."""
         return tuple(children) or node
 
+    def visit_line(self, node: _Node, children: _Children) -> int:
+        self._last_line_was_empty = len(node.text) == 0
+
     def visit_end_of_line(self, _n: _Node, _c: _Children) -> None:
         self._current_line_number += 1
 
@@ -151,20 +157,28 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
+    def visit_comment(self, node: _Node, children: _Children) -> None:
+        assert isinstance(node.text, str)
+        comment = node.text.lstrip("# ")
+        self._statement_stream_processor.on_comment(comment, self._last_line_was_empty)
+
     def visit_statement_constant(self, _n: _Node, children: _Children) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
         assert isinstance(constant_type, _serializable.SerializableType) and isinstance(name, str) and name
         assert isinstance(exp, _expression.Any)
+        self._last_line_was_empty = False
         self._statement_stream_processor.on_constant(constant_type, name, exp)
 
     def visit_statement_field(self, _n: _Node, children: _Children) -> None:
         field_type, _space, name = children
         assert isinstance(field_type, _serializable.SerializableType) and isinstance(name, str) and name
+        self._last_line_was_empty = False
         self._statement_stream_processor.on_field(field_type, name)
 
     def visit_statement_padding_field(self, _n: _Node, children: _Children) -> None:
         void_type = children[0]
         assert isinstance(void_type, _serializable.VoidType)
+        self._last_line_was_empty = False
         self._statement_stream_processor.on_padding_field(void_type)
 
     def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:

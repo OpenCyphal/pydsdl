@@ -21,6 +21,7 @@ class Attribute(_expression.Any):
     def __init__(self, data_type: SerializableType, name: str):
         self._data_type = data_type
         self._name = str(name)
+        self.doc = ""
 
         if isinstance(data_type, VoidType):
             if self._name:

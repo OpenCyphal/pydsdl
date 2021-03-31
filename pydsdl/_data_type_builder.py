@@ -122,6 +122,9 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                     )
         return out
 
+    def on_comment(self, comment: str, last_line_was_empty: bool = False) -> None:
+        self._structs[-1].add_comment(comment, last_line_was_empty)
+
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         self._on_attribute()
         self._structs[-1].add_constant(_serializable.Constant(constant_type, name, value))
@@ -327,6 +330,9 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 "`@extent %d * 8`"
                 % (inner.short_name, inner.extent, inner.extent // 8, DataTypeBuilder._suggest_extent_in_bytes(inner))
             )
+
+        out.doc = builder.doc
+
         return out
 
     @staticmethod
