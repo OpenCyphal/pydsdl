@@ -156,7 +156,7 @@ class CompositeType(SerializableType):
 
     @property
     def doc(self) -> str:
-        """The last component of the full name, e.g., ``Heartbeat`` of ``uavcan.node.Heartbeat``."""
+        """The DSDL header comment provided for this data type without the leading #."""
         return self._doc
 
     @property
@@ -627,7 +627,7 @@ class ServiceType(CompositeType):
     which contain the request and the response structure of the service type, respectively.
     """
 
-    def __init__(self, request: CompositeType, response: CompositeType, fixed_port_id: typing.Optional[int], doc: str = ""):
+    def __init__(self, request: CompositeType, response: CompositeType, fixed_port_id: typing.Optional[int]):
         name = request.full_namespace
         consistent = (
             request.full_name.startswith(name)
@@ -659,7 +659,7 @@ class ServiceType(CompositeType):
             fixed_port_id=fixed_port_id,
             source_file_path=request.source_file_path,
             has_parent_service=False,
-            doc=doc
+            doc=request.doc
         )
 
     @property
