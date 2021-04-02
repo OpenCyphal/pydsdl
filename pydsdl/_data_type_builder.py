@@ -53,6 +53,10 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._lookup_definitions = list(lookup_definitions)
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
+        self._comment = ""
+        self._last_element_schema_cb = None
+        self._last_element_cb = None
+        self._last_element_args = tuple()
 
         assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
@@ -63,6 +67,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._is_deprecated = False
 
     def finalize(self) -> _serializable.CompositeType:
+        self._flush_attribute()
         if len(self._structs) == 1:  # Structure type
             (builder,) = self._structs  # type: _data_schema_builder.DataSchemaBuilder,
             out = self._make_composite(
@@ -123,23 +128,44 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         return out
 
     def on_comment(self, comment: str, last_line_was_empty: bool = False) -> None:
-        self._structs[-1].add_comment(comment, last_line_was_empty)
+        if last_line_was_empty and self._structs[-1].doc == "":
+            # Throw away floating comment blocks (space above)
+            # Flush first
+            self._flush_attribute()
+            if self._structs[-1].doc != "":
+                return
+
+        self._comment += "\n" if self._comment != "" else ""
+        self._comment += comment
 
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         self._on_attribute()
-        self._structs[-1].add_constant(_serializable.Constant(constant_type, name, value))
+        self._queue_attribute(
+            self._structs[-1].add_constant,
+            _serializable.Constant,
+            constant_type, name, value
+        )
 
     def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
         self._on_attribute()
-        self._structs[-1].add_field(_serializable.Field(field_type, name))
+        self._queue_attribute(
+            self._structs[-1].add_field,
+            _serializable.Field,
+            field_type, name
+        )
 
     def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
         self._on_attribute()
-        self._structs[-1].add_field(_serializable.PaddingField(padding_field_type))
+        self._queue_attribute(
+            self._structs[-1].add_field,
+            _serializable.PaddingField,
+            padding_field_type
+        )
 
     def on_directive(
         self, line_number: int, directive_name: str, associated_expression_value: typing.Optional[_expression.Any]
     ) -> None:
+        self._flush_attribute()
         try:
             handler = {
                 "print": self._on_print_directive,
@@ -159,11 +185,13 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         if len(self._structs) > 1:
             raise _error.InvalidDefinitionError("Duplicated service response marker")
 
+        self._flush_attribute()
         self._structs.append(_data_schema_builder.DataSchemaBuilder())
         assert len(self._structs) == 2
 
     def resolve_top_level_identifier(self, name: str) -> _expression.Any:
         # Look only in the current data structure. The lookup cannot cross the service request/response boundary.
+        self._flush_attribute()
         for c in self._structs[-1].constants:
             if c.name == name:
                 return c.value
@@ -175,6 +203,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         raise UndefinedIdentifierError("Undefined identifier: %r" % name)
 
     def resolve_versioned_data_type(self, name: str, version: _serializable.Version) -> _serializable.CompositeType:
+        self._flush_attribute()
         if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in name:
             full_name = name
         else:
@@ -218,6 +247,31 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             print_output_handler=self._print_output_handler,
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
+
+    def _queue_attribute(
+        self,
+        data_schema_callback: typing.Callable,
+        element_constructor_class: typing.Callable,
+        *args: typing.Any
+    ) -> None:
+        self._flush_attribute()
+        self._last_element_schema_cb = data_schema_callback
+        self._last_element_cb = element_constructor_class
+        self._last_element_args = args
+
+    def _flush_attribute(self) -> None:
+        if self._structs[-1].doc == "" and self._comment != "":
+            # Add docstring to composite type
+            self._structs[-1].set_comment(self._comment)
+        elif self._last_element_cb:
+            # Add to attribute
+            self._last_element_schema_cb(
+                self._last_element_cb(*self._last_element_args, self._comment)
+            )
+        self._comment = ""
+        self._last_element_schema_cb = None
+        self._last_element_cb = None
+        self._last_element_args = ()
 
     def _on_attribute(self) -> None:
         if isinstance(self._structs[-1].serialization_mode, _data_schema_builder.DelimitedSerializationMode):
@@ -314,10 +368,11 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             fixed_port_id=fixed_port_id,
             source_file_path=source_file_path,
             has_parent_service=has_parent_service,
+            doc=builder.doc
         )  # type: _serializable.CompositeType
         sm = builder.serialization_mode
         if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):
-            out = _serializable.DelimitedType(inner, extent=sm.extent)  # type: _serializable.CompositeType
+            out = _serializable.DelimitedType(inner, extent=sm.extent, doc=builder.doc)  # type: _serializable.CompositeType
             _logger.debug("%r wrapped into %r", inner, out)
         elif isinstance(sm, _data_schema_builder.SealedSerializationMode):
             out = inner
@@ -330,8 +385,6 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 "`@extent %d * 8`"
                 % (inner.short_name, inner.extent, inner.extent // 8, DataTypeBuilder._suggest_extent_in_bytes(inner))
             )
-
-        out.doc = builder.doc
 
         return out
 

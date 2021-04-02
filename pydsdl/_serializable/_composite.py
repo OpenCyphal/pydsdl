@@ -63,6 +63,7 @@ class CompositeType(SerializableType):
         fixed_port_id: typing.Optional[int],
         source_file_path: str,
         has_parent_service: bool,
+        doc: str = ""
     ):
         super().__init__()
 
@@ -75,7 +76,7 @@ class CompositeType(SerializableType):
         self._source_file_path = str(source_file_path)
         self._has_parent_service = bool(has_parent_service)
 
-        self.doc = ""
+        self._doc = doc
 
         # Name check
         if not self._name:
@@ -152,6 +153,11 @@ class CompositeType(SerializableType):
     def short_name(self) -> str:
         """The last component of the full name, e.g., ``Heartbeat`` of ``uavcan.node.Heartbeat``."""
         return self.name_components[-1]
+
+    @property
+    def doc(self) -> str:
+        """The last component of the full name, e.g., ``Heartbeat`` of ``uavcan.node.Heartbeat``."""
+        return self._doc
 
     @property
     def full_namespace(self) -> str:
@@ -347,6 +353,7 @@ class UnionType(CompositeType):
         fixed_port_id: typing.Optional[int],
         source_file_path: str,
         has_parent_service: bool,
+        doc: str = ""
     ):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
@@ -358,6 +365,7 @@ class UnionType(CompositeType):
             fixed_port_id=fixed_port_id,
             source_file_path=source_file_path,
             has_parent_service=has_parent_service,
+            doc=doc
         )
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
@@ -504,7 +512,7 @@ class DelimitedType(CompositeType):
 
     _DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
 
-    def __init__(self, inner: CompositeType, extent: int):
+    def __init__(self, inner: CompositeType, extent: int, doc: str = ""):
         self._inner = inner
         super().__init__(
             name=inner.full_name,
@@ -514,6 +522,7 @@ class DelimitedType(CompositeType):
             fixed_port_id=inner.fixed_port_id,
             source_file_path=inner.source_file_path,
             has_parent_service=inner.has_parent_service,
+            doc=doc
         )
         self._extent = int(extent)
         if self._extent % self.alignment_requirement != 0:
@@ -618,7 +627,7 @@ class ServiceType(CompositeType):
     which contain the request and the response structure of the service type, respectively.
     """
 
-    def __init__(self, request: CompositeType, response: CompositeType, fixed_port_id: typing.Optional[int]):
+    def __init__(self, request: CompositeType, response: CompositeType, fixed_port_id: typing.Optional[int], doc: str = ""):
         name = request.full_namespace
         consistent = (
             request.full_name.startswith(name)
@@ -650,6 +659,7 @@ class ServiceType(CompositeType):
             fixed_port_id=fixed_port_id,
             source_file_path=request.source_file_path,
             has_parent_service=False,
+            doc=doc
         )
 
     @property
