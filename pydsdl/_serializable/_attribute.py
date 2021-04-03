@@ -40,7 +40,7 @@ class Attribute(_expression.Any):
 
     @property
     def doc(self) -> str:
-        """Returns the docs for this attribute."""
+        """Docs for this attribute without the leading #."""
         return self._doc
 
     def __hash__(self) -> int:

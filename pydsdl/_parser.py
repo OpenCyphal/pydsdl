@@ -52,7 +52,7 @@ class StatementStreamProcessor:
     processed DSDL definition.
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
-    def on_comment(self, comment: str, last_line_was_empty: bool = False) -> None:
+    def on_comment(self, comment: str) -> None:
         raise NotImplementedError  # pragma: no cover
 
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
@@ -134,6 +134,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         self._statement_stream_processor = statement_stream_processor  # type: StatementStreamProcessor
         self._current_line_number = 1  # Lines are numbered from one
         self._last_line_was_empty = False
+        self._comment = ""
         super().__init__()
 
     @property
@@ -146,7 +147,10 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         return tuple(children) or node
 
     def visit_line(self, node: _Node, children: _Children) -> int:
-        self._last_line_was_empty = len(node.text) == 0
+        if len(node.text) == 0:
+            # Line is empty, flush comment
+            self._statement_stream_processor.on_comment(self._comment)
+            self._comment = ""
 
     def visit_end_of_line(self, _n: _Node, _c: _Children) -> None:
         self._current_line_number += 1
@@ -159,34 +163,41 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
 
     def visit_comment(self, node: _Node, children: _Children) -> None:
         assert isinstance(node.text, str)
-        comment = node.text.lstrip("# ")
-        self._statement_stream_processor.on_comment(comment, self._last_line_was_empty)
+        self._comment += "\n" if self._comment != "" else ""
+        self._comment += node.text[2:] if node.text.startswith("# ") else node.text[1:]
 
     def visit_statement_constant(self, _n: _Node, children: _Children) -> None:
         constant_type, _sp0, name, _sp1, _eq, _sp2, exp = children
         assert isinstance(constant_type, _serializable.SerializableType) and isinstance(name, str) and name
         assert isinstance(exp, _expression.Any)
-        self._last_line_was_empty = False
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         self._statement_stream_processor.on_constant(constant_type, name, exp)
 
     def visit_statement_field(self, _n: _Node, children: _Children) -> None:
         field_type, _space, name = children
         assert isinstance(field_type, _serializable.SerializableType) and isinstance(name, str) and name
-        self._last_line_was_empty = False
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         self._statement_stream_processor.on_field(field_type, name)
 
     def visit_statement_padding_field(self, _n: _Node, children: _Children) -> None:
         void_type = children[0]
         assert isinstance(void_type, _serializable.VoidType)
-        self._last_line_was_empty = False
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         self._statement_stream_processor.on_padding_field(void_type)
 
     def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         self._statement_stream_processor.on_service_response_marker()
 
     def visit_statement_directive_with_expression(self, _n: _Node, children: _Children) -> None:
         _at, name, _space, exp = children
         assert isinstance(name, str) and name and isinstance(exp, _expression.Any)
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         self._statement_stream_processor.on_directive(
             line_number=self.current_line_number, directive_name=name, associated_expression_value=exp
         )
@@ -194,12 +205,16 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
     def visit_statement_directive_without_expression(self, _n: _Node, children: _Children) -> None:
         _at, name = children
         assert isinstance(name, str) and name
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         self._statement_stream_processor.on_directive(
             line_number=self.current_line_number, directive_name=name, associated_expression_value=None
         )
 
     def visit_identifier(self, node: _Node, _c: _Children) -> str:
         assert isinstance(node.text, str) and node.text
+        self._statement_stream_processor.on_comment(self._comment) # flush comment
+        self._comment = ""
         return node.text
 
     # ================================================== Data types ==================================================

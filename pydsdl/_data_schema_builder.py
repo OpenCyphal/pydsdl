@@ -36,11 +36,10 @@ class DataSchemaBuilder:
     def __init__(self) -> None:
         self._fields = []  # type: typing.List[_serializable.Field]
         self._constants = []  # type: typing.List[_serializable.Constant]
-        self._last_attribute = None # type: typing.Optional[_serializable.Attribute]
         self._serialization_mode = None  # type: typing.Optional[SerializationMode]
         self._is_union = False
         self._bit_length_computed_at_least_once = False
-        self.doc = ""
+        self._doc = ""
 
     @property
     def fields(self) -> typing.List[_serializable.Field]:
@@ -58,6 +57,10 @@ class DataSchemaBuilder:
         out += self.fields
         out += self.constants
         return out
+
+    @property
+    def doc(self) -> str:
+        return self._doc
 
     @property
     def serialization_mode(self) -> typing.Optional[SerializationMode]:
@@ -83,7 +86,7 @@ class DataSchemaBuilder:
         return out
 
     def set_comment(self, comment: str) -> None:
-        self.doc = comment
+        self._doc = comment
 
     def add_field(self, field: _serializable.Field) -> None:
         if self.union and self._bit_length_computed_at_least_once:

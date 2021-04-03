@@ -53,10 +53,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._lookup_definitions = list(lookup_definitions)
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
-        self._comment = ""
-        self._last_element_schema_cb = None
-        self._last_element_cb = None
-        self._last_element_args = tuple()
+        self._element_callback = None # type: typing.Callable
 
         assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
@@ -67,7 +64,6 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._is_deprecated = False
 
     def finalize(self) -> _serializable.CompositeType:
-        self._flush_attribute()
         if len(self._structs) == 1:  # Structure type
             (builder,) = self._structs  # type: _data_schema_builder.DataSchemaBuilder,
             out = self._make_composite(
@@ -127,45 +123,41 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                     )
         return out
 
-    def on_comment(self, comment: str, last_line_was_empty: bool = False) -> None:
-        if last_line_was_empty and self._structs[-1].doc == "":
-            # Throw away floating comment blocks (space above)
-            # Flush first
-            self._flush_attribute()
-            if self._structs[-1].doc != "":
-                return
-
-        self._comment += "\n" if self._comment != "" else ""
-        self._comment += comment
+    def on_comment(self, comment: str) -> None:
+        if self._structs[-1].doc == "":
+            # Attach doc to composite type
+            self._structs[-1].set_comment(comment)
+        else:
+            # Flush queued attribute with doc comment
+            self._flush_attribute(comment)
 
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         self._on_attribute()
         self._queue_attribute(
-            self._structs[-1].add_constant,
-            _serializable.Constant,
-            constant_type, name, value
+            lambda doc: self._structs[-1].add_constant(
+                _serializable.Constant(constant_type, name, value, doc)
+            )
         )
 
     def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
         self._on_attribute()
         self._queue_attribute(
-            self._structs[-1].add_field,
-            _serializable.Field,
-            field_type, name
+            lambda doc: self._structs[-1].add_field(
+                _serializable.Field(field_type, name, doc)
+            )
         )
 
     def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
         self._on_attribute()
         self._queue_attribute(
-            self._structs[-1].add_field,
-            _serializable.PaddingField,
-            padding_field_type
+            lambda doc: self._structs[-1].add_field(
+                _serializable.PaddingField(padding_field_type, doc)
+            )
         )
 
     def on_directive(
         self, line_number: int, directive_name: str, associated_expression_value: typing.Optional[_expression.Any]
     ) -> None:
-        self._flush_attribute()
         try:
             handler = {
                 "print": self._on_print_directive,
@@ -185,13 +177,11 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         if len(self._structs) > 1:
             raise _error.InvalidDefinitionError("Duplicated service response marker")
 
-        self._flush_attribute()
         self._structs.append(_data_schema_builder.DataSchemaBuilder())
         assert len(self._structs) == 2
 
     def resolve_top_level_identifier(self, name: str) -> _expression.Any:
         # Look only in the current data structure. The lookup cannot cross the service request/response boundary.
-        self._flush_attribute()
         for c in self._structs[-1].constants:
             if c.name == name:
                 return c.value
@@ -203,7 +193,6 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         raise UndefinedIdentifierError("Undefined identifier: %r" % name)
 
     def resolve_versioned_data_type(self, name: str, version: _serializable.Version) -> _serializable.CompositeType:
-        self._flush_attribute()
         if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in name:
             full_name = name
         else:
@@ -248,30 +237,14 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
 
-    def _queue_attribute(
-        self,
-        data_schema_callback: typing.Callable,
-        element_constructor_class: typing.Callable,
-        *args: typing.Any
-    ) -> None:
-        self._flush_attribute()
-        self._last_element_schema_cb = data_schema_callback
-        self._last_element_cb = element_constructor_class
-        self._last_element_args = args
+    def _queue_attribute(self, element_callback: typing.Callable) -> None:
+        self._flush_attribute("")
+        self._element_callback = element_callback
 
-    def _flush_attribute(self) -> None:
-        if self._structs[-1].doc == "" and self._comment != "":
-            # Add docstring to composite type
-            self._structs[-1].set_comment(self._comment)
-        elif self._last_element_cb:
-            # Add to attribute
-            self._last_element_schema_cb(
-                self._last_element_cb(*self._last_element_args, self._comment)
-            )
-        self._comment = ""
-        self._last_element_schema_cb = None
-        self._last_element_cb = None
-        self._last_element_args = ()
+    def _flush_attribute(self, comment: str) -> None:
+        if self._element_callback is not None:
+            self._element_callback(comment)
+        self._element_callback = None
 
     def _on_attribute(self) -> None:
         if isinstance(self._structs[-1].serialization_mode, _data_schema_builder.DelimitedSerializationMode):
