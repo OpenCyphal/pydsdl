@@ -53,7 +53,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._lookup_definitions = list(lookup_definitions)
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
-        self._element_callback = None # type: typing.Callable[[str], _serializable.Attribute]
+        self._element_callback = None  # type: typing.Optional[typing.Callable[[str], None]]
 
         assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
@@ -134,25 +134,17 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         self._on_attribute()
         self._queue_attribute(
-            lambda doc: self._structs[-1].add_constant(
-                _serializable.Constant(constant_type, name, value, doc)
-            )
+            lambda doc: self._structs[-1].add_constant(_serializable.Constant(constant_type, name, value, doc))
         )
 
     def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
         self._on_attribute()
-        self._queue_attribute(
-            lambda doc: self._structs[-1].add_field(
-                _serializable.Field(field_type, name, doc)
-            )
-        )
+        self._queue_attribute(lambda doc: self._structs[-1].add_field(_serializable.Field(field_type, name, doc)))
 
     def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
         self._on_attribute()
         self._queue_attribute(
-            lambda doc: self._structs[-1].add_field(
-                _serializable.PaddingField(padding_field_type, doc)
-            )
+            lambda doc: self._structs[-1].add_field(_serializable.PaddingField(padding_field_type, doc))
         )
 
     def on_directive(
@@ -237,7 +229,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
 
-    def _queue_attribute(self, element_callback: typing.Callable) -> None:
+    def _queue_attribute(self, element_callback: typing.Callable[[str], None]) -> None:
         self._flush_attribute("")
         self._element_callback = element_callback
 
@@ -341,7 +333,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             fixed_port_id=fixed_port_id,
             source_file_path=source_file_path,
             has_parent_service=has_parent_service,
-            doc=builder.doc
+            doc=builder.doc,
         )  # type: _serializable.CompositeType
         sm = builder.serialization_mode
         if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):

@@ -63,7 +63,7 @@ class CompositeType(SerializableType):
         fixed_port_id: typing.Optional[int],
         source_file_path: str,
         has_parent_service: bool,
-        doc: str = ""
+        doc: str = "",
     ):
         super().__init__()
 
@@ -353,7 +353,7 @@ class UnionType(CompositeType):
         fixed_port_id: typing.Optional[int],
         source_file_path: str,
         has_parent_service: bool,
-        doc: str = ""
+        doc: str = "",
     ):
         # Proxy all parameters directly to the base type - I wish we could do that
         # with kwargs while preserving the type information
@@ -365,7 +365,7 @@ class UnionType(CompositeType):
             fixed_port_id=fixed_port_id,
             source_file_path=source_file_path,
             has_parent_service=has_parent_service,
-            doc=doc
+            doc=doc,
         )
 
         if self.number_of_variants < self.MIN_NUMBER_OF_VARIANTS:
@@ -522,7 +522,7 @@ class DelimitedType(CompositeType):
             fixed_port_id=inner.fixed_port_id,
             source_file_path=inner.source_file_path,
             has_parent_service=inner.has_parent_service,
-            doc=inner.doc
+            doc=inner.doc,
         )
         self._extent = int(extent)
         if self._extent % self.alignment_requirement != 0:
@@ -659,7 +659,7 @@ class ServiceType(CompositeType):
             fixed_port_id=fixed_port_id,
             source_file_path=request.source_file_path,
             has_parent_service=False,
-            doc=request.doc
+            doc=request.doc,
         )
 
     @property

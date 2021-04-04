@@ -52,6 +52,7 @@ class StatementStreamProcessor:
     processed DSDL definition.
     This interface can be used to construct a more abstract intermediate representation of the processed text.
     """
+
     def on_header_comment(self, comment: str) -> None:
         raise NotImplementedError  # pragma: no cover
 
@@ -146,7 +147,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         return self._current_line_number
 
     # Misc. helpers
-    def _flush_comment(self):
+    def _flush_comment(self) -> None:
         if self._comment_is_header:
             self._statement_stream_processor.on_header_comment(self._comment)
         else:
@@ -158,7 +159,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
         """If the node has children, replace the node with them."""
         return tuple(children) or node
 
-    def visit_line(self, node: _Node, children: _Children) -> int:
+    def visit_line(self, node: _Node, children: _Children) -> None:
         if len(node.text) == 0:
             # Line is empty, flush comment
             self._flush_comment()
@@ -198,7 +199,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many
 
     def visit_statement_service_response_marker(self, _n: _Node, _c: _Children) -> None:
         self._flush_comment()
-        self._comment_is_header = True # Allow response header comment
+        self._comment_is_header = True  # Allow response header comment
         self._statement_stream_processor.on_service_response_marker()
 
     def visit_statement_directive_with_expression(self, _n: _Node, children: _Children) -> None:
