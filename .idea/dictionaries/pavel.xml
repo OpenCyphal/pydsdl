@@ -74,6 +74,7 @@
       <w>icmp</w>
       <w>iface</w>
       <w>inaddr</w>
+      <w>incomputable</w>
       <w>intersphinx</w>
       <w>intravehicular</w>
       <w>iscsi</w>
@@ -112,6 +113,7 @@
       <w>norecursedirs</w>
       <w>nosignatures</w>
       <w>noxfile</w>
+      <w>nullary</w>
       <w>octothorp</w>
       <w>onboard</w>
       <w>overgeneral</w>

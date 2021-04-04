@@ -186,7 +186,6 @@ class BitLengthSet:
 def _unittest_bit_length_set() -> None:
     from pytest import raises
 
-    assert not BitLengthSet()
     assert BitLengthSet() == BitLengthSet()
     assert not (BitLengthSet() != BitLengthSet())  # pylint: disable=unneeded-not
     assert BitLengthSet(123) == BitLengthSet([123])
