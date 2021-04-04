@@ -39,6 +39,7 @@ class DataSchemaBuilder:
         self._serialization_mode = None  # type: typing.Optional[SerializationMode]
         self._is_union = False
         self._bit_length_computed_at_least_once = False
+        self._doc = ""
 
     @property
     def fields(self) -> typing.List[_serializable.Field]:
@@ -56,6 +57,10 @@ class DataSchemaBuilder:
         out += self.fields
         out += self.constants
         return out
+
+    @property
+    def doc(self) -> str:
+        return self._doc
 
     @property
     def serialization_mode(self) -> typing.Optional[SerializationMode]:
@@ -79,6 +84,9 @@ class DataSchemaBuilder:
         out = ty.aggregate_bit_length_sets([f.data_type for f in self.fields])  # type: ignore
         assert isinstance(out, _bit_length_set.BitLengthSet) and len(out) > 0
         return out
+
+    def set_comment(self, comment: str) -> None:
+        self._doc = comment
 
     def add_field(self, field: _serializable.Field) -> None:
         if self.union and self._bit_length_computed_at_least_once:

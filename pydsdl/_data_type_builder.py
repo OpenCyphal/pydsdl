@@ -53,6 +53,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._lookup_definitions = list(lookup_definitions)
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
+        self._element_callback = None  # type: typing.Optional[typing.Callable[[str], None]]
 
         assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
@@ -122,17 +123,29 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                     )
         return out
 
+    def on_attribute_comment(self, comment: str) -> None:
+        # Flush queued attribute with doc comment
+        self._flush_attribute(comment)
+
+    def on_header_comment(self, comment: str) -> None:
+        # Attach doc to composite type
+        self._structs[-1].set_comment(comment)
+
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         self._on_attribute()
-        self._structs[-1].add_constant(_serializable.Constant(constant_type, name, value))
+        self._queue_attribute(
+            lambda doc: self._structs[-1].add_constant(_serializable.Constant(constant_type, name, value, doc))
+        )
 
     def on_field(self, field_type: _serializable.SerializableType, name: str) -> None:
         self._on_attribute()
-        self._structs[-1].add_field(_serializable.Field(field_type, name))
+        self._queue_attribute(lambda doc: self._structs[-1].add_field(_serializable.Field(field_type, name, doc)))
 
     def on_padding_field(self, padding_field_type: _serializable.VoidType) -> None:
         self._on_attribute()
-        self._structs[-1].add_field(_serializable.PaddingField(padding_field_type))
+        self._queue_attribute(
+            lambda doc: self._structs[-1].add_field(_serializable.PaddingField(padding_field_type, doc))
+        )
 
     def on_directive(
         self, line_number: int, directive_name: str, associated_expression_value: typing.Optional[_expression.Any]
@@ -215,6 +228,15 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             print_output_handler=self._print_output_handler,
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
+
+    def _queue_attribute(self, element_callback: typing.Callable[[str], None]) -> None:
+        self._flush_attribute("")
+        self._element_callback = element_callback
+
+    def _flush_attribute(self, comment: str) -> None:
+        if self._element_callback is not None:
+            self._element_callback(comment)
+        self._element_callback = None
 
     def _on_attribute(self) -> None:
         if isinstance(self._structs[-1].serialization_mode, _data_schema_builder.DelimitedSerializationMode):
@@ -311,6 +333,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             fixed_port_id=fixed_port_id,
             source_file_path=source_file_path,
             has_parent_service=has_parent_service,
+            doc=builder.doc,
         )  # type: _serializable.CompositeType
         sm = builder.serialization_mode
         if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):
@@ -327,6 +350,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 "`@extent %d * 8`"
                 % (inner.short_name, inner.extent, inner.extent // 8, DataTypeBuilder._suggest_extent_in_bytes(inner))
             )
+
         return out
 
     @staticmethod

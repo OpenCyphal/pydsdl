@@ -18,9 +18,10 @@ class InvalidTypeError(TypeParameterError):
 
 
 class Attribute(_expression.Any):
-    def __init__(self, data_type: SerializableType, name: str):
+    def __init__(self, data_type: SerializableType, name: str, doc: str = ""):
         self._data_type = data_type
         self._name = str(name)
+        self._doc = str(doc)
 
         if isinstance(data_type, VoidType):
             if self._name:
@@ -36,6 +37,11 @@ class Attribute(_expression.Any):
     def name(self) -> str:
         """For padding fields this is an empty string."""
         return self._name
+
+    @property
+    def doc(self) -> str:
+        """Docs for this attribute without the leading #."""
+        return self._doc
 
     def __hash__(self) -> int:
         return hash((self._data_type, self._name))
@@ -58,16 +64,16 @@ class Field(Attribute):
 
 
 class PaddingField(Field):
-    def __init__(self, data_type: VoidType):
+    def __init__(self, data_type: VoidType, doc: str = ""):
         if not isinstance(data_type, VoidType):
             raise TypeParameterError("Padding fields must be of the void type")
 
-        super().__init__(data_type, "")
+        super().__init__(data_type, "", doc)
 
 
 class Constant(Attribute):
-    def __init__(self, data_type: SerializableType, name: str, value: _expression.Any):
-        super().__init__(data_type, name)
+    def __init__(self, data_type: SerializableType, name: str, value: _expression.Any, doc: str = ""):
+        super().__init__(data_type, name, doc)
 
         if not isinstance(value, _expression.Primitive):
             raise InvalidConstantValueError("The constant value must be a primitive expression value")
