@@ -295,6 +295,119 @@ def _unittest_simple() -> None:
     assert str(p.fields[2]) == "saturated bool[<=255] c"
 
 
+@_in_n_out
+def _unittest_comments() -> None:
+    abc = _define(
+        "vendor/nested/7000.Abc.1.2.uavcan",
+        dedent(
+            """\
+        # header comment here
+        # multiline
+
+        # this should be ignored
+
+        uint8 CHARACTER = '#' # comment on constant
+        int8 a # comment on field
+        int8 aprime
+        @assert 1 == 1 # toss one in for confusion
+        void2 # comment on padding field
+        saturated int64[<33] b
+        # comment on array
+        # and another
+        @extent 1024 * 8
+        """
+        ),
+    )
+
+    p = _parse_definition(abc, [])
+    print("Parsed:", p)
+    print(p.doc.__repr__())
+    # assert p.doc == "header comment here\nmultiline"
+    assert p.constants[0].doc == "comment on constant"
+    assert p.fields[0].doc == "comment on field"
+    assert p.fields[2].doc == "comment on padding field"
+    assert p.fields[3].doc == "comment on array\nand another"
+
+    empty_new = _define("vendor/nested/Empty.255.255.uavcan", """@sealed""")
+
+    empty_old = _define("vendor/nested/Empty.255.254.uavcan", """@sealed""")
+
+    constants = _define(
+        "another/Constants.5.0.uavcan",
+        dedent(
+            """
+        @sealed
+        float64 PI = 3.1415926535897932384626433 # no header comment
+        """
+        ),
+    )
+
+    p = _parse_definition(constants, [])
+    assert p.doc == ""
+    assert p.constants[0].doc == "no header comment"
+
+    service = _define(
+        "another/300.Service.0.1.uavcan",
+        dedent(
+            """\
+        # first header comment here
+        # multiline
+        @union
+        @deprecated
+        vendor.nested.Empty.255.255 new_empty_implicit
+        vendor.nested.Empty.255.255 new_empty_explicit
+        vendor.nested.Empty.255.254 old_empty
+        @extent 32 # make sure no leaks
+        -----------------------------------
+        # second header comment here
+        # multiline
+        @sealed                      # RESPONSE SEALED REQUEST NOT
+        Constants.5.0 constants      # RELATIVE REFERENCE
+        vendor.nested.Abc.1.2 abc
+        """
+        ),
+    )
+
+    p = _parse_definition(
+        service,
+        [
+            abc,
+            empty_new,
+            empty_old,
+            constants,
+        ],
+    )
+    print("Parsed:", p)
+    req, res = [x.data_type for x in p.fields]
+    assert req.doc == "first header comment here\nmultiline"  # type: ignore
+    assert res.doc == "second header comment here\nmultiline"  # type: ignore
+
+    union = _define(
+        "another/Union.5.9.uavcan",
+        dedent(
+            """
+        @union
+        # sandwiched comment has no effect
+        @sealed
+        truncated float16 PI = 3.1415926535897932384626433
+        uint8 a
+        vendor.nested.Empty.255.255[5] b
+        saturated bool [ <= 255 ] c
+        """
+        ),
+    )
+
+    p = _parse_definition(
+        union,
+        [
+            empty_old,
+            empty_new,
+        ],
+    )
+
+    assert p.constants[0].doc == ""
+
+
 # noinspection PyProtectedMember,PyProtectedMember
 @_in_n_out
 def _unittest_error() -> None:
