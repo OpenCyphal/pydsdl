@@ -512,7 +512,7 @@ class DelimitedType(CompositeType):
 
     _DEFAULT_DELIMITER_HEADER_BIT_LENGTH = 32
 
-    def __init__(self, inner: CompositeType, extent: int, doc: str = ""):
+    def __init__(self, inner: CompositeType, extent: int):
         self._inner = inner
         super().__init__(
             name=inner.full_name,
@@ -522,7 +522,7 @@ class DelimitedType(CompositeType):
             fixed_port_id=inner.fixed_port_id,
             source_file_path=inner.source_file_path,
             has_parent_service=inner.has_parent_service,
-            doc=doc
+            doc=inner.doc
         )
         self._extent = int(extent)
         if self._extent % self.alignment_requirement != 0:

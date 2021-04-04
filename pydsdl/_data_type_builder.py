@@ -53,7 +53,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         self._lookup_definitions = list(lookup_definitions)
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
-        self._element_callback = None # type: typing.Callable
+        self._element_callback = None # type: typing.Callable[[str], _serializable.Attribute]
 
         assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
@@ -123,13 +123,13 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                     )
         return out
 
-    def on_comment(self, comment: str) -> None:
-        if self._structs[-1].doc == "":
-            # Attach doc to composite type
-            self._structs[-1].set_comment(comment)
-        else:
-            # Flush queued attribute with doc comment
-            self._flush_attribute(comment)
+    def on_attribute_comment(self, comment: str) -> None:
+        # Flush queued attribute with doc comment
+        self._flush_attribute(comment)
+
+    def on_header_comment(self, comment: str) -> None:
+        # Attach doc to composite type
+        self._structs[-1].set_comment(comment)
 
     def on_constant(self, constant_type: _serializable.SerializableType, name: str, value: _expression.Any) -> None:
         self._on_attribute()
@@ -345,7 +345,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         )  # type: _serializable.CompositeType
         sm = builder.serialization_mode
         if isinstance(sm, _data_schema_builder.DelimitedSerializationMode):
-            out = _serializable.DelimitedType(inner, extent=sm.extent, doc=builder.doc)  # type: _serializable.CompositeType
+            out = _serializable.DelimitedType(inner, extent=sm.extent)  # type: _serializable.CompositeType
             _logger.debug("%r wrapped into %r", inner, out)
         elif isinstance(sm, _data_schema_builder.SealedSerializationMode):
             out = inner
