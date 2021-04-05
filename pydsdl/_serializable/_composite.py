@@ -1155,7 +1155,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
             ),
             (
                 "x",
-                {  # The lone "+2" is for the variable-length array's implicit length field
+                {  # The lone "+8" is for the variable-length array's implicit length field
                     # First length option of z
                     a_bls_padded[0] + 8 + a_bls_padded[0] * 0,  # suka
                     a_bls_padded[0] + 8 + a_bls_padded[1] * 0,

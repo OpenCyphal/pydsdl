@@ -5,6 +5,7 @@
 import abc
 import math
 import typing
+import logging
 import itertools
 
 
@@ -244,6 +245,7 @@ class UnionOperator(Operator):
 class MemoizationOperator(Operator):
     """
     This is a no-op transparent lazy cache on top of the child operator.
+    It also logs a stack trace if the child takes too long to expand to help with bottleneck optimization.
     """
 
     def __init__(self, child: Operator) -> None:
@@ -274,7 +276,27 @@ class MemoizationOperator(Operator):
 
     def expand(self) -> typing.Set[int]:
         if self._expansion is None:
+            from time import monotonic
+
+            # Track the time and log occurrences that take a long time to help find bottlenecks in user code
+            # that accidentally relies on numerical expansion. This is mainly intended to help us transition
+            # Nunavut to the new solver API instead of numerical methods. It may be removed later.
+            started_at = monotonic()
             self._expansion = set(self._child.expand())
+            elapsed = monotonic() - started_at
+            if elapsed > 2.0:
+                _logger.info(
+                    "Numerical expansion took %.1f seconds; the result contains %d items:\n%s",
+                    elapsed,
+                    len(self._expansion),
+                    self._child,
+                )
+
+            # Since we did an expansion anyway, the set must be compact,
+            # so we use this opportunity to validate the correctness of the solver.
+            # This may be removed easily since it has no visible effects.
+            validate_numerically(self)
+
         return self._expansion
 
     def __repr__(self) -> str:
@@ -293,3 +315,6 @@ def validate_numerically(op: Operator) -> None:
     assert max(s) == op.max
     for div in range(1, 65):
         assert set(op.modulo(div)) == {x % div for x in s}
+
+
+_logger = logging.getLogger(__name__)
