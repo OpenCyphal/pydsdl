@@ -89,10 +89,15 @@ class BitLengthSet:
     def fixed_length(self) -> bool:
         """
         Shorthand for ``self.min == self.max``.
+
+        >>> BitLengthSet(8).repeat(1).fixed_length
+        True
+        >>> BitLengthSet(8).repeat_range(1).fixed_length
+        False
         """
         return self.min == self.max
 
-    def __mod__(self, divisor: typing.Any) -> typing.Iterable[int]:
+    def __mod__(self, divisor: int) -> typing.Iterable[int]:
         """
         Elementwise modulus derived analytically.
 
@@ -101,10 +106,8 @@ class BitLengthSet:
         >>> sorted(BitLengthSet([8, 12, 16]) % 8)
         [0, 4]
         """
-        if isinstance(divisor, int):
-            # The type is reported as iterable[int], not sure yet if we should specialize it further. Time will tell.
-            return BitLengthSet(self._op.modulo(divisor))
-        return NotImplemented
+        # The type is reported as iterable[int], not sure yet if we should specialize it further. Time will tell.
+        return BitLengthSet(self._op.modulo(int(divisor)))
 
     # ========================================  COMPOSITION METHODS  ========================================
 
@@ -300,7 +303,7 @@ class BitLengthSet:
 
     # ========================================  DEPRECATED METHODS   ========================================
 
-    def elementwise_sum_k_multicombinations(self, k: int) -> "BitLengthSet":
+    def elementwise_sum_k_multicombinations(self, k: int) -> "BitLengthSet":  # pragma: no cover
         """
         :meta private:
         """
@@ -310,7 +313,7 @@ class BitLengthSet:
     @staticmethod
     def elementwise_sum_cartesian_product(
         sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]
-    ) -> "BitLengthSet":
+    ) -> "BitLengthSet":  # pragma: no cover
         """
         :meta private:
         """

@@ -9,6 +9,8 @@ from ._symbolic import NullaryOperator, validate_numerically
 
 
 def _unittest_nullary() -> None:
+    import pytest
+
     op = NullaryOperator([0])
     assert set(op.expand()) == {0}
     assert set(op.modulo(12345)) == {0}
@@ -20,6 +22,9 @@ def _unittest_nullary() -> None:
     assert set(op.modulo(4)) == {0, 1, 2, 3}
     assert (op.min, op.max) == (1, 8)
     validate_numerically(op)
+
+    with pytest.raises(ValueError):
+        NullaryOperator([])
 
 
 def _unittest_padding() -> None:
@@ -54,6 +59,7 @@ def _unittest_padding() -> None:
 
 
 def _unittest_concatenation() -> None:
+    import pytest
     from ._symbolic import ConcatenationOperator
 
     op = ConcatenationOperator(
@@ -120,6 +126,9 @@ def _unittest_concatenation() -> None:
         div = random.randint(1, 64)
         assert set(op.modulo(div)) == {x % div for x in op.expand()}
         validate_numerically(op)
+
+    with pytest.raises(ValueError):
+        ConcatenationOperator([])
 
 
 def _unittest_repetition() -> None:
@@ -204,6 +213,7 @@ def _unittest_range_repetition() -> None:
 
 
 def _unittest_union() -> None:
+    import pytest
     from ._symbolic import UnionOperator
 
     op = UnionOperator(
@@ -240,6 +250,9 @@ def _unittest_union() -> None:
             ]
         )
         validate_numerically(op)
+
+    with pytest.raises(ValueError):
+        UnionOperator([])
 
 
 def _unittest_repr() -> None:
