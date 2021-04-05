@@ -4,7 +4,6 @@
 
 import typing
 import warnings
-import itertools
 from ._symbolic import Operator, NullaryOperator, MemoizationOperator
 
 
@@ -19,9 +18,11 @@ class BitLengthSet:
     There are several methods that trigger numerical expansion of the solution;
     due to the aforementioned combinatorial difficulties, they may be effectively incomputable in reasonable time,
     so production systems should not rely on them.
+
+    Instances are guaranteed to be immutable.
     """
 
-    def __init__(self, value: typing.Union[typing.Iterable[int], int, Operator, "BitLengthSet"] = 0):
+    def __init__(self, value: typing.Union[typing.Iterable[int], int, Operator, "BitLengthSet"]):
         """
         Accepts any iterable that yields integers (like another bit length set) or a single integer.
         """
@@ -46,7 +47,7 @@ class BitLengthSet:
         False
         >>> BitLengthSet(48).is_aligned_at(16)
         True
-        >>> BitLengthSet().is_aligned_at(1234567)
+        >>> BitLengthSet(0).is_aligned_at(1234567)
         True
         """
         return set(self % bit_length) == {0}
@@ -95,7 +96,7 @@ class BitLengthSet:
         """
         Elementwise modulus derived analytically.
 
-        >>> sorted(BitLengthSet([]) % 12345)  # Empty set, always zero.
+        >>> sorted(BitLengthSet([0]) % 12345)
         [0]
         >>> sorted(BitLengthSet([8, 12, 16]) % 8)
         [0, 4]
@@ -126,7 +127,10 @@ class BitLengthSet:
         """
         Construct a new bit length set expression that repeats the current one the specified number of times.
         This reflects the arrangement of fixed-length DSDL array elements.
+        This is a special case of :meth:`concatenate`.
 
+        >>> sorted(BitLengthSet(1).repeat(0))
+        [0]
         >>> sorted(BitLengthSet(1).repeat(1))
         [1]
         >>> sorted(BitLengthSet({1, 2, 3}).repeat(1))
@@ -138,14 +142,16 @@ class BitLengthSet:
 
         return BitLengthSet(RepetitionOperator(self._op, k))
 
-    def repeat_range(self, k: int) -> "BitLengthSet":
+    def repeat_range(self, k_max: int) -> "BitLengthSet":
         """
+        This is like :meth:`repeat` but ``k`` spans the range ``[0, k_max]``.
+
         >>> sorted(BitLengthSet({1, 2, 3}).repeat_range(2))
         [0, 1, 2, 3, 4, 5, 6]
         """
         from ._symbolic import RangeRepetitionOperator
 
-        return BitLengthSet(RangeRepetitionOperator(self._op, k))
+        return BitLengthSet(RangeRepetitionOperator(self._op, k_max))
 
     @staticmethod
     def concatenate(sets: typing.Iterable[typing.Union["BitLengthSet", typing.Iterable[int], int]]) -> "BitLengthSet":
@@ -189,7 +195,7 @@ class BitLengthSet:
         One can easily see that if the argument is a set of one value (or a scalar),
         this method will result in the addition of said scalar to every element of the original set.
 
-        >>> sorted(BitLengthSet() + BitLengthSet())
+        >>> sorted(BitLengthSet(0) + BitLengthSet(0))
         [0]
         >>> sorted(BitLengthSet(4) + BitLengthSet(3))
         [7]
@@ -215,7 +221,7 @@ class BitLengthSet:
         """
         A shorthand for ``unite([self, other])``.
 
-        >>> a = BitLengthSet()
+        >>> a = BitLengthSet(0)
         >>> a = a | BitLengthSet({1, 2, 3})
         >>> sorted(a)
         [0, 1, 2, 3]
@@ -313,18 +319,18 @@ class BitLengthSet:
 def _unittest_bit_length_set() -> None:
     from pytest import raises
 
-    assert BitLengthSet() == BitLengthSet()
-    assert not (BitLengthSet() != BitLengthSet())  # pylint: disable=unneeded-not
+    assert BitLengthSet(0) == BitLengthSet(0)
+    assert not (BitLengthSet(0) != BitLengthSet(0))  # pylint: disable=unneeded-not
     assert BitLengthSet(123) == BitLengthSet([123])
     assert BitLengthSet(123) != BitLengthSet(124)
     assert BitLengthSet(123) == 123
     assert BitLengthSet(123) != 124
     assert not (BitLengthSet(123) == "123")  # pylint: disable=unneeded-not
-    assert str(BitLengthSet()) == "{0}"
+    assert str(BitLengthSet(0)) == "{0}"
     assert str(BitLengthSet(123)) == "{123}"
     assert str(BitLengthSet((123, 0, 456, 12))) == "{0,12,123,456}"  # Always sorted!
-    assert BitLengthSet().is_aligned_at(1)
-    assert BitLengthSet().is_aligned_at(1024)
+    assert BitLengthSet(0).is_aligned_at(1)
+    assert BitLengthSet(0).is_aligned_at(1024)
     assert BitLengthSet(8).is_aligned_at_byte()
     assert not BitLengthSet(8).is_aligned_at(16)
 
@@ -334,7 +340,7 @@ def _unittest_bit_length_set() -> None:
     s = s + {0, 4, 8}
     assert s == {8, 16, 12, 20, 24}
 
-    assert BitLengthSet() + BitLengthSet() == BitLengthSet()
+    assert BitLengthSet(0) + BitLengthSet(0) == BitLengthSet(0)
     assert BitLengthSet(4) + BitLengthSet(3) == {7}
     assert BitLengthSet({4, 91}) + 3 == {7, 94}
     assert BitLengthSet(7) + {12, 15} == {19, 22}

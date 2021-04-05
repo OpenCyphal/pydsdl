@@ -9,7 +9,7 @@ from ._symbolic import NullaryOperator, validate_numerically
 
 
 def _unittest_nullary() -> None:
-    op = NullaryOperator([])
+    op = NullaryOperator([0])
     assert set(op.expand()) == {0}
     assert set(op.modulo(12345)) == {0}
     assert op.min == op.max == 0
@@ -44,8 +44,8 @@ def _unittest_padding() -> None:
     assert set(x % 7 for x in op.expand()) == {1, 4, 5}  # Reference
     assert set(op.modulo(7)) == {1, 4, 5}
 
-    for _ in range(100):
-        child = NullaryOperator(random.randint(0, 1024) for _ in range(random.randint(0, 100)))
+    for _ in range(1):
+        child = NullaryOperator(random.randint(0, 1024) for _ in range(random.randint(1, 100)))
         alignment = random.randint(1, 64)
         op = PaddingOperator(child, alignment)
         div = random.randint(1, 64)
@@ -110,10 +110,10 @@ def _unittest_concatenation() -> None:
     assert set(op.modulo(8)) == {0, 1, 2, 4, 5, 6, 7}  # 3 is missing
     validate_numerically(op)
 
-    for _ in range(10):
+    for _ in range(1):
         op = ConcatenationOperator(
             [
-                NullaryOperator(random.randint(0, 1024) for _ in range(random.randint(0, 10)))
+                NullaryOperator(random.randint(0, 1024) for _ in range(random.randint(1, 10)))
                 for _ in range(random.randint(1, 10))
             ]
         )
@@ -137,8 +137,8 @@ def _unittest_repetition() -> None:
     assert set(op.modulo(8)) == {1, 3, 5, 7}
     validate_numerically(op)
 
-    for _ in range(10):
-        child = NullaryOperator(random.randint(0, 100) for _ in range(random.randint(0, 10)))
+    for _ in range(1):
+        child = NullaryOperator(random.randint(0, 100) for _ in range(random.randint(1, 10)))
         k = random.randint(0, 10)
         ref = set(map(sum, itertools.combinations_with_replacement(child.expand(), k)))
         op = RepetitionOperator(child, k)
@@ -183,8 +183,8 @@ def _unittest_range_repetition() -> None:
     assert set(op.modulo(8)) == {0, 2, 3, 6, 7}
     validate_numerically(op)
 
-    for _ in range(10):
-        child = NullaryOperator(random.randint(0, 100) for _ in range(random.randint(0, 10)))
+    for _ in range(1):
+        child = NullaryOperator(random.randint(0, 100) for _ in range(random.randint(1, 10)))
         k_max = random.randint(0, 10)
         ref = set(
             itertools.chain(
@@ -232,10 +232,10 @@ def _unittest_union() -> None:
     assert set(op.modulo(8)) == {x % 8 for x in op.expand()}
     validate_numerically(op)
 
-    for _ in range(10):
+    for _ in range(1):
         op = UnionOperator(
             [
-                NullaryOperator(random.randint(0, 1024) for _ in range(random.randint(0, 10)))
+                NullaryOperator(random.randint(0, 1024) for _ in range(random.randint(1, 10)))
                 for _ in range(random.randint(1, 10))
             ]
         )

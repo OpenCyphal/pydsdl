@@ -180,9 +180,9 @@ class CompositeType(SerializableType):
         The amount of memory, in bits, that needs to be allocated in order to store a serialized representation of
         this type or any of its minor versions under the same major version.
         This value is always at least as large as the sum of maximum bit lengths of all fields padded to one byte.
-        If the type is sealed, its extent equals ``max(bit_length_set)``.
+        If the type is sealed, its extent equals ``bit_length_set.max``.
         """
-        return max(self.bit_length_set or {0})
+        return self.bit_length_set.max
 
     @property
     def bit_length_set(self) -> BitLengthSet:
@@ -291,9 +291,6 @@ class CompositeType(SerializableType):
             The base offset will be implicitly padded out to :attr:`alignment_requirement`.
 
         :return: A generator of ``(Field, BitLengthSet)``.
-            Each instance of :class:`pydsdl.BitLengthSet` yielded by the generator is a dedicated copy,
-            meaning that the consumer can mutate the returned instances arbitrarily without affecting future values.
-            It is guaranteed that each yielded instance is non-empty.
         """
         raise NotImplementedError
 
@@ -381,16 +378,13 @@ class UnionType(CompositeType):
             self._compute_tag_bit_length([x.data_type for x in self.fields]), PrimitiveType.CastMode.TRUNCATED
         )
 
+        self._bls = self.aggregate_bit_length_sets(
+            [f.data_type for f in self.fields],
+        ).pad_to_alignment(self.alignment_requirement)
+
     @property
     def bit_length_set(self) -> BitLengthSet:
-        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
-        att = "_8579621435"
-        if not hasattr(self, att):
-            agr = self.aggregate_bit_length_sets
-            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
-        out = getattr(self, att)
-        assert isinstance(out, BitLengthSet)
-        return out
+        return self._bls
 
     @property
     def number_of_variants(self) -> int:
@@ -408,11 +402,13 @@ class UnionType(CompositeType):
         self, base_offset: typing.Optional[BitLengthSet] = None
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
-        base_offset = BitLengthSet(base_offset or {0}).pad_to_alignment(self.alignment_requirement)
-        base_offset += self.tag_field_type.bit_length
+        offset = (
+            BitLengthSet(base_offset or {0}).pad_to_alignment(self.alignment_requirement)
+            + self.tag_field_type.bit_length
+        )
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
-            assert base_offset.is_aligned_at(f.data_type.alignment_requirement)
-            yield f, BitLengthSet(base_offset)  # We yield a copy of the offset to prevent mutation
+            assert offset.is_aligned_at(f.data_type.alignment_requirement)
+            yield f, offset
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
@@ -436,11 +432,7 @@ class UnionType(CompositeType):
             return BitLengthSet(ms[0])
 
         tbl = UnionType._compute_tag_bit_length(field_types)
-        out = BitLengthSet()
-        for s in ms:
-            out |= s + tbl
-        assert len(out) > 0, "Empty sets forbidden"
-        return out
+        return tbl + BitLengthSet.unite(ms)
 
     @staticmethod
     def _compute_tag_bit_length(field_types: typing.Sequence[SerializableType]) -> int:
@@ -459,38 +451,55 @@ class StructureType(CompositeType):
     A message type that is NOT marked ``@union``.
     """
 
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        name: str,
+        version: Version,
+        attributes: typing.Iterable[Attribute],
+        deprecated: bool,
+        fixed_port_id: typing.Optional[int],
+        source_file_path: str,
+        has_parent_service: bool,
+        doc: str = "",
+    ):
+        super().__init__(
+            name=name,
+            version=version,
+            attributes=attributes,
+            deprecated=deprecated,
+            fixed_port_id=fixed_port_id,
+            source_file_path=source_file_path,
+            has_parent_service=has_parent_service,
+            doc=doc,
+        )
+        self._bls = self.aggregate_bit_length_sets(
+            [f.data_type for f in self.fields],
+        ).pad_to_alignment(self.alignment_requirement)
+
     def iterate_fields_with_offsets(
         self, base_offset: typing.Optional[BitLengthSet] = None
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
-        base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
+        offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
         for f in self.fields:
-            base_offset = base_offset.pad_to_alignment(f.data_type.alignment_requirement)
-            yield f, BitLengthSet(base_offset)  # We yield a copy of the offset to prevent mutation
-            base_offset += f.data_type.bit_length_set
+            offset = offset.pad_to_alignment(f.data_type.alignment_requirement)
+            yield f, offset
+            offset = offset + f.data_type.bit_length_set
 
     @property
     def bit_length_set(self) -> BitLengthSet:
-        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
-        att = "_7953874601"
-        if not hasattr(self, att):
-            agr = self.aggregate_bit_length_sets
-            setattr(self, att, agr([f.data_type for f in self.fields]).pad_to_alignment(self.alignment_requirement))
-        out = getattr(self, att)
-        assert isinstance(out, BitLengthSet)
-        return out
+        return self._bls
 
     @staticmethod
     def aggregate_bit_length_sets(field_types: typing.Sequence[SerializableType]) -> BitLengthSet:
         """
         Computes the bit length set for a structure type given the type of each of its fields.
-        The final padding is not applied.
+        The final padding is not applied (but inter-field padding obviously is).
         """
-        bls = BitLengthSet()
-        for t in field_types:
-            bls = bls.pad_to_alignment(t.alignment_requirement)
-            bls += t.bit_length_set
-        return bls or BitLengthSet(0)  # Empty bit length sets are forbidden
+        bls = field_types[0].bit_length_set if len(field_types) > 0 else BitLengthSet(0)
+        for t in field_types[1:]:
+            bls = bls.pad_to_alignment(t.alignment_requirement) + t.bit_length_set
+        return bls
 
 
 class DelimitedType(CompositeType):
@@ -544,15 +553,16 @@ class DelimitedType(CompositeType):
             delimiter_header_bit_length, UnsignedIntegerType.CastMode.TRUNCATED
         )
 
+        self._bls = self.delimiter_header_type.bit_length + BitLengthSet(self.alignment_requirement).repeat_range(
+            self._extent // self.alignment_requirement
+        )
+
         assert self.extent % self.BITS_PER_BYTE == 0
         assert self.extent % self.alignment_requirement == 0
         assert self.extent >= self.inner_type.extent
-        assert len(self.bit_length_set) > 0
         assert self.bit_length_set.is_aligned_at_byte()
         assert self.bit_length_set.is_aligned_at(self.alignment_requirement)
-        assert (
-            not self.bit_length_set or self.extent >= max(self.bit_length_set) - self.delimiter_header_type.bit_length
-        )
+        assert self.extent >= (self.bit_length_set.max - self.delimiter_header_type.bit_length)
         assert self.has_parent_service == inner.has_parent_service
 
     @property
@@ -585,17 +595,7 @@ class DelimitedType(CompositeType):
         For example, a type that contains a single field of type ``uint32[2]`` would have the bit length set of
         ``{h, h+8, h+16, ..., h+56, h+64}`` where ``h`` is the length of the delimiter header.
         """
-        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
-        att = "_3476583631"
-        if not hasattr(self, att):
-            x = (
-                BitLengthSet(range(self.extent + 1)).pad_to_alignment(self.alignment_requirement)
-                + self.delimiter_header_type.bit_length
-            )
-            setattr(self, att, x)
-        out = getattr(self, att)
-        assert isinstance(out, BitLengthSet)
-        return out
+        return self._bls
 
     @property
     def delimiter_header_type(self) -> UnsignedIntegerType:
@@ -864,6 +864,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     assert u.bit_length_set == {24}
     assert u.extent == 24
     assert DelimitedType(u, 40).extent == 40
+    assert set(DelimitedType(u, 40).bit_length_set) == {32, 40, 48, 56, 64, 72}
     assert DelimitedType(u, 40).bit_length_set == {32, 40, 48, 56, 64, 72}
     assert DelimitedType(u, 24).extent == 24
     assert DelimitedType(u, 24).bit_length_set == {32, 40, 48, 56}
@@ -1191,9 +1192,9 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
     )
 
     # Ensuring the equivalency between bit length and aligned bit offset
-    b_offset = BitLengthSet()
+    b_offset = BitLengthSet(0)
     for f in b.fields:
-        b_offset += f.data_type.bit_length_set
+        b_offset = b_offset + f.data_type.bit_length_set
     print("b_offset:", b_offset)
     assert b_offset.pad_to_alignment(8) == b.bit_length_set
     assert not b_offset.is_aligned_at_byte()

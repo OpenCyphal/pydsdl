@@ -51,7 +51,9 @@ class NullaryOperator(Operator):
     """
 
     def __init__(self, values: typing.Iterable[int]) -> None:
-        self._value = set(values) or {0}
+        self._value = set(values)
+        if not self._value:
+            raise ValueError("A bit length set cannot be empty. Did you mean to pass {0}?")
         for x in self._value:
             if not isinstance(x, int):
                 raise TypeError("Invalid element for nullary set operator: %r" % x)

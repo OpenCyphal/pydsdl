@@ -59,16 +59,12 @@ class ArrayType(SerializableType):
 class FixedLengthArrayType(ArrayType):
     def __init__(self, element_type: SerializableType, capacity: int):
         super().__init__(element_type, capacity)
+        self._bls = self.element_type.bit_length_set.repeat(self.capacity)
+        assert self._bls.is_aligned_at(self.alignment_requirement)
 
     @property
     def bit_length_set(self) -> BitLengthSet:
-        # This can be further generalized as a Cartesian product of the element type's bit length set taken N times,
-        # where N is the capacity of the array. However, we avoid such generalization because it leads to a mild
-        # combinatorial explosion even with small arrays, resorting to this special case instead. The difference in
-        # performance measured on the standard data type set was about tenfold.
-        return self.element_type.bit_length_set.elementwise_sum_k_multicombinations(self.capacity).pad_to_alignment(
-            self.alignment_requirement
-        )
+        return self._bls
 
     def enumerate_elements_with_offsets(
         self, base_offset: typing.Optional[BitLengthSet] = None
@@ -85,18 +81,10 @@ class FixedLengthArrayType(ArrayType):
             of the array element (zero-based) and its offset as a bit length set.
         """
         base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
-        _self_test_base_offset = BitLengthSet(0)
         for index in range(self.capacity):
-            assert base_offset.is_aligned_at(
-                self.element_type.alignment_requirement
-            ), "The bit length set of the element type computed incorrectly: length % alignment = 0 does not hold."
-            yield index, BitLengthSet(base_offset)  # We yield a copy of the offset to prevent mutation
-            base_offset += self.element_type.bit_length_set
-
-            # This is only for ensuring that the logic is functioning as intended.
-            # Combinatorial transformations are easy to mess up, so we have to employ defensive programming.
-            assert self.element_type.bit_length_set.elementwise_sum_k_multicombinations(index) == _self_test_base_offset
-            _self_test_base_offset += self.element_type.bit_length_set
+            offset = base_offset + self.element_type.bit_length_set.repeat(index)
+            assert offset.is_aligned_at(self.element_type.alignment_requirement)
+            yield index, offset
 
     def __str__(self) -> str:
         return "%s[%d]" % (self.element_type, self.capacity)
@@ -151,16 +139,13 @@ class VariableLengthArrayType(ArrayType):
 
         self._length_field_type = UnsignedIntegerType(length_field_length, PrimitiveType.CastMode.TRUNCATED)
 
+        self._bls = self.length_field_type.bit_length + self.element_type.bit_length_set.repeat_range(self.capacity)
+        assert self._bls.is_aligned_at(self.alignment_requirement)
+
     @property
     def bit_length_set(self) -> BitLengthSet:
-        # Can't use @cached_property because it is unavailable before Python 3.8 and it breaks Sphinx and MyPy.
-        # Caching is important because bit length set derivation is a very expensive operation.
-        att = "_8467150963"
-        if not hasattr(self, att):
-            setattr(self, att, self._compute_bit_length_set())
-        out = getattr(self, att)
-        assert isinstance(out, BitLengthSet)
-        return out
+        assert self._bls.is_aligned_at(self.alignment_requirement)
+        return self._bls
 
     @property
     def string_like(self) -> bool:
@@ -176,16 +161,6 @@ class VariableLengthArrayType(ArrayType):
         """
         assert self._length_field_type.bit_length % self.element_type.alignment_requirement == 0
         return self._length_field_type
-
-    def _compute_bit_length_set(self) -> BitLengthSet:
-        # Please refer to the corresponding implementation for the fixed-length array.
-        # The idea here is that we treat the variable-length array as a combination of fixed-length arrays of
-        # different sizes, from zero elements up to the maximum number of elements.
-        output = BitLengthSet()
-        for capacity in range(self.capacity + 1):
-            output |= self.element_type.bit_length_set.elementwise_sum_k_multicombinations(capacity)
-        output += self.length_field_type.bit_length
-        return output.pad_to_alignment(self.alignment_requirement)
 
     def __str__(self) -> str:
         return "%s[<=%d]" % (self.element_type, self.capacity)
