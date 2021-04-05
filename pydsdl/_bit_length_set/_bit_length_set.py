@@ -271,7 +271,9 @@ class BitLengthSet:
         >>> len(BitLengthSet([1, 2, 3]))
         3
         """
-        return len(self._op.expand())
+        exp = self._op.expand()
+        assert isinstance(exp, set)  # We know that memoization and nullary operators return sets.
+        return len(exp)
 
     def __eq__(self, other: typing.Any) -> bool:
         """
@@ -347,16 +349,16 @@ def _unittest_bit_length_set() -> None:
     assert {1, 2, 3} + BitLengthSet([4, 5, 6]) == {5, 6, 7, 8, 9}
 
     with raises(TypeError):
-        assert BitLengthSet([4, 5, 6]) + "a"
+        assert BitLengthSet([4, 5, 6]) + "a"  # type: ignore
 
     with raises(TypeError):
-        assert "a" + BitLengthSet([4, 5, 6])
+        assert "a" + BitLengthSet([4, 5, 6])  # type: ignore
 
     with raises(TypeError):
-        assert "a" | BitLengthSet([4, 5, 6])
+        assert "a" | BitLengthSet([4, 5, 6])  # type: ignore
 
     with raises(TypeError):
-        assert BitLengthSet([4, 5, 6]) | "a"
+        assert BitLengthSet([4, 5, 6]) | "a"  # type: ignore
 
     with raises(ValueError):
         BitLengthSet([4, 5, 6]).pad_to_alignment(0)
