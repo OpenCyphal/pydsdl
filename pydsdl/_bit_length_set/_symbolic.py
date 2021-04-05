@@ -9,6 +9,10 @@ import itertools
 
 
 class Operator(abc.ABC):
+    """
+    Operators are immutable. This allows for aggressive caching and reference-sharing.
+    """
+
     @abc.abstractmethod
     def modulo(self, divisor: int) -> typing.Iterable[int]:
         """
@@ -47,7 +51,10 @@ class NullaryOperator(Operator):
     """
 
     def __init__(self, values: typing.Iterable[int]) -> None:
-        self._value = frozenset(values) or frozenset({0})
+        self._value = set(values) or {0}
+        for x in self._value:
+            if not isinstance(x, int):
+                raise TypeError("Invalid element for nullary set operator: %r" % x)
 
     def modulo(self, divisor: int) -> typing.Iterable[int]:
         return map(lambda x: x % divisor, self._value)
@@ -60,7 +67,7 @@ class NullaryOperator(Operator):
     def max(self) -> int:
         return max(self._value)
 
-    def expand(self) -> typing.Iterable[int]:
+    def expand(self) -> typing.Set[int]:
         return self._value
 
     def __repr__(self) -> str:
@@ -73,7 +80,7 @@ class PaddingOperator(Operator):
     """
 
     def __init__(self, child: Operator, alignment: int) -> None:
-        if alignment < 1:  # pragma: no cover
+        if alignment < 1:
             raise ValueError("Invalid alignment: %r bits" % alignment)
         self._child = child
         self._padding = int(alignment)
@@ -230,6 +237,46 @@ class UnionOperator(Operator):
 
     def __repr__(self) -> str:
         return "(%s)" % "|".join(map(repr, self._children))
+
+
+class MemoizationOperator(Operator):
+    """
+    This is a no-op transparent lazy cache on top of the child operator.
+    """
+
+    def __init__(self, child: Operator) -> None:
+        self._child = child
+        self._min = None  # type: typing.Optional[int]
+        self._max = None  # type: typing.Optional[int]
+        self._modula = {}  # type: typing.Dict[int, typing.Set[int]]
+        self._expansion = None  # type: typing.Optional[typing.Set[int]]
+
+    def modulo(self, divisor: int) -> typing.Set[int]:
+        try:
+            return self._modula[divisor]
+        except LookupError:
+            self._modula[divisor] = set(self._child.modulo(divisor))
+        return self._modula[divisor]
+
+    @property
+    def min(self) -> int:
+        if self._min is None:
+            self._min = self._child.min
+        return self._min
+
+    @property
+    def max(self) -> int:
+        if self._max is None:
+            self._max = self._child.max
+        return self._max
+
+    def expand(self) -> typing.Set[int]:
+        if self._expansion is None:
+            self._expansion = set(self._child.expand())
+        return self._expansion
+
+    def __repr__(self) -> str:
+        return repr(self._child)  # Not sure if we should indicate our presence considering that we're a no-op
 
 
 def validate_numerically(op: Operator) -> None:

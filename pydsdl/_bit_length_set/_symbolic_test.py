@@ -249,28 +249,31 @@ def _unittest_repr() -> None:
         RepetitionOperator,
         RangeRepetitionOperator,
         UnionOperator,
+        MemoizationOperator,
     )
 
-    op = UnionOperator(
-        [
-            PaddingOperator(NullaryOperator([1, 2, 3, 4, 5, 6, 7, 8]), 4),
-            ConcatenationOperator(
-                [
-                    NullaryOperator([8, 16]),
-                    NullaryOperator([96, 112, 120]),
-                    RangeRepetitionOperator(NullaryOperator([64]), 8),
-                ]
-            ),
-            RepetitionOperator(
-                UnionOperator(
+    op = MemoizationOperator(
+        UnionOperator(
+            [
+                PaddingOperator(NullaryOperator([1, 2, 3, 4, 5, 6, 7, 8]), 4),
+                ConcatenationOperator(
                     [
-                        NullaryOperator([32]),
-                        NullaryOperator([40]),
+                        NullaryOperator([8, 16]),
+                        NullaryOperator([96, 112, 120]),
+                        RangeRepetitionOperator(NullaryOperator([64]), 8),
                     ]
                 ),
-                2,
-            ),
-        ]
+                RepetitionOperator(
+                    UnionOperator(
+                        [
+                            NullaryOperator([32]),
+                            NullaryOperator([40]),
+                        ]
+                    ),
+                    2,
+                ),
+            ]
+        )
     )
     validate_numerically(op)
     assert repr(op) == "(pad(4,{1,2,3,4,5,6,7,8})|concat({8,16},{96,112,120},repeat(<=8,{64}))|repeat(2,({32}|{40})))"

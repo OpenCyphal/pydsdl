@@ -3,7 +3,9 @@
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
 import typing
+import warnings
 import itertools
+from ._symbolic import Operator, NullaryOperator, MemoizationOperator
 
 
 class BitLengthSet:
@@ -11,27 +13,32 @@ class BitLengthSet:
     This type represents the Bit Length Set as defined in the Specification.
     It is used for representing bit offsets of fields and bit lengths of serialized representations.
 
-    Instances are comparable between each other, with plain integers, and with native sets of integers.
-    The methods do not mutate the instance they are invoked on; instead, the result is returned as a new instance.
+    Most of the methods are evaluated analytically in nearly constant time rather than numerically.
+    This is critical for complex layouts where numerical methods break due to combinatorial explosion and/or memory
+    limits (see this discussed in https://github.com/UAVCAN/pydsdl/issues/23).
+    There are several methods that trigger numerical expansion of the solution;
+    due to the aforementioned combinatorial difficulties, they may be effectively incomputable in reasonable time,
+    so production systems should not rely on them.
     """
 
-    def __init__(self, values: typing.Union[typing.Iterable[int], int] = 0):
+    def __init__(self, value: typing.Union[typing.Iterable[int], int, Operator, "BitLengthSet"] = 0):
         """
-        Accepts any iterable that yields integers (like another bit length set) or a single integer,
-        in which case it will result in the set containing only the one specified integer.
-        The source container is always deep-copied.
+        Accepts any iterable that yields integers (like another bit length set) or a single integer.
         """
-        if isinstance(values, set):
-            self._value = values  # Do not convert if already a set
-        elif isinstance(values, int):
-            self._value = {values}
+        if isinstance(value, BitLengthSet):
+            self._op = value._op  # type: Operator
+        elif isinstance(value, Operator):
+            self._op = MemoizationOperator(value)
+        elif isinstance(value, int):
+            self._op = NullaryOperator([value])
         else:
-            self._value = set(map(int, values))
+            self._op = NullaryOperator(value)
+
+    # ========================================  QUERY METHODS  ========================================
 
     def is_aligned_at(self, bit_length: int) -> bool:
         """
-        Checks whether all of the contained offset values match the specified alignment goal.
-        A zero-length bit length set is considered to have infinite alignment.
+        Shorthand for ``set(self % bit_length) == {0}``.
 
         >>> BitLengthSet(64).is_aligned_at(32)
         True
@@ -42,7 +49,7 @@ class BitLengthSet:
         >>> BitLengthSet().is_aligned_at(1234567)
         True
         """
-        return set(map(lambda x: x % bit_length, self._value)) == {0}
+        return set(self % bit_length) == {0}
 
     def is_aligned_at_byte(self) -> bool:
         """
@@ -57,9 +64,52 @@ class BitLengthSet:
 
         return self.is_aligned_at(SerializableType.BITS_PER_BYTE)
 
+    @property
+    def min(self) -> int:
+        """
+        The smallest element in the set derived analytically.
+
+        >>> BitLengthSet.concatenate([{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]).min
+        12
+        """
+        return self._op.min
+
+    @property
+    def max(self) -> int:
+        """
+        The largest element in the set derived analytically.
+
+        >>> BitLengthSet.concatenate([{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]).pad_to_alignment(8).max
+        24
+        """
+        return self._op.max
+
+    @property
+    def fixed_length(self) -> bool:
+        """
+        Shorthand for ``self.min == self.max``.
+        """
+        return self.min == self.max
+
+    def __mod__(self, divisor: typing.Any) -> typing.Iterable[int]:
+        """
+        Elementwise modulus derived analytically.
+
+        >>> sorted(BitLengthSet([]) % 12345)  # Empty set, always zero.
+        [0]
+        >>> sorted(BitLengthSet([8, 12, 16]) % 8)
+        [0, 4]
+        """
+        if isinstance(divisor, int):
+            # The type is reported as iterable[int], not sure yet if we should specialize it further. Time will tell.
+            return BitLengthSet(self._op.modulo(divisor))
+        return NotImplemented
+
+    # ========================================  COMPOSITION METHODS  ========================================
+
     def pad_to_alignment(self, bit_length: int) -> "BitLengthSet":
         """
-        Pad each element in the set such that the set becomes aligned at the specified alignment goal.
+        Transform the bit length set expression such that the set becomes aligned at the specified alignment goal.
         After this transformation is applied, elements may become up to ``bit_length-1`` bits larger.
         The argument shall be a positive integer, otherwise it's a :class:`ValueError`.
 
@@ -68,119 +118,196 @@ class BitLengthSet:
         >>> BitLengthSet(randint(1, 1000) for _ in range(100)).pad_to_alignment(alignment).is_aligned_at(alignment)
         True
         """
-        r = int(bit_length)
-        if r < 1:
-            raise ValueError("Invalid alignment: %r bits" % r)
-        assert r >= 1
-        out = BitLengthSet(((x + r - 1) // r) * r for x in self)
-        assert not out or 0 <= min(out) - min(self) < r
-        assert not out or 0 <= max(out) - max(self) < r
-        assert len(out) <= len(self)
-        return out
+        from ._symbolic import PaddingOperator
+
+        return BitLengthSet(PaddingOperator(self._op, bit_length))
+
+    def repeat(self, k: int) -> "BitLengthSet":
+        """
+        Construct a new bit length set expression that repeats the current one the specified number of times.
+        This reflects the arrangement of fixed-length DSDL array elements.
+
+        >>> sorted(BitLengthSet(1).repeat(1))
+        [1]
+        >>> sorted(BitLengthSet({1, 2, 3}).repeat(1))
+        [1, 2, 3]
+        >>> sorted(BitLengthSet({1, 2, 3}).repeat(2))
+        [2, 3, 4, 5, 6]
+        """
+        from ._symbolic import RepetitionOperator
+
+        return BitLengthSet(RepetitionOperator(self._op, k))
+
+    def repeat_range(self, k: int) -> "BitLengthSet":
+        """
+        >>> sorted(BitLengthSet({1, 2, 3}).repeat_range(2))
+        [0, 1, 2, 3, 4, 5, 6]
+        """
+        from ._symbolic import RangeRepetitionOperator
+
+        return BitLengthSet(RangeRepetitionOperator(self._op, k))
+
+    @staticmethod
+    def concatenate(sets: typing.Iterable[typing.Union["BitLengthSet", typing.Iterable[int], int]]) -> "BitLengthSet":
+        """
+        Construct a new bit length set expression that concatenates multiple bit length sets one after another.
+        This reflects the data fields arrangement in a DSDL structure type.
+
+        >>> sorted(BitLengthSet.concatenate([1, 2, 10]))
+        [13]
+        >>> sorted(BitLengthSet.concatenate([{1, 2}, {4, 5}]))
+        [5, 6, 7]
+        >>> sorted(BitLengthSet.concatenate([{1, 2, 3}, {4, 5, 6}]))
+        [5, 6, 7, 8, 9]
+        >>> sorted(BitLengthSet.concatenate([{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]))
+        [12, 13, 14, 15, 16, 17, 18]
+        """
+        from ._symbolic import ConcatenationOperator
+
+        op = ConcatenationOperator(BitLengthSet(s)._op for s in sets)
+        return BitLengthSet(op)
+
+    @staticmethod
+    def unite(sets: typing.Iterable[typing.Union["BitLengthSet", typing.Iterable[int], int]]) -> "BitLengthSet":
+        """
+        Construct a new bit length set expression that is a union of multiple bit length sets.
+        This reflects the data fields arrangement in a DSDL discriminated union.
+
+        >>> sorted(BitLengthSet.unite([1, 2, 10]))
+        [1, 2, 10]
+        >>> sorted(BitLengthSet.unite([{1, 2}, {2, 3}]))
+        [1, 2, 3]
+        """
+        from ._symbolic import UnionOperator
+
+        op = UnionOperator(BitLengthSet(s)._op for s in sets)
+        return BitLengthSet(op)
+
+    def __add__(self, other: typing.Union["BitLengthSet", typing.Iterable[int], int]) -> "BitLengthSet":
+        """
+        A shorthand for ``concatenate([self, other])``.
+        One can easily see that if the argument is a set of one value (or a scalar),
+        this method will result in the addition of said scalar to every element of the original set.
+
+        >>> sorted(BitLengthSet() + BitLengthSet())
+        [0]
+        >>> sorted(BitLengthSet(4) + BitLengthSet(3))
+        [7]
+        >>> sorted(BitLengthSet({4, 91}) + 3)
+        [7, 94]
+        >>> sorted(BitLengthSet({4, 91}) + {5, 7})
+        [9, 11, 96, 98]
+        """
+        return BitLengthSet.concatenate([self, other])
+
+    def __radd__(self, other: typing.Union["BitLengthSet", typing.Iterable[int], int]) -> "BitLengthSet":
+        """
+        See :meth:`__add__`.
+
+        >>> sorted({1, 2, 3} + BitLengthSet({4, 5, 6}))
+        [5, 6, 7, 8, 9]
+        >>> sorted(1 + BitLengthSet({2, 5, 7}))
+        [3, 6, 8]
+        """
+        return BitLengthSet.concatenate([other, self])
+
+    def __or__(self, other: typing.Union["BitLengthSet", typing.Iterable[int], int]) -> "BitLengthSet":
+        """
+        A shorthand for ``unite([self, other])``.
+
+        >>> a = BitLengthSet()
+        >>> a = a | BitLengthSet({1, 2, 3})
+        >>> sorted(a)
+        [0, 1, 2, 3]
+        >>> a = a | {3, 4, 5}
+        >>> sorted(a)
+        [0, 1, 2, 3, 4, 5]
+        >>> sorted(a | 6)
+        [0, 1, 2, 3, 4, 5, 6]
+        """
+        return BitLengthSet.unite([self, other])
+
+    def __ror__(self, other: typing.Union["BitLengthSet", typing.Iterable[int], int]) -> "BitLengthSet":
+        """
+        See :meth:`__or__`.
+
+        >>> sorted({1, 2, 3} | BitLengthSet({4, 5, 6}))
+        [1, 2, 3, 4, 5, 6]
+        >>> sorted(1 | BitLengthSet({2, 5, 7}))
+        [1, 2, 5, 7]
+        """
+        return BitLengthSet.unite([other, self])
+
+    # ========================================  SLOW NUMERICAL METHODS  ========================================
+
+    def __iter__(self) -> typing.Iterator[int]:
+        """
+        ..  attention::
+            This method triggers slow numerical expansion.
+
+            You might be tempted to use ``min(foo)`` or ``max(foo)`` for detecting length bounds.
+            This may be effectively incomputable for data types with complex layout.
+            Instead, use :attr:`min` and :attr:`max`.
+        """
+        return iter(self._op.expand())
+
+    def __len__(self) -> int:
+        """
+        ..  attention::
+            This method triggers slow numerical expansion.
+
+            You might be tempted to use something like ``len(foo) == 1`` for detecting fixed-length sets.
+            This may be effectively incomputable for data types with complex layout.
+            Instead, use :attr:`fixed_length`.
+
+        >>> len(BitLengthSet(0))
+        1
+        >>> len(BitLengthSet([1, 2, 3]))
+        3
+        """
+        return len(self._op.expand())
+
+    def __eq__(self, other: typing.Any) -> bool:
+        """
+        ..  attention::
+            This method triggers slow numerical expansion.
+
+        >>> BitLengthSet([1, 2, 3]) == {1, 2, 3}
+        True
+        >>> BitLengthSet([123]) == 123
+        True
+        """
+        try:
+            return set(self) == set(BitLengthSet(other))
+        except TypeError:
+            return NotImplemented
+
+    # ========================================  AUXILIARY METHODS  ========================================
+
+    def __str__(self) -> str:
+        return str(self._op)
+
+    def __repr__(self) -> str:
+        return "%s(%s)" % (type(self).__name__, self)
+
+    # ========================================  DEPRECATED METHODS   ========================================
 
     def elementwise_sum_k_multicombinations(self, k: int) -> "BitLengthSet":
         """
-        This is a special case of :meth:`elementwise_sum_cartesian_product`.
-        The original object is not modified.
+        :meta private:
         """
-        k_multicombination = itertools.combinations_with_replacement(self, k)
-        elementwise_sums = map(sum, k_multicombination)
-        return BitLengthSet(elementwise_sums)  # type: ignore
+        warnings.warn(DeprecationWarning("Use repeat() instead"))
+        return self.repeat(k)
 
     @staticmethod
     def elementwise_sum_cartesian_product(
         sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]
     ) -> "BitLengthSet":
         """
-        This operation is fundamental for bit length and bit offset (which are, generally, the same thing) computation.
-
-        The basic background is explained in the specification. The idea is that the bit offset of a given entity
-        in a data type definition of the structure category (or, in other words, the bit length set of serialized
-        representations of the preceding entities, which is the same thing, assuming that the data type is of the
-        structure category) is a function of bit length sets of each preceding entity. Various combinations of
-        bit lengths of the preceding entities are possible, which can be expressed through the Cartesian product over
-        the bit length sets of the preceding entities. Since in a type of the structure category entities are arranged
-        as an ordered sequence of a fixed length (meaning that entities can't be added or removed), the resulting
-        bit length (offset) is computed by elementwise summation of each element of the Cartesian product.
-
-        This method is not applicable for the tagged union type category, since a tagged union holds exactly one
-        value at any moment; therefore, the bit length set of a tagged union is simply a union of bit length sets
-        of each entity that can be contained in the union, plus the length of the implicit union tag field.
-
-        From the standpoint of bit length combination analysis, fixed-length arrays are a special case of structures,
-        because they also contain a fixed ordered sequence of fields, where all fields are of the same type.
-        The method defined for structures applies to fixed-length arrays, but one should be aware that it may be
-        computationally suboptimal, since the fact that all array elements are of the same type allows us to replace
-        the computationally expensive Cartesian product with k-multicombinations (k-selections).
-
-        In the context of bit length analysis, variable-length arrays do not require any special treatment, since a
-        variable-length array with the capacity of N elements can be modeled as a tagged union containing
-        N fixed arrays of length from 1 to N, plus one empty field (representing the case of an empty variable-length
-        array).
+        :meta private:
         """
-        cartesian_product = itertools.product(*list(map(BitLengthSet, sets)))
-        elementwise_sums = map(sum, cartesian_product)
-        return BitLengthSet(elementwise_sums)  # type: ignore
-
-    def __iter__(self) -> typing.Iterator[int]:
-        return iter(self._value)
-
-    def __len__(self) -> int:
-        """Cardinality."""
-        return len(self._value)
-
-    def __eq__(self, other: typing.Any) -> bool:
-        """
-        Whether the current set equals the other.
-        """
-        if isinstance(other, BitLengthSet):
-            return self._value == other._value
-        return NotImplemented
-
-    def __add__(self, other: typing.Any) -> "BitLengthSet":
-        """
-        This operation models the addition of a new object to a serialized representation;
-        i.e., it is an alias for ``elementwise_sum_cartesian_product([self, other])``.
-        The result is stored into a new instance which is returned.
-
-        If the argument is a bit length set, an elementwise sum set of the Cartesian product of the argument set
-        with the current set will be computed, and the result will be returned as a new set (self is not modified).
-        One can easily see that if the argument is a set of one value (or a scalar),
-        this method will result in the addition of said scalar to every element of the original set.
-        """
-        if isinstance(other, BitLengthSet):
-            return BitLengthSet.elementwise_sum_cartesian_product([self, other])
-        return NotImplemented
-
-    def __radd__(self, other: typing.Any) -> "BitLengthSet":
-        """
-        See :meth:`__add__`.
-        """
-        if isinstance(other, BitLengthSet):
-            return other + self
-        return NotImplemented
-
-    def __or__(self, other: typing.Any) -> "BitLengthSet":
-        """
-        Creates and returns a new set that is a union of this set with another bit length set.
-        """
-        if isinstance(other, BitLengthSet):
-            return BitLengthSet(self._value | other._value)
-        return NotImplemented
-
-    def __ror__(self, other: typing.Any) -> "BitLengthSet":
-        """
-        See :meth:`__or__`.
-        """
-        if isinstance(other, BitLengthSet):
-            return other | self
-        return NotImplemented
-
-    def __str__(self) -> str:
-        return "{" + ", ".join(map(str, sorted(self._value))) + "}"
-
-    def __repr__(self) -> str:
-        return type(self).__name__ + "(" + str(self or "") + ")"
+        warnings.warn(DeprecationWarning("Use concatenate() instead"))
+        return BitLengthSet.concatenate(sets)
 
 
 def _unittest_bit_length_set() -> None:
@@ -193,9 +320,9 @@ def _unittest_bit_length_set() -> None:
     assert BitLengthSet(123) == 123
     assert BitLengthSet(123) != 124
     assert not (BitLengthSet(123) == "123")  # pylint: disable=unneeded-not
-    assert str(BitLengthSet()) == "{}"
+    assert str(BitLengthSet()) == "{0}"
     assert str(BitLengthSet(123)) == "{123}"
-    assert str(BitLengthSet((123, 0, 456, 12))) == "{0, 12, 123, 456}"  # Always sorted!
+    assert str(BitLengthSet((123, 0, 456, 12))) == "{0,12,123,456}"  # Always sorted!
     assert BitLengthSet().is_aligned_at(1)
     assert BitLengthSet().is_aligned_at(1024)
     assert BitLengthSet(8).is_aligned_at_byte()
@@ -214,24 +341,16 @@ def _unittest_bit_length_set() -> None:
     assert {1, 2, 3} + BitLengthSet([4, 5, 6]) == {5, 6, 7, 8, 9}
 
     with raises(TypeError):
-        assert BitLengthSet([4, 5, 6]) + "1"
+        assert BitLengthSet([4, 5, 6]) + "a"
 
     with raises(TypeError):
-        assert "1" + BitLengthSet([4, 5, 6])
+        assert "a" + BitLengthSet([4, 5, 6])
 
     with raises(TypeError):
-        s = BitLengthSet([4, 5, 6])
-        s += "1"
+        assert "a" | BitLengthSet([4, 5, 6])
 
     with raises(TypeError):
-        assert "1" | BitLengthSet([4, 5, 6])
-
-    with raises(TypeError):
-        assert BitLengthSet([4, 5, 6]) | "1"
-
-    with raises(TypeError):
-        s = BitLengthSet([4, 5, 6])
-        s |= "1"
+        assert BitLengthSet([4, 5, 6]) | "a"
 
     with raises(ValueError):
         BitLengthSet([4, 5, 6]).pad_to_alignment(0)
