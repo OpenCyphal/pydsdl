@@ -91,7 +91,7 @@ class PaddingOperator(Operator):
     def modulo(self, divisor: int) -> typing.Iterable[int]:
         r = self._padding
         mx = self.max
-        lcm = math.lcm(r, divisor)
+        lcm = least_common_multiple(r, divisor)
         for x in set(self._child.modulo(lcm)):
             assert x <= mx and x < lcm
             yield self._pad(x) % divisor
@@ -301,6 +301,13 @@ class MemoizationOperator(Operator):
 
     def __repr__(self) -> str:
         return repr(self._child)  # Not sure if we should indicate our presence considering that we're a no-op
+
+
+def least_common_multiple(a: int, b: int) -> int:
+    """
+    This replicates :func:`math.lcm` to support Python <3.9.
+    """
+    return abs(a * b) // math.gcd(a, b)
 
 
 def validate_numerically(op: Operator) -> None:
