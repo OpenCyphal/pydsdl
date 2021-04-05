@@ -170,7 +170,7 @@ class BitLengthSet:
         """
         from ._symbolic import ConcatenationOperator
 
-        op = ConcatenationOperator(BitLengthSet(s)._op for s in sets)
+        op = ConcatenationOperator(BitLengthSet(s)._op for s in sets)  # pylint: disable=protected-access
         return BitLengthSet(op)
 
     @staticmethod
@@ -186,7 +186,7 @@ class BitLengthSet:
         """
         from ._symbolic import UnionOperator
 
-        op = UnionOperator(BitLengthSet(s)._op for s in sets)
+        op = UnionOperator(BitLengthSet(s)._op for s in sets)  # pylint: disable=protected-access
         return BitLengthSet(op)
 
     def __add__(self, other: typing.Union["BitLengthSet", typing.Iterable[int], int]) -> "BitLengthSet":
