@@ -67,7 +67,7 @@ class FixedLengthArrayType(ArrayType):
         return self._bls
 
     def enumerate_elements_with_offsets(
-        self, base_offset: typing.Optional[BitLengthSet] = None
+        self, base_offset: BitLengthSet = BitLengthSet(0)
     ) -> typing.Iterator[typing.Tuple[int, BitLengthSet]]:
         """
         This is a convenience method for code generation.
@@ -80,7 +80,7 @@ class FixedLengthArrayType(ArrayType):
         :returns: For an N-element array, an iterator over N elements, where each element is a tuple of the index
             of the array element (zero-based) and its offset as a bit length set.
         """
-        base_offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
+        base_offset = base_offset.pad_to_alignment(self.alignment_requirement)
         for index in range(self.capacity):
             offset = base_offset + self.element_type.bit_length_set.repeat(index)
             assert offset.is_aligned_at(self.element_type.alignment_requirement)

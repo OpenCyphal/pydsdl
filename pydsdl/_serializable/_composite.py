@@ -261,7 +261,7 @@ class CompositeType(SerializableType):
 
     @abc.abstractmethod
     def iterate_fields_with_offsets(
-        self, base_offset: typing.Optional[BitLengthSet] = None
+        self, base_offset: BitLengthSet = BitLengthSet(0)
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
         Iterates over every field (not attribute -- constants are excluded) of the data type,
@@ -399,13 +399,10 @@ class UnionType(CompositeType):
         return self._tag_field_type
 
     def iterate_fields_with_offsets(
-        self, base_offset: typing.Optional[BitLengthSet] = None
+        self, base_offset: BitLengthSet = BitLengthSet(0)
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
-        offset = (
-            BitLengthSet(base_offset or {0}).pad_to_alignment(self.alignment_requirement)
-            + self.tag_field_type.bit_length
-        )
+        offset = base_offset.pad_to_alignment(self.alignment_requirement) + self.tag_field_type.bit_length
         for f in self.fields:  # Same offset for every field, because it's a tagged union, not a struct
             assert offset.is_aligned_at(f.data_type.alignment_requirement)
             yield f, offset
@@ -477,10 +474,10 @@ class StructureType(CompositeType):
         ).pad_to_alignment(self.alignment_requirement)
 
     def iterate_fields_with_offsets(
-        self, base_offset: typing.Optional[BitLengthSet] = None
+        self, base_offset: BitLengthSet = BitLengthSet(0)
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """See the base class."""
-        offset = BitLengthSet(base_offset or 0).pad_to_alignment(self.alignment_requirement)
+        offset = base_offset.pad_to_alignment(self.alignment_requirement)
         for f in self.fields:
             offset = offset.pad_to_alignment(f.data_type.alignment_requirement)
             yield f, offset
@@ -606,12 +603,12 @@ class DelimitedType(CompositeType):
         return self._delimiter_header_type
 
     def iterate_fields_with_offsets(
-        self, base_offset: typing.Optional[BitLengthSet] = None
+        self, base_offset: BitLengthSet = BitLengthSet(0)
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """
         Delegates the call to the inner type, but with the base offset increased by the size of the delimiter header.
         """
-        base_offset = (base_offset or BitLengthSet(0)) + self.delimiter_header_type.bit_length_set
+        base_offset = base_offset + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
     def __repr__(self) -> str:
@@ -677,7 +674,7 @@ class ServiceType(CompositeType):
         return self._response_type
 
     def iterate_fields_with_offsets(
-        self, base_offset: typing.Optional[BitLengthSet] = None
+        self, base_offset: BitLengthSet = BitLengthSet(0)
     ) -> typing.Iterator[typing.Tuple[Field, BitLengthSet]]:
         """Always raises a :class:`TypeError`."""
         raise TypeError("Service types do not have serializable fields. Use either request or response.")
@@ -981,7 +978,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
     def validate_iterator(
         t: CompositeType,
         reference: typing.Iterable[typing.Tuple[str, typing.Set[int]]],
-        base_offset: typing.Optional[BitLengthSet] = None,
+        base_offset: BitLengthSet = BitLengthSet(0),
     ) -> None:
         for (name, ref_set), (field, real_set) in itertools.zip_longest(
             reference, t.iterate_fields_with_offsets(base_offset)
