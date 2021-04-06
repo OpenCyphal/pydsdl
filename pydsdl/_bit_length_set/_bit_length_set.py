@@ -295,6 +295,15 @@ class BitLengthSet:
 
     # ========================================  AUXILIARY METHODS  ========================================
 
+    def __bool__(self) -> bool:
+        """
+        This method is overridden to avoid accidental invocation of :meth:`__len__` in boolean expressions
+        because it triggers numerical expansion.
+
+        :return: Always True.
+        """
+        return True  # pragma: no cover
+
     def __str__(self) -> str:
         return str(self._op)
 
