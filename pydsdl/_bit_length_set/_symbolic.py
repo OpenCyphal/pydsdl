@@ -2,6 +2,7 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
+import os
 import abc
 import math
 import typing
@@ -291,6 +292,7 @@ class MemoizationOperator(Operator):
                     len(self._expansion),
                     self._child,
                 )
+            assert elapsed < _POISON_SLOW_EXPANSION
 
             # Since we did an expansion anyway, the set must be compact,
             # so we use this opportunity to validate the correctness of the solver.
@@ -323,5 +325,11 @@ def validate_numerically(op: Operator) -> None:
     for div in range(1, 65):
         assert set(op.modulo(div)) == {x % div for x in s}
 
+
+_POISON_SLOW_EXPANSION = float(os.environ.get("PYDSDL_POISON_SLOW_EXPANSION", "999999999"))
+"""
+This is intended for developers only so it is not mentioned in the public documentation.
+The purpose is to trigger an assertion failure if a numerical expansion takes more than this many seconds.
+"""
 
 _logger = logging.getLogger(__name__)
