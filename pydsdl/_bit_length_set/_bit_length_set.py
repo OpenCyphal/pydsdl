@@ -342,7 +342,7 @@ class BitLengthSet:
         """
         :meta private:
         """
-        warnings.warn(DeprecationWarning("Use repeat() instead"))
+        warnings.warn("Use repeat() instead", DeprecationWarning)
         return self.repeat(k)
 
     @staticmethod
@@ -352,7 +352,7 @@ class BitLengthSet:
         """
         :meta private:
         """
-        warnings.warn(DeprecationWarning("Use concatenate() instead"))
+        warnings.warn("Use concatenate() instead", DeprecationWarning)
         return BitLengthSet.concatenate(sets)
 
 
