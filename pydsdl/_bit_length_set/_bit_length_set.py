@@ -20,6 +20,19 @@ class BitLengthSet:
     so production systems should not rely on them.
 
     Instances are guaranteed to be immutable.
+
+    >>> b = 16 + BitLengthSet(8).repeat_range(256)
+    >>> b
+    BitLengthSet(concat({16},repeat(<=256,{8})))
+    >>> b = 32 + b.repeat_range(65536)
+    >>> b
+    BitLengthSet(concat({32},repeat(<=65536,concat({16},repeat(<=256,{8})))))
+    >>> b.min, b.max
+    (32, 135266336)
+    >>> sorted(b % 16)
+    [0, 8]
+    >>> sorted(b % 32)
+    [0, 8, 16, 24]
     """
 
     def __init__(self, value: typing.Union[typing.Iterable[int], int, Operator, "BitLengthSet"]):
@@ -296,16 +309,17 @@ class BitLengthSet:
             other = BitLengthSet(other)
         except TypeError:
             return NotImplemented
-        return self.min == other.min and self.max == other.max and set(self % 64) == set(other % 64)
+        divisor = 32
+        return self.min == other.min and self.max == other.max and set(self % divisor) == set(other % divisor)
 
     def __hash__(self) -> int:
         """
-        Hash is computed in (nearly) constant time (numerical expansion is not performed).
+        Hash is computed in constant time (numerical expansion is not performed).
 
-        >>> hash(BitLengthSet({1, 2, 3})) != hash(BitLengthSet({1, 3}))
+        >>> hash(BitLengthSet({1, 4})) != hash(BitLengthSet({1, 3}))
         True
         """
-        return hash((self.min, self.max, frozenset(self % 64)))
+        return hash((self.min, self.max))
 
     def __bool__(self) -> bool:
         """
