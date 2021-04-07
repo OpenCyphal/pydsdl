@@ -310,7 +310,7 @@ class MemoizationOperator(Operator):
             started_at = monotonic()
             self._expansion = self._child.expand()
             elapsed = monotonic() - started_at
-            if elapsed > 2.0:
+            if elapsed > 2.0:  # pragma: no cover
                 _logger.info(
                     "Numerical expansion took %.1f seconds; the result contains %d items:\n%s",
                     elapsed,
