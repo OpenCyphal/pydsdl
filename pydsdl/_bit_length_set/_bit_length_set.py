@@ -274,9 +274,7 @@ class BitLengthSet:
         >>> len(BitLengthSet([1, 2, 3]))
         3
         """
-        exp = self._op.expand()
-        assert isinstance(exp, set)  # We know that memoization and nullary operators return sets.
-        return len(exp)
+        return len(self._op.expand())
 
     def __eq__(self, other: typing.Any) -> bool:
         """

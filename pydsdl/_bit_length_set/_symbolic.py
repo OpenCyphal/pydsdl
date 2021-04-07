@@ -16,7 +16,7 @@ class Operator(abc.ABC):
     """
 
     @abc.abstractmethod
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
+    def modulo(self, divisor: int) -> typing.Set[int]:
         """
         May return duplicates.
         """
@@ -33,7 +33,7 @@ class Operator(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def expand(self) -> typing.Iterable[int]:
+    def expand(self) -> typing.Set[int]:
         """
         Transform the symbolic form into numerical form.
         This is useful for cross-checking derived solutions and for DSDL expression evaluation.
@@ -60,8 +60,8 @@ class NullaryOperator(Operator):
             if not isinstance(x, int):
                 raise TypeError("Invalid element for nullary set operator: %r" % x)
 
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
-        return map(lambda x: x % divisor, self._value)
+    def modulo(self, divisor: int) -> typing.Set[int]:
+        return set(map(lambda x: x % divisor, self._value))
 
     @property
     def min(self) -> int:
@@ -72,7 +72,7 @@ class NullaryOperator(Operator):
         return max(self._value)
 
     def expand(self) -> typing.Set[int]:
-        return self._value
+        return set(self._value)
 
     def __repr__(self) -> str:
         return "{%s}" % ",".join(str(x) for x in sorted(self._value))
@@ -89,13 +89,15 @@ class PaddingOperator(Operator):
         self._child = child
         self._padding = int(alignment)
 
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
+    def modulo(self, divisor: int) -> typing.Set[int]:
         r = self._padding
         mx = self.max
         lcm = least_common_multiple(r, divisor)
-        for x in set(self._child.modulo(lcm)):
+        out = set()  # type: typing.Set[int]
+        for x in self._child.modulo(lcm):
             assert x <= mx and x < lcm
-            yield self._pad(x) % divisor
+            out.add(self._pad(x) % divisor)
+        return out
 
     @property
     def min(self) -> int:
@@ -105,7 +107,7 @@ class PaddingOperator(Operator):
     def max(self) -> int:
         return self._pad(self._child.max)
 
-    def expand(self) -> typing.Iterable[int]:
+    def expand(self) -> typing.Set[int]:
         return set(map(self._pad, self._child.expand()))
 
     def _pad(self, x: int) -> int:
@@ -127,11 +129,11 @@ class ConcatenationOperator(Operator):
         if not self._children:
             raise ValueError("This operator is not defined on zero operands")
 
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
+    def modulo(self, divisor: int) -> typing.Set[int]:
         # Take the modulus from each child and find all combinations.
         # The computational complexity is tightly bounded because the cardinality of the modulus set is less than
         # the bit length operand.
-        mods = [set(ch.modulo(divisor)) for ch in self._children]
+        mods = [ch.modulo(divisor) for ch in self._children]
         prod = itertools.product(*mods)
         sums = set(map(sum, prod))
         return {typing.cast(int, x) % divisor for x in sums}
@@ -144,7 +146,7 @@ class ConcatenationOperator(Operator):
     def max(self) -> int:
         return sum(x.max for x in self._children)
 
-    def expand(self) -> typing.Iterable[int]:
+    def expand(self) -> typing.Set[int]:
         return {sum(el) for el in itertools.product(*(x.expand() for x in self._children))}
 
     def __repr__(self) -> str:
@@ -161,9 +163,20 @@ class RepetitionOperator(Operator):
         self._k = int(k)
         self._child = child
 
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
+    def modulo(self, divisor: int) -> typing.Set[int]:
+        # Values of k > divisor will yield repeated entries so we can apply a reduction,
+        # but the equivalent k modulo divisor shall be the same as k modulo divisor.
+        # This is because the solution doesn't converge at k -> inf:
+        #   {sum(x) % 2 for x in combinations_with_replacement({1, 3}, 2)} == {0}
+        #   {sum(x) % 2 for x in combinations_with_replacement({1, 3}, 3)} == {1}
+        #   {sum(x) % 2 for x in combinations_with_replacement({1, 3}, 4)} == {0}
+        #   {sum(x) % 2 for x in combinations_with_replacement({1, 3}, 5)} == {1}
+        # etc.
+        equivalent_k = min(self._k, divisor + self._k % divisor)
+        assert (self._k % divisor) == (equivalent_k % divisor), (divisor, self._k)
         return {
-            (sum(el) % divisor) for el in itertools.combinations_with_replacement(self._child.modulo(divisor), self._k)
+            (sum(el) % divisor)
+            for el in itertools.combinations_with_replacement(self._child.modulo(divisor), equivalent_k)
         }
 
     @property
@@ -174,7 +187,7 @@ class RepetitionOperator(Operator):
     def max(self) -> int:
         return self._child.max * self._k
 
-    def expand(self) -> typing.Iterable[int]:
+    def expand(self) -> typing.Set[int]:
         return {sum(el) for el in itertools.combinations_with_replacement(self._child.expand(), self._k)}
 
     def __repr__(self) -> str:
@@ -191,13 +204,18 @@ class RangeRepetitionOperator(Operator):
         self._k_max = int(k_max)
         self._child = child
 
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
-        single = set(self._child.modulo(divisor))
-        # Values of k > divisor will yield repeated entries so we can apply a reduction.
-        equivalent_k_max = min(self._k_max, divisor)
+    def modulo(self, divisor: int) -> typing.Set[int]:
+        single = self._child.modulo(divisor)
+        assert isinstance(single, set)
+        # Values of k > divisor will yield repeated entries so we can apply a reduction (see non-range case above).
+        # This holds only if the argument does not contain repeated entries which is guaranteed by `set`.
+        equivalent_k_max = min(self._k_max, divisor + self._k_max % divisor)
+        assert (self._k_max % divisor) == (equivalent_k_max % divisor), (divisor, self._k_max)
+        out = set()  # type: typing.Set[int]
         for k in range(equivalent_k_max + 1):
             for el in itertools.combinations_with_replacement(single, k):
-                yield sum(el) % divisor
+                out.add(sum(el) % divisor)
+        return out
 
     @property
     def min(self) -> int:
@@ -207,11 +225,14 @@ class RangeRepetitionOperator(Operator):
     def max(self) -> int:
         return self._child.max * self._k_max
 
-    def expand(self) -> typing.Iterable[int]:
-        ch = set(self._child.expand())
+    def expand(self) -> typing.Set[int]:
+        ch = self._child.expand()
+        assert isinstance(ch, set)
+        out = set()  # type: typing.Set[int]
         for k in range(self._k_max + 1):
             for el in itertools.combinations_with_replacement(ch, k):
-                yield sum(el)
+                out.add(sum(el))
+        return out
 
     def __repr__(self) -> str:
         return "repeat(<=%d,%r)" % (self._k_max, self._child)
@@ -223,9 +244,11 @@ class UnionOperator(Operator):
         if not self._children:
             raise ValueError("This operator is not defined on zero operands")
 
-    def modulo(self, divisor: int) -> typing.Iterable[int]:
+    def modulo(self, divisor: int) -> typing.Set[int]:
+        out = set()  # type: typing.Set[int]
         for x in self._children:
-            yield from x.modulo(divisor)
+            out |= x.modulo(divisor)
+        return out
 
     @property
     def min(self) -> int:
@@ -235,9 +258,11 @@ class UnionOperator(Operator):
     def max(self) -> int:
         return max(x.max for x in self._children)
 
-    def expand(self) -> typing.Iterable[int]:
+    def expand(self) -> typing.Set[int]:
+        out = set()  # type: typing.Set[int]
         for x in self._children:
-            yield from x.expand()
+            out |= x.expand()
+        return out
 
     def __repr__(self) -> str:
         return "(%s)" % "|".join(map(repr, self._children))
@@ -260,7 +285,7 @@ class MemoizationOperator(Operator):
         try:
             return self._modula[divisor]
         except LookupError:
-            self._modula[divisor] = set(self._child.modulo(divisor))
+            self._modula[divisor] = self._child.modulo(divisor)
         return self._modula[divisor]
 
     @property
@@ -283,7 +308,7 @@ class MemoizationOperator(Operator):
             # that accidentally relies on numerical expansion. This is mainly intended to help us transition
             # Nunavut to the new solver API instead of numerical methods. It may be removed later.
             started_at = monotonic()
-            self._expansion = set(self._child.expand())
+            self._expansion = self._child.expand()
             elapsed = monotonic() - started_at
             if elapsed > 2.0:
                 _logger.info(
@@ -319,11 +344,11 @@ def validate_numerically(op: Operator) -> None:
     The computational complexity may be prohibitively high for some inputs due to combinatorial explosion.
     In case of a divergence the function triggers an assertion failure.
     """
-    s = set(op.expand())
+    s = op.expand()
     assert min(s) == op.min
     assert max(s) == op.max
     for div in range(1, 65):
-        assert set(op.modulo(div)) == {x % div for x in s}
+        assert op.modulo(div) == {x % div for x in s}, div
 
 
 _POISON_SLOW_EXPANSION = float(os.environ.get("PYDSDL_POISON_SLOW_EXPANSION", "999999999"))
