@@ -17,9 +17,6 @@ class Operator(abc.ABC):
 
     @abc.abstractmethod
     def modulo(self, divisor: int) -> typing.Set[int]:
-        """
-        May return duplicates.
-        """
         raise NotImplementedError
 
     @property
@@ -38,7 +35,6 @@ class Operator(abc.ABC):
         Transform the symbolic form into numerical form.
         This is useful for cross-checking derived solutions and for DSDL expression evaluation.
         For complex expressions this may be incomputable due to combinatorial explosion or memory limits.
-        May return duplicates.
         """
         raise NotImplementedError
 
@@ -318,7 +314,7 @@ class MemoizationOperator(Operator):
                     self._child,
                     stack_info=True,
                 )
-            assert elapsed < _POISON_SLOW_EXPANSION
+            assert elapsed < _POISON_SLOW_EXPANSION_SECONDS
 
             # Since we did an expansion anyway, the set must be compact,
             # so we use this opportunity to validate the correctness of the solver.
@@ -352,7 +348,7 @@ def validate_numerically(op: Operator) -> None:
         assert op.modulo(div) == {x % div for x in s}, div
 
 
-_POISON_SLOW_EXPANSION = float(os.environ.get("PYDSDL_POISON_SLOW_EXPANSION", "999999999"))
+_POISON_SLOW_EXPANSION_SECONDS = float(os.environ.get("PYDSDL_POISON_SLOW_EXPANSION_SECONDS", "999999999"))
 """
 This is intended for developers only so it is not mentioned in the public documentation.
 The purpose is to trigger an assertion failure if a numerical expansion takes more than this many seconds.
