@@ -181,6 +181,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         if name == "_offset_":
             bls = self._structs[-1].offset
             assert len(bls) > 0 and all(map(lambda x: isinstance(x, int), bls))
+            # FIXME: THIS OPERATION TRIGGERS NUMERICAL EXPANSION OF THE BIT LENGTH SET.
+            # TODO: INTEGRATE THE SET EXPRESSION WITH THE BIT LENGTH SET SOLVER TO IMPROVE PERFORMANCE.
             return _expression.Set(map(_expression.Rational, bls))
         raise UndefinedIdentifierError("Undefined identifier: %r" % name)
 

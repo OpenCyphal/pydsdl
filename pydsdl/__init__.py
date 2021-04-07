@@ -7,8 +7,8 @@
 import os as _os
 import sys as _sys
 
-__version__ = "1.11.0"
-__version_info__ = tuple(map(int, __version__.split(".")))
+__version__ = "1.12.0"
+__version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "UAVCAN Consortium"
 __copyright__ = "Copyright (c) 2018 UAVCAN Consortium"

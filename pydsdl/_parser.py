@@ -118,7 +118,7 @@ def _make_binary_operator_handler(operator: _expression.BinaryOperator[_expressi
 
 
 # noinspection PyMethodMayBeStatic
-class _ParseTreeProcessor(parsimonious.NodeVisitor):  # pylint: disable=too-many-public-methods
+class _ParseTreeProcessor(parsimonious.NodeVisitor):
     """
     This class processes the parse tree, evaluates the expressions and emits a high-level representation
     of the processed description. Essentially it does most of the ground work related to supporting the DSDL
