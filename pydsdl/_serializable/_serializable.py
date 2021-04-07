@@ -76,7 +76,7 @@ class SerializableType(_expression.Any):
             bls = self.bit_length_set
         except TypeError:  # If the type is non-serializable.
             bls = BitLengthSet(0)
-        return hash(str(self) + str(bls))
+        return hash((str(self), bls))
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, SerializableType):

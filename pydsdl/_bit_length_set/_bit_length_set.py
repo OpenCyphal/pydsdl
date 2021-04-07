@@ -276,22 +276,36 @@ class BitLengthSet:
         """
         return len(self._op.expand())
 
+    # ========================================  AUXILIARY METHODS  ========================================
+
     def __eq__(self, other: typing.Any) -> bool:
         """
-        ..  attention::
-            This method triggers slow numerical expansion.
+        Currently, this method performs an approximate comparison that may yield a false-positive for some operands.
+        This is done to avoid performing the costly numerical expansion of the operands.
+        The implementation may be changed to perform exact comparison in the future if the underlying solver is
+        updated accordingly.
 
-        >>> BitLengthSet([1, 2, 3]) == {1, 2, 3}
+        >>> BitLengthSet([1, 2, 4]) == {1, 2, 4}
         True
-        >>> BitLengthSet([123]) == 123
+        >>> BitLengthSet([1, 2, 4]) == {1, 3, 4}
+        False
+        >>> BitLengthSet([123]) == BitLengthSet(123)
         True
         """
         try:
-            return set(self) == set(BitLengthSet(other))
+            other = BitLengthSet(other)
         except TypeError:
             return NotImplemented
+        return self.min == other.min and self.max == other.max and set(self % 64) == set(other % 64)
 
-    # ========================================  AUXILIARY METHODS  ========================================
+    def __hash__(self) -> int:
+        """
+        Hash is computed in (nearly) constant time (numerical expansion is not performed).
+
+        >>> hash(BitLengthSet({1, 2, 3})) != hash(BitLengthSet({1, 3}))
+        True
+        """
+        return hash((self.min, self.max, frozenset(self % 64)))
 
     def __bool__(self) -> bool:
         """
