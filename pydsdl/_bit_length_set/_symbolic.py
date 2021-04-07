@@ -316,6 +316,7 @@ class MemoizationOperator(Operator):
                     elapsed,
                     len(self._expansion),
                     self._child,
+                    stack_info=True,
                 )
             assert elapsed < _POISON_SLOW_EXPANSION
 
