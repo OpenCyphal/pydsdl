@@ -402,7 +402,7 @@ def _ensure_no_common_usage_errors(
 
 
 def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:
-    directories = list(sorted([str(os.path.abspath(x)) for x in set(directories)]))
+    directories = list(sorted([str(os.path.join(os.path.abspath(x), "")) for x in set(directories)]))
     for a in directories:
         for b in directories:
             if (a != b) and a.startswith(b):
@@ -608,3 +608,15 @@ def _unittest_common_usage_errors() -> None:
     (rep,) = reports
     reports.clear()
     assert os.path.normcase(dir_dsdl_uavcan) in rep
+
+
+def _unittest_nested_roots() -> None:
+    from pytest import raises
+
+    _ensure_no_nested_root_namespaces([])
+    _ensure_no_nested_root_namespaces(["a"])
+    _ensure_no_nested_root_namespaces(["a/b", "a/c"])
+    with raises(NestedRootNamespaceError):
+        _ensure_no_nested_root_namespaces(["a/b", "a"])
+    _ensure_no_nested_root_namespaces(["aa/b", "a"])
+    _ensure_no_nested_root_namespaces(["a/b", "aa"])
