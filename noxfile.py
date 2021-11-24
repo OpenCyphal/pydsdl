@@ -9,7 +9,7 @@ from pathlib import Path
 import nox
 
 
-PYTHONS = ["3.6", "3.7", "3.8", "3.9"]
+PYTHONS = ["3.6", "3.7", "3.8", "3.9", "3.10"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True

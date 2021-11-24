@@ -9,6 +9,10 @@ environment:
 
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.10"
+
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.9"
 
     - job_group: tests
@@ -30,7 +34,7 @@ environment:
     - job_name: deploy
       job_depends_on: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
-      PYTHON: "3.9"
+      PYTHON: "3.10"
 
   GIT_TOKEN:
     secure: +jQhxLpePj6hdDryfET/XpLo7VL9fhDXVHlwLOPp/nRDYe97TJAfd0XCTuPz1qkT
@@ -54,6 +58,7 @@ for:
       - cmd: 'echo %PATH%'
       # Shared config.
       - python -m pip install --upgrade pip setuptools nox
+      - python --version
     test_script:
       # GNU/Linux test.
       - sh: nox --non-interactive --error-on-missing-interpreters --session test lint --python $PYTHON
