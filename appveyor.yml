@@ -23,6 +23,10 @@ environment:
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.6"
 
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: macos
+      PYTHON: "3.9"
+
     - job_name: deploy
       job_depends_on: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
@@ -53,7 +57,8 @@ for:
     test_script:
       # GNU/Linux test.
       - sh: nox --non-interactive --error-on-missing-interpreters --session test lint --python $PYTHON
-      - sh: nox --non-interactive --session docs
+      # skip macOS docs build
+      - sh: 'if [ "$APPVEYOR_BUILD_WORKER_IMAGE" != "macos" ]; then nox --non-interactive --session docs; fi'
       # MS Windows test.
       - cmd: nox --forcecolor --non-interactive --error-on-missing-interpreters --session test lint
       # Shared test for all platforms.
