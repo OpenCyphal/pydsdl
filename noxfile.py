@@ -84,7 +84,7 @@ def lint(session):
         },
     )
     if is_latest_python(session):
-        session.install("black == 20.8b1")
+        session.install("black == 21.4b2")
         session.run("black", "--check", ".")
 
 
