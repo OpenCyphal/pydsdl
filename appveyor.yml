@@ -5,7 +5,11 @@ environment:
   matrix:
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
-      PYTHON: "C:\\Python39-x64"
+      PYTHON: "C:\\Python310-x64"
+
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.10"
 
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
@@ -23,10 +27,14 @@ environment:
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.6"
 
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: macos
+      PYTHON: "3.9"
+
     - job_name: deploy
       job_depends_on: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
-      PYTHON: "3.9"
+      PYTHON: "3.10"
 
   GIT_TOKEN:
     secure: +jQhxLpePj6hdDryfET/XpLo7VL9fhDXVHlwLOPp/nRDYe97TJAfd0XCTuPz1qkT
@@ -49,11 +57,13 @@ for:
       - cmd: 'SET PATH=%PYTHON%\\Scripts;%PATH%'
       - cmd: 'echo %PATH%'
       # Shared config.
-      - python -m pip install --upgrade pip setuptools nox
+      - python -m pip install --upgrade pip setuptools nox typed_ast
+      - python --version
     test_script:
       # GNU/Linux test.
       - sh: nox --non-interactive --error-on-missing-interpreters --session test lint --python $PYTHON
-      - sh: nox --non-interactive --session docs
+      # skip macOS docs build
+      - sh: 'if [ "$APPVEYOR_BUILD_WORKER_IMAGE" != "macos" ]; then nox --non-interactive --session docs; fi'
       # MS Windows test.
       - cmd: nox --forcecolor --non-interactive --error-on-missing-interpreters --session test lint
       # Shared test for all platforms.

@@ -9,7 +9,7 @@ from pathlib import Path
 import nox
 
 
-PYTHONS = ["3.6", "3.7", "3.8", "3.9"]
+PYTHONS = ["3.6", "3.7", "3.8", "3.9", "3.10"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -64,7 +64,7 @@ def test(session):
 def lint(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install(
-        "mypy   == 0.812",
+        "mypy   == 0.931",
         "pylint == 2.7.2",
     )
     session.run(
@@ -84,7 +84,7 @@ def lint(session):
         },
     )
     if is_latest_python(session):
-        session.install("black == 20.8b1")
+        session.install("black == 21.12b0")
         session.run("black", "--check", ".")
 
 
