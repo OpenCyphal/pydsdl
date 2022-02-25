@@ -458,7 +458,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     import tempfile
     from ._dsdl_definition import FileNameFormatError
 
-    directory = tempfile.TemporaryDirectory()
+    directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
     root_ns_dir = os.path.join(directory.name, "foo")
 
     os.mkdir(root_ns_dir)
@@ -581,7 +581,7 @@ def _unittest_dsdl_definition_constructor() -> None:
 def _unittest_common_usage_errors() -> None:
     import tempfile
 
-    directory = tempfile.TemporaryDirectory()
+    directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
     root_ns_dir = os.path.join(directory.name, "foo")
     os.mkdir(root_ns_dir)
 

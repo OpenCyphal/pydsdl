@@ -24,10 +24,6 @@ environment:
       PYTHON: "3.7"
 
     - job_group: tests
-      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
-      PYTHON: "3.6"
-
-    - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: macos
       PYTHON: "3.9"
 

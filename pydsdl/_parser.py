@@ -155,9 +155,9 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         self._comment_is_header = False
         self._comment = ""
 
-    def generic_visit(self, node: _Node, children: typing.Sequence[typing.Any]) -> typing.Any:
+    def generic_visit(self, node: _Node, visited_children: typing.Sequence[typing.Any]) -> typing.Any:
         """If the node has children, replace the node with them."""
-        return tuple(children) or node
+        return tuple(visited_children) or node
 
     def visit_line(self, node: _Node, children: _Children) -> None:
         if len(node.text) == 0:

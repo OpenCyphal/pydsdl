@@ -871,27 +871,21 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     assert DelimitedType(u, 800).inner_type is u
     assert DelimitedType(u, 800).inner_type.inner_type is u
 
-    assert (
-        try_union_fields(
-            [
-                UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-            * 257
-        ).bit_length_set
-        == {16 + 16}
-    )
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+        * 257
+    ).bit_length_set == {16 + 16}
 
-    assert (
-        try_union_fields(
-            [
-                UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-            * 32769
-        ).bit_length_set
-        == {32 + 16}
-    )
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+        * 32769
+    ).bit_length_set == {32 + 16}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
@@ -899,15 +893,12 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     outer = FixedLengthArrayType(small, 2)  # unpadded bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
-    assert (
-        try_union_fields(
-            [
-                outer,
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-        ).bit_length_set
-        == {24, 32, 40, 48, 56}
-    )
+    assert try_union_fields(
+        [
+            outer,
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+    ).bit_length_set == {24, 32, 40, 48, 56}
 
     def try_struct_fields(field_types: typing.List[SerializableType]) -> StructureType:
         atr = []
@@ -941,15 +932,12 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
 
     assert try_struct_fields([]).bit_length_set == {0}  # Empty sets forbidden
 
-    assert (
-        try_struct_fields(
-            [
-                outer,
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-        ).bit_length_set
-        == {16 + 16, 24 + 16, 32 + 16, 40 + 16, 48 + 16}
-    )
+    assert try_struct_fields(
+        [
+            outer,
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+    ).bit_length_set == {16 + 16, 24 + 16, 32 + 16, 40 + 16, 48 + 16}
 
     assert try_struct_fields([outer]).bit_length_set == {16, 24, 32, 40, 48}
 
