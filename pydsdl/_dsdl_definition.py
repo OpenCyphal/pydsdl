@@ -159,7 +159,7 @@ class DSDLDefinition:
         except (MemoryError, SystemError):  # pragma: no cover
             raise
         except Exception as ex:  # pragma: no cover
-            raise InternalError(culprit=ex, path=self.file_path)
+            raise InternalError(culprit=ex, path=self.file_path) from ex
 
     @property
     def full_name(self) -> str:

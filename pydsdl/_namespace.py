@@ -455,10 +455,8 @@ def _unittest_dsdl_definition_constructor() -> None:
     from ._dsdl_definition import FileNameFormatError
 
     directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
-    root_ns_dir = Path(os.path.join(directory.name, "foo"))
-
-    os.mkdir(root_ns_dir)
-    os.mkdir(os.path.join(root_ns_dir, "nested"))
+    root_ns_dir = Path(directory.name, "foo").resolve()
+    (root_ns_dir / "nested").mkdir(parents=True)
 
     def touchy(relative_path: str) -> None:
         p = os.path.join(root_ns_dir, relative_path.replace("/", os.path.sep))
