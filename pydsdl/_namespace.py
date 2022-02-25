@@ -133,10 +133,10 @@ def read_namespace(
             raise TypeError("Lookup directories shall be an iterable of paths. Found in list: " + type(a).__name__)
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(a))
 
-    # Normalize paths and remove duplicates.
-    root_namespace_directory = Path(root_namespace_directory).absolute()
+    # Normalize paths and remove duplicates. Resolve symlinks to avoid ambiguities.
+    root_namespace_directory = Path(root_namespace_directory).resolve()
     lookup_directories_path_list.append(root_namespace_directory)
-    lookup_directories_path_list = list(sorted({x.absolute() for x in lookup_directories_path_list}))
+    lookup_directories_path_list = list(sorted({x.resolve() for x in lookup_directories_path_list}))
     _logger.debug("Lookup directories are listed below:")
     for a in lookup_directories_path_list:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(a))
@@ -385,7 +385,7 @@ def _ensure_no_common_usage_errors(
 
     all_paths = set([root_namespace_directory] + list(lookup_directories))
     for p in all_paths:
-        p = Path(os.path.normcase(p.absolute()))
+        p = Path(os.path.normcase(p.resolve()))
         try:
             candidates = [x for x in os.listdir(p) if os.path.isdir(os.path.join(p, x)) and is_valid_name(str(x))]
         except OSError:  # pragma: no cover
@@ -415,7 +415,7 @@ def _ensure_no_namespace_name_collisions(directories: Iterable[Path]) -> None:
     def get_namespace_name(d: Path) -> str:
         return str(os.path.split(d))[-1]
 
-    directories = list(sorted([x.absolute() for x in set(directories)]))
+    directories = list(sorted([x.resolve() for x in set(directories)]))
     for a in directories:
         for b in directories:
             if (a != b) and get_namespace_name(a).lower() == get_namespace_name(b).lower():
@@ -436,17 +436,13 @@ def _construct_dsdl_definitions_from_namespace(
 
     walker = os.walk(root_namespace_path, onerror=on_walk_error, followlinks=True)
 
-    source_file_paths = []  # type: list[Path]
+    source_file_paths: set[Path] = set()
     for root, _dirnames, filenames in walker:
         for filename in fnmatch.filter(filenames, _DSDL_FILE_GLOB):
-            source_file_paths.append(Path(os.path.join(root, filename)))
-
-    _logger.debug("DSDL files in the namespace dir %s are listed below:", root_namespace_path)
-    for a in source_file_paths:
-        _logger.debug(_LOG_LIST_ITEM_PREFIX + str(a))
+            source_file_paths.add(Path(root, filename).resolve())
 
     output = []  # type: list[_dsdl_definition.DSDLDefinition]
-    for fp in source_file_paths:
+    for fp in sorted(source_file_paths):
         dsdl_def = _dsdl_definition.DSDLDefinition(fp, root_namespace_path)
         output.append(dsdl_def)
 
@@ -620,3 +616,16 @@ def _unittest_nested_roots() -> None:
         _ensure_no_nested_root_namespaces([Path("a/b"), Path("a")])
     _ensure_no_nested_root_namespaces([Path("aa/b"), Path("a")])
     _ensure_no_nested_root_namespaces([Path("a/b"), Path("aa")])
+
+
+def _unittest_issue_71() -> None:  # https://github.com/UAVCAN/pydsdl/issues/71
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        real = Path(directory, "real", "nested")
+        real.mkdir(parents=True)
+        link = Path(directory, "link")
+        link.symlink_to(real, target_is_directory=True)
+        (real / "Msg.0.1.uavcan").write_text("@sealed")
+        assert len(read_namespace(real, [real, link])) == 1
+        assert len(read_namespace(link, [real, link])) == 1
