@@ -5,6 +5,7 @@
 # pylint: disable=broad-except
 
 import typing
+from pathlib import Path
 import urllib.parse
 
 
@@ -15,13 +16,13 @@ class FrontendError(Exception):  # PEP8 says that the "Exception" suffix is redu
     please refer to the direct descendants instead.
     """
 
-    def __init__(self, text: str, path: typing.Optional[str] = None, line: typing.Optional[int] = None):
+    def __init__(self, text: str, path: typing.Optional[Path] = None, line: typing.Optional[int] = None):
         Exception.__init__(self, text)
         self._path = path
         self._line = line
 
     def set_error_location_if_unknown(
-        self, path: typing.Optional[str] = None, line: typing.Optional[int] = None
+        self, path: typing.Optional[Path] = None, line: typing.Optional[int] = None
     ) -> None:
         """
         Entries that are already known will be left unchanged.
@@ -35,7 +36,7 @@ class FrontendError(Exception):  # PEP8 says that the "Exception" suffix is redu
             self._line = line
 
     @property
-    def path(self) -> typing.Optional[str]:
+    def path(self) -> typing.Optional[Path]:
         """Source file path where the error has occurred, if known."""
         return self._path
 
@@ -79,7 +80,7 @@ class InternalError(FrontendError):
     def __init__(
         self,
         text: typing.Optional[str] = None,
-        path: typing.Optional[str] = None,
+        path: typing.Optional[Path] = None,
         line: typing.Optional[int] = None,
         culprit: typing.Optional[Exception] = None,
     ):
@@ -114,13 +115,13 @@ def _unittest_error() -> None:
         assert repr(ex) == "FrontendError: 'Hello world!'"
 
     try:
-        raise FrontendError("Hello world!", path="path/to/file.uavcan", line=123)
+        raise FrontendError("Hello world!", path=Path("path/to/file.uavcan"), line=123)
     except Exception as ex:
         assert str(ex) == "path/to/file.uavcan:123: Hello world!"
         assert repr(ex) == "FrontendError: 'path/to/file.uavcan:123: Hello world!'"
 
     try:
-        raise FrontendError("Hello world!", path="path/to/file.uavcan")
+        raise FrontendError("Hello world!", path=Path("path/to/file.uavcan"))
     except Exception as ex:
         assert str(ex) == "path/to/file.uavcan: Hello world!"
         assert repr(ex) == "FrontendError: 'path/to/file.uavcan: Hello world!'"
@@ -128,9 +129,9 @@ def _unittest_error() -> None:
 
 def _unittest_internal_error_github_reporting() -> None:
     try:
-        raise InternalError(path="FILE_PATH", line=42)
+        raise InternalError(path=Path("FILE_PATH"), line=42)
     except FrontendError as ex:
-        assert ex.path == "FILE_PATH"
+        assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
         assert str(ex) == "FILE_PATH:42: "
 
@@ -139,14 +140,14 @@ def _unittest_internal_error_github_reporting() -> None:
             try:  # TRY HARDER
                 raise InternalError(text="BASE TEXT", culprit=Exception("ERROR TEXT"))
             except FrontendError as ex:
-                ex.set_error_location_if_unknown(path="FILE_PATH")
+                ex.set_error_location_if_unknown(path=Path("FILE_PATH"))
                 raise
         except FrontendError as ex:
             ex.set_error_location_if_unknown(line=42)
             raise
     except FrontendError as ex:
         print(ex)
-        assert ex.path == "FILE_PATH"
+        assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
         # We have to ignore the last couple of characters because Python before 3.7 reprs Exceptions like this:
         #   Exception('ERROR TEXT',)
@@ -158,6 +159,6 @@ def _unittest_internal_error_github_reporting() -> None:
         )
 
     try:
-        raise InternalError(text="BASE TEXT", path="FILE_PATH")
+        raise InternalError(text="BASE TEXT", path=Path("FILE_PATH"))
     except FrontendError as ex:
         assert str(ex) == "FILE_PATH: BASE TEXT"

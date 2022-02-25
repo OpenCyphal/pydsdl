@@ -4,7 +4,7 @@
 
 import re
 import string
-import typing  # pylint: disable=W0611
+from typing import Pattern
 from ._serializable import TypeParameterError
 
 
@@ -42,7 +42,7 @@ _VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + strin
 
 # Disallowed name patterns apply to any part of any name, e.g., an attribute name, a namespace component,
 # type name, etc. The pattern must produce an exact match to trigger a name error. All patterns are case-insensitive.
-_DISALLOWED_NAME_PATTERNS = [
+_DISALLOWED_NAME_PATTERNS: list[str | Pattern[str]] = [
     "truncated",
     "saturated",
     "true",
@@ -72,7 +72,7 @@ _DISALLOWED_NAME_PATTERNS = [
     re.compile(r"com\d$"),
     re.compile(r"lpt\d$"),
     re.compile(r"_.*_$"),
-]  # type: typing.List[typing.Union[str, typing.Pattern[str]]]
+]
 
 
 def _unittest_check_name() -> None:

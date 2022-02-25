@@ -2,9 +2,9 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-import os
-import typing
+from typing import Optional, Callable, Iterable
 import logging
+from pathlib import Path
 from . import _serializable
 from . import _expression
 from . import _error
@@ -45,15 +45,15 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
     def __init__(
         self,
         definition: _dsdl_definition.DSDLDefinition,
-        lookup_definitions: typing.Iterable[_dsdl_definition.DSDLDefinition],
-        print_output_handler: typing.Callable[[int, str], None],
+        lookup_definitions: Iterable[_dsdl_definition.DSDLDefinition],
+        print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
     ):
         self._definition = definition
         self._lookup_definitions = list(lookup_definitions)
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
-        self._element_callback = None  # type: typing.Optional[typing.Callable[[str], None]]
+        self._element_callback = None  # type: Optional[Callable[[str], None]]
 
         assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
         assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
@@ -148,7 +148,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         )
 
     def on_directive(
-        self, line_number: int, directive_name: str, associated_expression_value: typing.Optional[_expression.Any]
+        self, line_number: int, directive_name: str, associated_expression_value: Optional[_expression.Any]
     ) -> None:
         try:
             handler = {
@@ -209,8 +209,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 lookup_nss or "(empty set)",
             )
             if requested_ns not in lookup_nss and requested_ns == subroot_ns:
-                error_description += " Did you mean to use the directory %r instead of %r?" % (
-                    os.path.join(self._definition.root_namespace_path, subroot_ns),
+                error_description += " Did you mean to use the directory %s instead of %s?" % (
+                    self._definition.root_namespace_path / subroot_ns,
                     self._definition.root_namespace_path,
                 )
             else:
@@ -231,7 +231,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
 
-    def _queue_attribute(self, element_callback: typing.Callable[[str], None]) -> None:
+    def _queue_attribute(self, element_callback: Callable[[str], None]) -> None:
         self._flush_attribute("")
         self._element_callback = element_callback
 
@@ -247,7 +247,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 "This is to prevent errors if the extent is dependent on the bit length set of the data schema."
             )
 
-    def _on_print_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_print_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
         _logger.info(
             "Print directive at %s:%d%s",
             self._definition.file_path,
@@ -256,7 +256,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         )
         self._print_output_handler(line_number, str(value if value is not None else ""))
 
-    def _on_assert_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_assert_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
         if isinstance(value, _expression.Boolean):
             if not value.native_value:
                 raise AssertionCheckFailureError(
@@ -268,7 +268,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         else:
             raise InvalidDirectiveError("The assertion check expression must yield a boolean, not %s" % value.TYPE_NAME)
 
-    def _on_extent_directive(self, line_number: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_extent_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
         if self._structs[-1].serialization_mode is not None:
             raise InvalidDirectiveError(
                 "Misplaced extent directive. The serialization mode is already set to %s"
@@ -284,7 +284,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         else:
             raise InvalidDirectiveError("The extent directive expects a rational, not %s" % value.TYPE_NAME)
 
-    def _on_sealed_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_sealed_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:
         if self._structs[-1].serialization_mode is not None:
             raise InvalidDirectiveError(
                 "Misplaced sealing directive. The serialization mode is already set to %s"
@@ -294,7 +294,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError("The sealed directive does not expect an expression")
         self._structs[-1].set_serialization_mode(_data_schema_builder.SealedSerializationMode())
 
-    def _on_union_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_union_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:
         if value is not None:
             raise InvalidDirectiveError("The union directive does not expect an expression")
         if self._structs[-1].union:
@@ -303,7 +303,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError("The union directive must be placed before the first " "attribute definition")
         self._structs[-1].make_union()
 
-    def _on_deprecated_directive(self, _ln: int, value: typing.Optional[_expression.Any]) -> None:
+    def _on_deprecated_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:
         if value is not None:
             raise InvalidDirectiveError("The deprecated directive does not expect an expression")
         if self._is_deprecated:
@@ -322,8 +322,8 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         name: str,
         version: _serializable.Version,
         deprecated: bool,
-        fixed_port_id: typing.Optional[int],
-        source_file_path: str,
+        fixed_port_id: Optional[int],
+        source_file_path: Path,
         has_parent_service: bool,
     ) -> _serializable.CompositeType:
         ty = _serializable.UnionType if builder.union else _serializable.StructureType

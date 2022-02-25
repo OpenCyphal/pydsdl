@@ -2,10 +2,12 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
+from __future__ import annotations
 import os
 import time
-import typing
+from typing import Iterable, Callable
 import logging
+from pathlib import Path
 from . import _error
 from . import _serializable
 from . import _parser
@@ -19,8 +21,8 @@ class FileNameFormatError(_error.InvalidDefinitionError):
     Raised when a DSDL definition file is named incorrectly.
     """
 
-    def __init__(self, text: str, path: str):
-        super().__init__(text=text, path=str(path))
+    def __init__(self, text: str, path: Path):
+        super().__init__(text=text, path=Path(path))
 
 
 class DSDLDefinition:
@@ -30,11 +32,11 @@ class DSDLDefinition:
     Upper layers that operate on top of this abstraction do not concern themselves with the file system at all.
     """
 
-    def __init__(self, file_path: str, root_namespace_path: str):
+    def __init__(self, file_path: Path, root_namespace_path: Path):
         # Normalizing the path and reading the definition text
-        self._file_path = os.path.abspath(file_path)
+        self._file_path = Path(file_path).absolute()
         del file_path
-        self._root_namespace_path = os.path.abspath(root_namespace_path)
+        self._root_namespace_path = Path(root_namespace_path).absolute()
         del root_namespace_path
         with open(self._file_path) as f:
             self._text = str(f.read())
@@ -55,7 +57,7 @@ class DSDLDefinition:
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.uavcan
         basename_components = basename.split(".")[:-1]
-        str_fixed_port_id = None  # type: typing.Optional[str]
+        str_fixed_port_id: str | None = None
         if len(basename_components) == 4:
             str_fixed_port_id, short_name, str_major_version, str_minor_version = basename_components
         elif len(basename_components) == 3:
@@ -66,10 +68,10 @@ class DSDLDefinition:
         # Parsing the fixed port ID, if specified; None if not
         if str_fixed_port_id is not None:
             try:
-                self._fixed_port_id = int(str_fixed_port_id)  # type: typing.Optional[int]
+                self._fixed_port_id: int | None = int(str_fixed_port_id)
             except ValueError:
                 raise FileNameFormatError(
-                    "Not a valid fixed port-ID: %r. "
+                    "Not a valid fixed port-ID: %s. "
                     "Namespaces are defined as directories; putting the namespace name in the file name will not work. "
                     'For example: "foo/Bar.1.0.uavcan" is OK (where "foo" is a directory); "foo.Bar.1.0.uavcan" is not.'
                     % str_fixed_port_id,
@@ -94,12 +96,12 @@ class DSDLDefinition:
             namespace_components + [str(short_name)]
         )  # type: str
 
-        self._cached_type = None  # type: typing.Optional[_serializable.CompositeType]
+        self._cached_type: _serializable.CompositeType | None = None
 
     def read(
         self,
-        lookup_definitions: typing.Iterable["DSDLDefinition"],
-        print_output_handler: typing.Callable[[int, str], None],
+        lookup_definitions: Iterable["DSDLDefinition"],
+        print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
     ) -> _serializable.CompositeType:
         """
@@ -167,7 +169,7 @@ class DSDLDefinition:
         return self._name
 
     @property
-    def name_components(self) -> typing.List[str]:
+    def name_components(self) -> list[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
         return self._name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)
 
@@ -196,7 +198,7 @@ class DSDLDefinition:
         return self._version
 
     @property
-    def fixed_port_id(self) -> typing.Optional[int]:
+    def fixed_port_id(self) -> int | None:
         """Either the fixed port ID as integer, or None if not defined for this type."""
         return self._fixed_port_id
 
@@ -205,11 +207,11 @@ class DSDLDefinition:
         return self.fixed_port_id is not None
 
     @property
-    def file_path(self) -> str:
+    def file_path(self) -> Path:
         return self._file_path
 
     @property
-    def root_namespace_path(self) -> str:
+    def root_namespace_path(self) -> Path:
         return self._root_namespace_path
 
     def __eq__(self, other: object) -> bool:
@@ -222,7 +224,7 @@ class DSDLDefinition:
         return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
-        return "DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%r)" % (
+        return "DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%s)" % (
             self.full_name,
             self.version,
             self.fixed_port_id,

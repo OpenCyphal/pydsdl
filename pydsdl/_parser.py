@@ -2,6 +2,7 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
+from __future__ import annotations
 import os
 import typing
 import logging
@@ -95,7 +96,7 @@ def _get_grammar() -> parsimonious.Grammar:
 _logger = logging.getLogger(__name__)
 
 
-_Children = typing.Tuple[typing.Any, ...]
+_Children = tuple[typing.Any, ...]
 _VisitorHandler = typing.Callable[["_ParseTreeProcessor", _Node, _Children], typing.Any]
 _PrimitiveTypeConstructor = typing.Callable[[_serializable.PrimitiveType.CastMode], _serializable.PrimitiveType]
 
@@ -301,8 +302,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_mul = parsimonious.NodeVisitor.lift_child
     visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
-    def visit_expression_list(self, _n: _Node, children: _Children) -> typing.Tuple[_expression.Any, ...]:
-        out = []  # type: typing.List[_expression.Any]
+    def visit_expression_list(self, _n: _Node, children: _Children) -> tuple[_expression.Any, ...]:
+        out = []  # type: list[_expression.Any]
         if children:
             children = children[0]
             assert len(children) == 2
