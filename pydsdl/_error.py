@@ -60,10 +60,10 @@ class FrontendError(Exception):  # PEP8 says that the "Exception" suffix is redu
             uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
         """
         if self.path and self.line:
-            return "%s:%d: %s" % (self.path, self.line, self.text)
+            return "%s:%d: %s" % (self.path.as_posix(), self.line, self.text)
 
         if self.path:
-            return "%s: %s" % (self.path, self.text)
+            return "%s: %s" % (self.path.as_posix(), self.text)
 
         return self.text
 
