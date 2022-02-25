@@ -96,7 +96,7 @@ def _get_grammar() -> parsimonious.Grammar:
 _logger = logging.getLogger(__name__)
 
 
-_Children = tuple[typing.Any, ...]
+_Children = typing.Tuple[typing.Any, ...]
 _VisitorHandler = typing.Callable[["_ParseTreeProcessor", _Node, _Children], typing.Any]
 _PrimitiveTypeConstructor = typing.Callable[[_serializable.PrimitiveType.CastMode], _serializable.PrimitiveType]
 
