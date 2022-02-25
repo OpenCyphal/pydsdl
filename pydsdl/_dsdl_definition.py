@@ -8,15 +8,15 @@ import time
 from typing import Iterable, Callable
 import logging
 from pathlib import Path
-from . import _error
-from . import _serializable
+from ._error import FrontendError, InvalidDefinitionError, InternalError
+from ._serializable import CompositeType, Version
 from . import _parser
 
 
 _logger = logging.getLogger(__name__)
 
 
-class FileNameFormatError(_error.InvalidDefinitionError):
+class FileNameFormatError(InvalidDefinitionError):
     """
     Raised when a DSDL definition file is named incorrectly.
     """
@@ -34,15 +34,15 @@ class DSDLDefinition:
 
     def __init__(self, file_path: Path, root_namespace_path: Path):
         # Normalizing the path and reading the definition text
-        self._file_path = Path(file_path).absolute()
+        self._file_path = Path(file_path).resolve()
         del file_path
-        self._root_namespace_path = Path(root_namespace_path).absolute()
+        self._root_namespace_path = Path(root_namespace_path).resolve()
         del root_namespace_path
         with open(self._file_path) as f:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(self._root_namespace_path)[-1]:
+        if CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(self._root_namespace_path)[-1]:
             raise FileNameFormatError("Invalid namespace name", path=self._root_namespace_path)
 
         # Determining the relative path within the root namespace directory
@@ -82,28 +82,26 @@ class DSDLDefinition:
 
         # Parsing the version numbers
         try:
-            self._version = _serializable.Version(major=int(str_major_version), minor=int(str_minor_version))
+            self._version = Version(major=int(str_major_version), minor=int(str_minor_version))
         except ValueError:
             raise FileNameFormatError("Could not parse the version numbers", path=self._file_path) from None
 
         # Finally, constructing the name
         namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
         for nc in namespace_components:
-            if _serializable.CompositeType.NAME_COMPONENT_SEPARATOR in nc:
-                raise FileNameFormatError("Invalid name for namespace component", path=self._file_path)
+            if CompositeType.NAME_COMPONENT_SEPARATOR in nc:
+                raise FileNameFormatError(f"Invalid name for namespace component: {nc!r}", path=self._file_path)
 
-        self._name = _serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join(
-            namespace_components + [str(short_name)]
-        )  # type: str
+        self._name: str = CompositeType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])
 
-        self._cached_type: _serializable.CompositeType | None = None
+        self._cached_type: CompositeType | None = None
 
     def read(
         self,
         lookup_definitions: Iterable["DSDLDefinition"],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
-    ) -> _serializable.CompositeType:
+    ) -> CompositeType:
         """
         Reads the data type definition and returns its high-level data type representation.
         The output is cached; all following invocations will read from the cache.
@@ -155,13 +153,13 @@ class DSDLDefinition:
                 self._cached_type.fixed_port_id,
             )
             return self._cached_type
-        except _error.FrontendError as ex:  # pragma: no cover
+        except FrontendError as ex:  # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
         except (MemoryError, SystemError):  # pragma: no cover
             raise
         except Exception as ex:  # pragma: no cover
-            raise _error.InternalError(culprit=ex, path=self.file_path)
+            raise InternalError(culprit=ex, path=self.file_path)
 
     @property
     def full_name(self) -> str:
@@ -171,7 +169,7 @@ class DSDLDefinition:
     @property
     def name_components(self) -> list[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
-        return self._name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)
+        return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
@@ -181,7 +179,7 @@ class DSDLDefinition:
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
-        return str(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
@@ -194,7 +192,7 @@ class DSDLDefinition:
         return self._text
 
     @property
-    def version(self) -> _serializable.Version:
+    def version(self) -> Version:
         return self._version
 
     @property
