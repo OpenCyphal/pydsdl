@@ -8,6 +8,10 @@ environment:
       PYTHON: "C:\\Python310-x64"
 
     - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: macos
+      PYTHON: "3.9"
+
+    - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.10"
 
@@ -22,10 +26,6 @@ environment:
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.7"
-
-    - job_group: tests
-      APPVEYOR_BUILD_WORKER_IMAGE: macos
-      PYTHON: "3.9"
 
     - job_name: deploy
       job_depends_on: tests
