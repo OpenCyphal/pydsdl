@@ -2,10 +2,12 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
+from __future__ import annotations
 import abc
 import math
 import typing
 import itertools
+from pathlib import Path
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
@@ -61,7 +63,7 @@ class CompositeType(SerializableType):
         attributes: typing.Iterable[Attribute],
         deprecated: bool,
         fixed_port_id: typing.Optional[int],
-        source_file_path: str,
+        source_file_path: Path,
         has_parent_service: bool,
         doc: str = "",
     ):
@@ -73,7 +75,7 @@ class CompositeType(SerializableType):
         self._attributes_by_name = {a.name: a for a in self._attributes if not isinstance(a, PaddingField)}
         self._deprecated = bool(deprecated)
         self._fixed_port_id = None if fixed_port_id is None else int(fixed_port_id)
-        self._source_file_path = str(source_file_path)
+        self._source_file_path = Path(source_file_path)
         self._has_parent_service = bool(has_parent_service)
 
         self._doc = doc
@@ -236,7 +238,7 @@ class CompositeType(SerializableType):
         return self.fixed_port_id is not None
 
     @property
-    def source_file_path(self) -> str:
+    def source_file_path(self) -> Path:
         """
         For synthesized types such as service request/response sections, this property is defined as an empty string.
         """
@@ -348,7 +350,7 @@ class UnionType(CompositeType):
         attributes: typing.Iterable[Attribute],
         deprecated: bool,
         fixed_port_id: typing.Optional[int],
-        source_file_path: str,
+        source_file_path: Path,
         has_parent_service: bool,
         doc: str = "",
     ):
@@ -455,7 +457,7 @@ class StructureType(CompositeType):
         attributes: typing.Iterable[Attribute],
         deprecated: bool,
         fixed_port_id: typing.Optional[int],
-        source_file_path: str,
+        source_file_path: Path,
         has_parent_service: bool,
         doc: str = "",
     ):
@@ -692,7 +694,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=[],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path="",
+            source_file_path=Path(),
             has_parent_service=False,
         )
 
@@ -732,7 +734,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=[],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path="",
+            source_file_path=Path(),
             has_parent_service=False,
         )
 
@@ -747,7 +749,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             ],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path="",
+            source_file_path=Path(),
             has_parent_service=False,
         )
 
@@ -761,7 +763,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
         ],
         deprecated=False,
         fixed_port_id=None,
-        source_file_path="",
+        source_file_path=Path(),
         has_parent_service=False,
     )
     assert u["a"].name == "a"
@@ -787,7 +789,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
         ],
         deprecated=False,
         fixed_port_id=None,
-        source_file_path="",
+        source_file_path=Path(),
         has_parent_service=False,
     )
     assert s["a"].name == "a"
@@ -846,7 +848,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=atr,
             deprecated=False,
             fixed_port_id=None,
-            source_file_path="",
+            source_file_path=Path(),
             has_parent_service=False,
         )
 
@@ -871,27 +873,21 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     assert DelimitedType(u, 800).inner_type is u
     assert DelimitedType(u, 800).inner_type.inner_type is u
 
-    assert (
-        try_union_fields(
-            [
-                UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-            * 257
-        ).bit_length_set
-        == {16 + 16}
-    )
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+        * 257
+    ).bit_length_set == {16 + 16}
 
-    assert (
-        try_union_fields(
-            [
-                UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-            * 32769
-        ).bit_length_set
-        == {32 + 16}
-    )
+    assert try_union_fields(
+        [
+            UnsignedIntegerType(16, PrimitiveType.CastMode.TRUNCATED),
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+        * 32769
+    ).bit_length_set == {32 + 16}
 
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
@@ -899,15 +895,12 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     outer = FixedLengthArrayType(small, 2)  # unpadded bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
-    assert (
-        try_union_fields(
-            [
-                outer,
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-        ).bit_length_set
-        == {24, 32, 40, 48, 56}
-    )
+    assert try_union_fields(
+        [
+            outer,
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+    ).bit_length_set == {24, 32, 40, 48, 56}
 
     def try_struct_fields(field_types: typing.List[SerializableType]) -> StructureType:
         atr = []
@@ -920,7 +913,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=atr,
             deprecated=False,
             fixed_port_id=None,
-            source_file_path="",
+            source_file_path=Path(),
             has_parent_service=False,
         )
 
@@ -941,15 +934,12 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
 
     assert try_struct_fields([]).bit_length_set == {0}  # Empty sets forbidden
 
-    assert (
-        try_struct_fields(
-            [
-                outer,
-                SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
-            ]
-        ).bit_length_set
-        == {16 + 16, 24 + 16, 32 + 16, 40 + 16, 48 + 16}
-    )
+    assert try_struct_fields(
+        [
+            outer,
+            SignedIntegerType(16, PrimitiveType.CastMode.SATURATED),
+        ]
+    ).bit_length_set == {16 + 16, 24 + 16, 32 + 16, 40 + 16, 48 + 16}
 
     assert try_struct_fields([outer]).bit_length_set == {16, 24, 32, 40, 48}
 
@@ -971,7 +961,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
             attributes=attributes,
             deprecated=False,
             fixed_port_id=None,
-            source_file_path="",
+            source_file_path=Path(),
             has_parent_service=False,
         )
 
@@ -1239,7 +1229,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=False,
                 fixed_port_id=None,
-                source_file_path="",
+                source_file_path=Path(),
                 has_parent_service=True,
             ),
             response=StructureType(
@@ -1248,7 +1238,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=False,
                 fixed_port_id=None,
-                source_file_path="",
+                source_file_path=Path(),
                 has_parent_service=True,
             ),
             fixed_port_id=None,
@@ -1262,7 +1252,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=False,
                 fixed_port_id=None,
-                source_file_path="",
+                source_file_path=Path(),
                 has_parent_service=True,
             ),
             response=StructureType(
@@ -1271,7 +1261,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=True,
                 fixed_port_id=None,
-                source_file_path="",
+                source_file_path=Path(),
                 has_parent_service=False,
             ),
             fixed_port_id=None,
@@ -1284,7 +1274,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
         attributes=[],
         deprecated=False,
         fixed_port_id=None,
-        source_file_path="",
+        source_file_path=Path(),
         has_parent_service=False,
     )
     validate_iterator(e, [])

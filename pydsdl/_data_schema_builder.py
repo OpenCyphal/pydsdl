@@ -2,7 +2,7 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-import typing
+from __future__ import annotations
 from . import _error
 from . import _serializable
 from . import _bit_length_set
@@ -34,26 +34,26 @@ class SealedSerializationMode(SerializationMode):
 
 class DataSchemaBuilder:
     def __init__(self) -> None:
-        self._fields = []  # type: typing.List[_serializable.Field]
-        self._constants = []  # type: typing.List[_serializable.Constant]
-        self._serialization_mode = None  # type: typing.Optional[SerializationMode]
+        self._fields: list[_serializable.Field] = []
+        self._constants: list[_serializable.Constant] = []
+        self._serialization_mode: SerializationMode | None = None
         self._is_union = False
         self._bit_length_computed_at_least_once = False
         self._doc = ""
 
     @property
-    def fields(self) -> typing.List[_serializable.Field]:
+    def fields(self) -> list[_serializable.Field]:
         assert all(map(lambda x: isinstance(x, _serializable.Field), self._fields))
         return self._fields
 
     @property
-    def constants(self) -> typing.List[_serializable.Constant]:
+    def constants(self) -> list[_serializable.Constant]:
         assert all(map(lambda x: isinstance(x, _serializable.Constant), self._constants))
         return self._constants
 
     @property
-    def attributes(self) -> typing.List[_serializable.Attribute]:  # noinspection PyTypeChecker
-        out = []  # type: typing.List[_serializable.Attribute]
+    def attributes(self) -> list[_serializable.Attribute]:  # noinspection PyTypeChecker
+        out = []  # type: list[_serializable.Attribute]
         out += self.fields
         out += self.constants
         return out
@@ -63,7 +63,7 @@ class DataSchemaBuilder:
         return self._doc
 
     @property
-    def serialization_mode(self) -> typing.Optional[SerializationMode]:
+    def serialization_mode(self) -> SerializationMode | None:
         return self._serialization_mode
 
     @property

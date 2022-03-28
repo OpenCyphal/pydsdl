@@ -4,11 +4,13 @@
 
 # pylint: disable=logging-not-lazy
 
+from __future__ import annotations
 import os
-import typing
+from typing import Iterable, Callable, DefaultDict
 import logging
 import fnmatch
 import collections
+from pathlib import Path
 from . import _serializable
 from . import _dsdl_definition
 from . import _error
@@ -74,16 +76,16 @@ class SealingConsistencyError(_error.InvalidDefinitionError):
     """
 
 
-PrintOutputHandler = typing.Callable[[str, int, str], None]
+PrintOutputHandler = Callable[[Path, int, str], None]
 """Invoked when the frontend encounters a print directive or needs to output a generic diagnostic."""
 
 
 def read_namespace(
-    root_namespace_directory: str,
-    lookup_directories: typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,
-    print_output_handler: typing.Optional[PrintOutputHandler] = None,
+    root_namespace_directory: Path | str,
+    lookup_directories: None | Path | str | Iterable[Path | str] = None,
+    print_output_handler: PrintOutputHandler | None = None,
     allow_unregulated_fixed_port_id: bool = False,
-) -> typing.List[_serializable.CompositeType]:
+) -> list[_serializable.CompositeType]:
     """
     This function is the main entry point of the library.
     It reads all DSDL definitions from the specified root namespace directory and produces the annotated AST.
@@ -120,24 +122,24 @@ def read_namespace(
     # Add the own root namespace to the set of lookup directories, sort lexicographically, remove duplicates.
     # We'd like this to be an iterable list of strings but we handle the common practice of passing in a single path.
     if lookup_directories is None:
-        lookup_directories_path_list = []  # type: typing.List[str]
-    elif isinstance(lookup_directories, (str, bytes)):
-        lookup_directories_path_list = [lookup_directories]
+        lookup_directories_path_list: list[Path] = []
+    elif isinstance(lookup_directories, (str, bytes, Path)):
+        lookup_directories_path_list = [Path(lookup_directories)]
     else:
-        lookup_directories_path_list = list(lookup_directories)
+        lookup_directories_path_list = list(map(Path, lookup_directories))
 
     for a in lookup_directories_path_list:
-        if not isinstance(a, str):  # non-string paths
-            raise TypeError("Lookup directories shall be an iterable of strings. Found in list: " + type(a).__name__)
-        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
+        if not isinstance(a, (str, Path)):
+            raise TypeError("Lookup directories shall be an iterable of paths. Found in list: " + type(a).__name__)
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + str(a))
 
-    # Normalize paths and remove duplicates.
-    root_namespace_directory = os.path.abspath(root_namespace_directory)
+    # Normalize paths and remove duplicates. Resolve symlinks to avoid ambiguities.
+    root_namespace_directory = Path(root_namespace_directory).resolve()
     lookup_directories_path_list.append(root_namespace_directory)
-    lookup_directories_path_list = list(sorted({os.path.abspath(x) for x in lookup_directories_path_list}))
+    lookup_directories_path_list = list(sorted({x.resolve() for x in lookup_directories_path_list}))
     _logger.debug("Lookup directories are listed below:")
     for a in lookup_directories_path_list:
-        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
+        _logger.debug(_LOG_LIST_ITEM_PREFIX + str(a))
 
     # Check for common usage errors and warn the user if anything looks suspicious.
     _ensure_no_common_usage_errors(root_namespace_directory, lookup_directories_path_list, _logger.warning)
@@ -149,13 +151,13 @@ def read_namespace(
     # Construct DSDL definitions from the target and the lookup dirs.
     target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
     if not target_dsdl_definitions:
-        _logger.info("The namespace at %r is empty", root_namespace_directory)
+        _logger.info("The namespace at %s is empty", root_namespace_directory)
         return []
     _logger.debug("Target DSDL definitions are listed below:")
     for x in target_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
-    lookup_dsdl_definitions = []  # type: typing.List[_dsdl_definition.DSDLDefinition]
+    lookup_dsdl_definitions = []  # type: list[_dsdl_definition.DSDLDefinition]
     for ld in lookup_directories_path_list:
         lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
@@ -167,7 +169,7 @@ def read_namespace(
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     _logger.info(
-        "Reading %d definitions from the root namespace %r, "
+        "Reading %d definitions from the root namespace %s, "
         "with %d lookup definitions located in root namespaces: %s",
         len(target_dsdl_definitions),
         list(set(map(lambda t: t.root_namespace, target_dsdl_definitions)))[0],
@@ -199,11 +201,11 @@ _logger = logging.getLogger(__name__)
 
 
 def _read_namespace_definitions(
-    target_definitions: typing.List[_dsdl_definition.DSDLDefinition],
-    lookup_definitions: typing.List[_dsdl_definition.DSDLDefinition],
-    print_output_handler: typing.Optional[PrintOutputHandler] = None,
+    target_definitions: list[_dsdl_definition.DSDLDefinition],
+    lookup_definitions: list[_dsdl_definition.DSDLDefinition],
+    print_output_handler: PrintOutputHandler | None = None,
     allow_unregulated_fixed_port_id: bool = False,
-) -> typing.List[_serializable.CompositeType]:
+) -> list[_serializable.CompositeType]:
     """
     Construct type descriptors from the specified target definitions.
     Allow the target definitions to use the lookup definitions within themselves.
@@ -212,7 +214,7 @@ def _read_namespace_definitions(
     :return: A list of types.
     """
 
-    def make_print_handler(definition: _dsdl_definition.DSDLDefinition) -> typing.Callable[[int, str], None]:
+    def make_print_handler(definition: _dsdl_definition.DSDLDefinition) -> Callable[[int, str], None]:
         def handler(line_number: int, text: str) -> None:
             if print_output_handler:  # pragma: no branch
                 assert isinstance(line_number, int) and isinstance(text, str)
@@ -221,7 +223,7 @@ def _read_namespace_definitions(
 
         return handler
 
-    types = []  # type: typing.List[_serializable.CompositeType]
+    types = []  # type: list[_serializable.CompositeType]
     for tdd in target_definitions:
         try:
             dt = tdd.read(lookup_definitions, make_print_handler(tdd), allow_unregulated_fixed_port_id)
@@ -239,30 +241,30 @@ def _read_namespace_definitions(
 
 
 def _ensure_no_name_collisions(
-    target_definitions: typing.List[_dsdl_definition.DSDLDefinition],
-    lookup_definitions: typing.List[_dsdl_definition.DSDLDefinition],
+    target_definitions: list[_dsdl_definition.DSDLDefinition],
+    lookup_definitions: list[_dsdl_definition.DSDLDefinition],
 ) -> None:
     for tg in target_definitions:
         for lu in lookup_definitions:
             if tg.full_name != lu.full_name and tg.full_name.lower() == lu.full_name.lower():
                 raise DataTypeNameCollisionError(
-                    "Full name of this definition differs from %r only by letter case, "
+                    "Full name of this definition differs from %s only by letter case, "
                     "which is not permitted" % lu.file_path,
                     path=tg.file_path,
                 )
 
             if tg.full_namespace.lower().startswith(lu.full_name.lower()):  # pragma: no cover
                 raise DataTypeNameCollisionError(
-                    "The namespace of this type conflicts with %r" % lu.file_path, path=tg.file_path
+                    "The namespace of this type conflicts with %s" % lu.file_path, path=tg.file_path
                 )
 
             if lu.full_namespace.lower().startswith(tg.full_name.lower()):
                 raise DataTypeNameCollisionError(
-                    "This type conflicts with the namespace of %r" % lu.file_path, path=tg.file_path
+                    "This type conflicts with the namespace of %s" % lu.file_path, path=tg.file_path
                 )
 
 
-def _ensure_no_fixed_port_id_collisions(types: typing.List[_serializable.CompositeType]) -> None:
+def _ensure_no_fixed_port_id_collisions(types: list[_serializable.CompositeType]) -> None:
     for a in types:
         for b in types:
             different_names = a.full_name != b.full_name
@@ -278,20 +280,18 @@ def _ensure_no_fixed_port_id_collisions(types: typing.List[_serializable.Composi
                 if a.has_fixed_port_id and b.has_fixed_port_id:
                     if a.fixed_port_id == b.fixed_port_id:
                         raise FixedPortIDCollisionError(
-                            "The fixed port ID of this definition is also used in %r" % b.source_file_path,
+                            "The fixed port ID of this definition is also used in %s" % b.source_file_path,
                             path=a.source_file_path,
                         )
 
 
-def _ensure_minor_version_compatibility(types: typing.List[_serializable.CompositeType]) -> None:
-    by_name = collections.defaultdict(list)  # type: typing.DefaultDict[str, typing.List[_serializable.CompositeType]]
+def _ensure_minor_version_compatibility(types: list[_serializable.CompositeType]) -> None:
+    by_name = collections.defaultdict(list)  # type: DefaultDict[str, list[_serializable.CompositeType]]
     for t in types:
         by_name[t.full_name].append(t)
 
     for definitions in by_name.values():
-        by_major = collections.defaultdict(
-            list
-        )  # type: typing.DefaultDict[int, typing.List[_serializable.CompositeType]]
+        by_major = collections.defaultdict(list)  # type: DefaultDict[int, list[_serializable.CompositeType]]
         for t in definitions:
             by_major[t.version.major].append(t)
 
@@ -313,20 +313,20 @@ def _ensure_minor_version_compatibility_pairwise(
     # Version collision
     if a.version.minor == b.version.minor:
         raise MultipleDefinitionsUnderSameVersionError(
-            "This definition shares its version number with %r" % b.source_file_path, path=a.source_file_path
+            "This definition shares its version number with %s" % b.source_file_path, path=a.source_file_path
         )
 
     # Must be of the same kind: both messages or both services
     if isinstance(a, _serializable.ServiceType) != isinstance(b, _serializable.ServiceType):
         raise VersionsOfDifferentKindError(
-            "This definition is not of the same kind as %r" % b.source_file_path, path=a.source_file_path
+            "This definition is not of the same kind as %s" % b.source_file_path, path=a.source_file_path
         )
 
     # Must use either the same RPID, or the older one should not have an RPID
     if a.has_fixed_port_id == b.has_fixed_port_id:
         if a.fixed_port_id != b.fixed_port_id:
             raise MinorVersionFixedPortIDError(
-                "Different fixed port ID values under the same version %r" % b.source_file_path, path=a.source_file_path
+                "Different fixed port ID values under the same version %s" % b.source_file_path, path=a.source_file_path
             )
     else:
         must_have = a if a.version.minor > b.version.minor else b
@@ -365,15 +365,15 @@ def _ensure_minor_version_compatibility_pairwise(
 
 
 def _ensure_no_common_usage_errors(
-    root_namespace_directory: str, lookup_directories: typing.Iterable[str], reporter: typing.Callable[[str], None]
+    root_namespace_directory: Path, lookup_directories: Iterable[Path], reporter: Callable[[str], None]
 ) -> None:
     suspicious_base_names = [
         "public_regulated_data_types",
         "dsdl",
     ]
 
-    def base(s: str) -> str:
-        return os.path.basename(os.path.normpath(s))
+    def base(s: Path) -> str:
+        return str(os.path.basename(os.path.normpath(s)))
 
     def is_valid_name(s: str) -> bool:
         try:
@@ -385,14 +385,14 @@ def _ensure_no_common_usage_errors(
 
     all_paths = set([root_namespace_directory] + list(lookup_directories))
     for p in all_paths:
-        p = os.path.normcase(os.path.abspath(p))
+        p = Path(os.path.normcase(p.resolve()))
         try:
-            candidates = [x for x in os.listdir(p) if os.path.isdir(os.path.join(p, x)) and is_valid_name(x)]
+            candidates = [x for x in os.listdir(p) if os.path.isdir(os.path.join(p, x)) and is_valid_name(str(x))]
         except OSError:  # pragma: no cover
             candidates = []
         if candidates and base(p) in suspicious_base_names:
             report = (
-                "Possibly incorrect usage detected: input path %r is likely incorrect because the last path component "
+                "Possibly incorrect usage detected: input path %s is likely incorrect because the last path component "
                 "should be the root namespace name rather than its parent directory. You probably meant:\n%s"
             ) % (
                 p,
@@ -401,30 +401,30 @@ def _ensure_no_common_usage_errors(
             reporter(report)
 
 
-def _ensure_no_nested_root_namespaces(directories: typing.Iterable[str]) -> None:
-    directories = list(sorted([str(os.path.join(os.path.abspath(x), "")) for x in set(directories)]))
-    for a in directories:
-        for b in directories:
+def _ensure_no_nested_root_namespaces(directories: Iterable[Path]) -> None:
+    dir_str = list(sorted([os.path.join(os.path.abspath(x), "") for x in set(directories)]))
+    for a in dir_str:
+        for b in dir_str:
             if (a != b) and a.startswith(b):
                 raise NestedRootNamespaceError(
-                    "The following namespace is nested inside this one, which is not permitted: %r" % a, path=b
+                    "The following namespace is nested inside this one, which is not permitted: %s" % a, path=Path(b)
                 )
 
 
-def _ensure_no_namespace_name_collisions(directories: typing.Iterable[str]) -> None:
-    def get_namespace_name(d: str) -> str:
-        return os.path.split(d)[-1]
+def _ensure_no_namespace_name_collisions(directories: Iterable[Path]) -> None:
+    def get_namespace_name(d: Path) -> str:
+        return str(os.path.split(d))[-1]
 
-    directories = list(sorted([str(os.path.abspath(x)) for x in set(directories)]))
+    directories = list(sorted([x.resolve() for x in set(directories)]))
     for a in directories:
         for b in directories:
             if (a != b) and get_namespace_name(a).lower() == get_namespace_name(b).lower():
-                raise RootNamespaceNameCollisionError("The name of this namespace conflicts with %r" % b, path=a)
+                raise RootNamespaceNameCollisionError("The name of this namespace conflicts with %s" % b, path=a)
 
 
 def _construct_dsdl_definitions_from_namespace(
-    root_namespace_path: str,
-) -> typing.List[_dsdl_definition.DSDLDefinition]:
+    root_namespace_path: Path,
+) -> list[_dsdl_definition.DSDLDefinition]:
     """
     Accepts a directory path, returns a sorted list of abstract DSDL file representations. Those can be read later.
     The definitions are sorted by name lexicographically, then by major version (greatest version first),
@@ -436,17 +436,13 @@ def _construct_dsdl_definitions_from_namespace(
 
     walker = os.walk(root_namespace_path, onerror=on_walk_error, followlinks=True)
 
-    source_file_paths = []  # type: typing.List[str]
+    source_file_paths: set[Path] = set()
     for root, _dirnames, filenames in walker:
         for filename in fnmatch.filter(filenames, _DSDL_FILE_GLOB):
-            source_file_paths.append(os.path.join(root, filename))
+            source_file_paths.add(Path(root, filename).resolve())
 
-    _logger.debug("DSDL files in the namespace dir %r are listed below:", root_namespace_path)
-    for a in source_file_paths:
-        _logger.debug(_LOG_LIST_ITEM_PREFIX + a)
-
-    output = []  # type: typing.List[_dsdl_definition.DSDLDefinition]
-    for fp in source_file_paths:
+    output = []  # type: list[_dsdl_definition.DSDLDefinition]
+    for fp in sorted(source_file_paths):
         dsdl_def = _dsdl_definition.DSDLDefinition(fp, root_namespace_path)
         output.append(dsdl_def)
 
@@ -458,11 +454,9 @@ def _unittest_dsdl_definition_constructor() -> None:
     import tempfile
     from ._dsdl_definition import FileNameFormatError
 
-    directory = tempfile.TemporaryDirectory()
-    root_ns_dir = os.path.join(directory.name, "foo")
-
-    os.mkdir(root_ns_dir)
-    os.mkdir(os.path.join(root_ns_dir, "nested"))
+    directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+    root_ns_dir = Path(directory.name, "foo").resolve()
+    (root_ns_dir / "nested").mkdir(parents=True)
 
     def touchy(relative_path: str) -> None:
         p = os.path.join(root_ns_dir, relative_path.replace("/", os.path.sep))
@@ -479,24 +473,24 @@ def _unittest_dsdl_definition_constructor() -> None:
 
     dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
     print(dsdl_defs)
-    lut = {x.full_name: x for x in dsdl_defs}  # type: typing.Dict[str, _dsdl_definition.DSDLDefinition]
+    lut = {x.full_name: x for x in dsdl_defs}  # type: dict[str, _dsdl_definition.DSDLDefinition]
     assert len(lut) == 3
 
     assert str(lut["foo.Qwerty"]) == repr(lut["foo.Qwerty"])
     assert (
         str(lut["foo.Qwerty"])
         == "DSDLDefinition(full_name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, "
-        "file_path=%r)" % lut["foo.Qwerty"].file_path
+        "file_path=%s)" % lut["foo.Qwerty"].file_path
     )
 
     assert (
         str(lut["foo.nested.Foo"])
         == "DSDLDefinition(full_name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, "
-        "file_path=%r)" % lut["foo.nested.Foo"].file_path
+        "file_path=%s)" % lut["foo.nested.Foo"].file_path
     )
 
     t = lut["foo.Qwerty"]
-    assert t.file_path == os.path.join(root_ns_dir, "123.Qwerty.123.234.uavcan")
+    assert t.file_path == root_ns_dir / "123.Qwerty.123.234.uavcan"
     assert t.has_fixed_port_id
     assert t.fixed_port_id == 123
     assert t.text == "# TEST TEXT"
@@ -508,7 +502,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.full_namespace == "foo"
 
     t = lut["foo.nested.Asd"]
-    assert t.file_path == os.path.join(root_ns_dir, "nested", "2.Asd.21.32.uavcan")
+    assert t.file_path == root_ns_dir / "nested" / "2.Asd.21.32.uavcan"
     assert t.has_fixed_port_id
     assert t.fixed_port_id == 2
     assert t.text == "# TEST TEXT"
@@ -520,7 +514,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.full_namespace == "foo.nested"
 
     t = lut["foo.nested.Foo"]
-    assert t.file_path == os.path.join(root_ns_dir, "nested", "Foo.32.43.uavcan")
+    assert t.file_path == root_ns_dir / "nested" / "Foo.32.43.uavcan"
     assert not t.has_fixed_port_id
     assert t.fixed_port_id is None
     assert t.text == "# TEST TEXT"
@@ -569,7 +563,7 @@ def _unittest_dsdl_definition_constructor() -> None:
         assert False
 
     try:
-        _construct_dsdl_definitions_from_namespace(root_ns_dir + "/nested/super.bad")
+        _construct_dsdl_definitions_from_namespace(root_ns_dir / "nested/super.bad")
     except FileNameFormatError as ex:
         print(ex)
     else:  # pragma: no cover
@@ -581,30 +575,30 @@ def _unittest_dsdl_definition_constructor() -> None:
 def _unittest_common_usage_errors() -> None:
     import tempfile
 
-    directory = tempfile.TemporaryDirectory()
-    root_ns_dir = os.path.join(directory.name, "foo")
+    directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+    root_ns_dir = Path(os.path.join(directory.name, "foo"))
     os.mkdir(root_ns_dir)
 
-    reports = []  # type: typing.List[str]
+    reports = []  # type: list[str]
 
     _ensure_no_common_usage_errors(root_ns_dir, [], reports.append)
     assert not reports
-    _ensure_no_common_usage_errors(root_ns_dir, ["/baz"], reports.append)
+    _ensure_no_common_usage_errors(root_ns_dir, [Path("/baz")], reports.append)
     assert not reports
 
-    dir_dsdl = os.path.join(root_ns_dir, "dsdl")
+    dir_dsdl = root_ns_dir / "dsdl"
     os.mkdir(dir_dsdl)
-    _ensure_no_common_usage_errors(dir_dsdl, ["/baz"], reports.append)
+    _ensure_no_common_usage_errors(dir_dsdl, [Path("/baz")], reports.append)
     assert not reports  # Because empty.
 
     dir_dsdl_vscode = os.path.join(dir_dsdl, ".vscode")
     os.mkdir(dir_dsdl_vscode)
-    _ensure_no_common_usage_errors(dir_dsdl, ["/baz"], reports.append)
+    _ensure_no_common_usage_errors(dir_dsdl, [Path("/baz")], reports.append)
     assert not reports  # Because the name is not valid.
 
     dir_dsdl_uavcan = os.path.join(dir_dsdl, "uavcan")
     os.mkdir(dir_dsdl_uavcan)
-    _ensure_no_common_usage_errors(dir_dsdl, ["/baz"], reports.append)
+    _ensure_no_common_usage_errors(dir_dsdl, [Path("/baz")], reports.append)
     (rep,) = reports
     reports.clear()
     assert os.path.normcase(dir_dsdl_uavcan) in rep
@@ -614,9 +608,22 @@ def _unittest_nested_roots() -> None:
     from pytest import raises
 
     _ensure_no_nested_root_namespaces([])
-    _ensure_no_nested_root_namespaces(["a"])
-    _ensure_no_nested_root_namespaces(["a/b", "a/c"])
+    _ensure_no_nested_root_namespaces([Path("a")])
+    _ensure_no_nested_root_namespaces([Path("a/b"), Path("a/c")])
     with raises(NestedRootNamespaceError):
-        _ensure_no_nested_root_namespaces(["a/b", "a"])
-    _ensure_no_nested_root_namespaces(["aa/b", "a"])
-    _ensure_no_nested_root_namespaces(["a/b", "aa"])
+        _ensure_no_nested_root_namespaces([Path("a/b"), Path("a")])
+    _ensure_no_nested_root_namespaces([Path("aa/b"), Path("a")])
+    _ensure_no_nested_root_namespaces([Path("a/b"), Path("aa")])
+
+
+def _unittest_issue_71() -> None:  # https://github.com/UAVCAN/pydsdl/issues/71
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        real = Path(directory, "real", "nested")
+        real.mkdir(parents=True)
+        link = Path(directory, "link")
+        link.symlink_to(real, target_is_directory=True)
+        (real / "Msg.0.1.uavcan").write_text("@sealed")
+        assert len(read_namespace(real, [real, link])) == 1
+        assert len(read_namespace(link, [real, link])) == 1

@@ -174,9 +174,9 @@ class FloatType(ArithmeticType):
             # The limits are exact
             self._magnitude = fractions.Fraction(
                 {
-                    16: (2 ** 0x00F) * (2 - frac(2) ** frac(-10)),  # IEEE 754 binary16
-                    32: (2 ** 0x07F) * (2 - frac(2) ** frac(-23)),  # IEEE 754 binary32
-                    64: (2 ** 0x3FF) * (2 - frac(2) ** frac(-52)),  # IEEE 754 binary64
+                    16: (2**0x00F) * (2 - frac(2) ** frac(-10)),  # IEEE 754 binary16
+                    32: (2**0x07F) * (2 - frac(2) ** frac(-23)),  # IEEE 754 binary32
+                    64: (2**0x3FF) * (2 - frac(2) ** frac(-52)),  # IEEE 754 binary64
                 }[self.bit_length]
             )
         except KeyError:

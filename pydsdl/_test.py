@@ -2,11 +2,13 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-# pylint: disable=global-statement,protected-access,too-many-statements
+# pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with
 
+from __future__ import annotations
 import os
 import typing
 import tempfile
+from pathlib import Path
 from textwrap import dedent
 from . import _expression
 from . import _error
@@ -34,15 +36,15 @@ def _parse_definition(
     )
 
 
-def _define(rel_path: str, text: str) -> _dsdl_definition.DSDLDefinition:
-    rel_path = rel_path.replace("/", os.sep)  # Windows compatibility
+def _define(rel_path: str | Path, text: str) -> _dsdl_definition.DSDLDefinition:
+    rel_path = str(rel_path).replace("/", os.sep)  # Windows compatibility
     assert _DIRECTORY
-    path = os.path.join(_DIRECTORY.name, rel_path)
+    path = Path(_DIRECTORY.name, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf8") as f:
         f.write(text)
 
-    root_namespace_path = os.path.join(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep)[0])
+    root_namespace_path = Path(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep, maxsplit=1)[0])
     out = _dsdl_definition.DSDLDefinition(path, root_namespace_path)
     print("New definition:", out, "Root NS:", root_namespace_path)
     return out
@@ -68,8 +70,8 @@ def _unittest_define() -> None:
     assert d.full_name == "uavcan.test.Message"
     assert d.version == (1, 2)
     assert d.fixed_port_id == 5000
-    assert d.file_path == os.path.join(_DIRECTORY.name, "uavcan", "test", "5000.Message.1.2.uavcan")
-    assert d.root_namespace_path == os.path.join(_DIRECTORY.name, "uavcan")
+    assert d.file_path == Path(_DIRECTORY.name, "uavcan", "test", "5000.Message.1.2.uavcan").resolve()
+    assert d.root_namespace_path == Path(_DIRECTORY.name, "uavcan").resolve()
     assert open(d.file_path).read() == "# empty"
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
@@ -77,8 +79,8 @@ def _unittest_define() -> None:
     assert d.full_name == "uavcan.Service"
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
-    assert d.file_path == os.path.join(_DIRECTORY.name, "uavcan", "Service.255.254.uavcan")
-    assert d.root_namespace_path == os.path.join(_DIRECTORY.name, "uavcan")
+    assert d.file_path == Path(_DIRECTORY.name, "uavcan", "Service.255.254.uavcan").resolve()
+    assert d.root_namespace_path == Path(_DIRECTORY.name, "uavcan").resolve()
     assert open(d.file_path).read() == "# empty 2"
 
 
@@ -105,7 +107,7 @@ def _unittest_simple() -> None:
     assert isinstance(p, _serializable.DelimitedType)
     assert isinstance(p.inner_type, _serializable.StructureType)
     assert p.full_name == "vendor.nested.Abc"
-    assert p.source_file_path.endswith(os.path.join("vendor", "nested", "7000.Abc.1.2.uavcan"))
+    assert str(p.source_file_path).endswith(os.path.join("vendor", "nested", "7000.Abc.1.2.uavcan"))
     assert p.source_file_path == abc.file_path
     assert p.fixed_port_id == 7000
     assert p.deprecated
@@ -525,7 +527,7 @@ def _unittest_error() -> None:
     with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*nonexistent.TypeName.*1\.0.*"):
         standalone("vendor/types/A.1.0.uavcan", "nonexistent.TypeName.1.0 field\n@sealed")
 
-    with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*vendor[/\\]+types' instead of .*vendor'.*"):
+    with raises(_data_type_builder.UndefinedDataTypeError, match=r"(?i).*vendor[/\\]+types instead of .*vendor.*"):
         standalone("vendor/types/A.1.0.uavcan", "types.Nonexistent.1.0 field\n@sealed")
 
     with raises(_error.InvalidDefinitionError, match=r"(?i).*not defined for.*"):
@@ -630,7 +632,7 @@ def _unittest_error() -> None:
             ),
         )
     except _error.FrontendError as ex:
-        assert ex.path and ex.path.endswith(os.path.join("vendor", "types", "A.1.0.uavcan"))
+        assert ex.path and str(ex.path).endswith(os.path.join("vendor", "types", "A.1.0.uavcan"))
         assert ex.line and ex.line == 4
     else:  # pragma: no cover
         assert False
@@ -737,7 +739,7 @@ def _unittest_error() -> None:
 
 @_in_n_out
 def _unittest_print() -> None:
-    printed_items = None  # type: typing.Optional[typing.Tuple[int, str]]
+    printed_items = None  # type: None | tuple[int, str]
 
     def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
@@ -980,15 +982,15 @@ def _unittest_parse_namespace() -> None:
 
     directory = tempfile.TemporaryDirectory()
 
-    print_output = None  # type: typing.Optional[typing.Tuple[str, int, str]]
+    print_output = None  # type: None | tuple[str, int, str]
 
-    def print_handler(d: str, line: int, text: str) -> None:
+    def print_handler(d: Path, line: int, text: str) -> None:
         nonlocal print_output
-        print_output = d, line, text
+        print_output = str(d), line, text
 
     # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
-        path = os.path.join(directory.name, rel_path)
+        path = Path(directory.name, rel_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(text)
@@ -1041,8 +1043,8 @@ def _unittest_parse_namespace() -> None:
     _define("zubax/300.Spartans.30.0", "completely unrelated stuff")
 
     parsed = _namespace.read_namespace(
-        os.path.join(directory.name, "zubax"),
-        [os.path.join(directory.name, "zubax", ".")],  # Intentional duplicate
+        Path(directory.name, "zubax"),
+        [Path(directory.name, "zubax", ".")],  # Intentional duplicate
         print_handler,
     )
     print(parsed)
@@ -1052,7 +1054,7 @@ def _unittest_parse_namespace() -> None:
     assert "zubax.nested.Spartans" in [x.full_name for x in parsed]
 
     # try again with minimal arguments to read_namespace
-    parsed_minimal_args = _namespace.read_namespace(os.path.join(directory.name, "zubax"))
+    parsed_minimal_args = _namespace.read_namespace(Path(directory.name, "zubax"))
     assert len(parsed_minimal_args) == 3
 
     _define(
@@ -1067,14 +1069,14 @@ def _unittest_parse_namespace() -> None:
     )
 
     with raises(_namespace.FixedPortIDCollisionError):
-        _namespace.read_namespace(os.path.join(directory.name, "zubax"), [], print_handler)
+        _namespace.read_namespace(Path(directory.name, "zubax"), [], print_handler)
 
     with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
-        _namespace.read_namespace(os.path.join(directory.name, "zubax"), b"/my/path")  # type: ignore
+        _namespace.read_namespace(Path(directory.name, "zubax"), b"/my/path")  # type: ignore
 
     with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
         # noinspection PyTypeChecker
-        _namespace.read_namespace(os.path.join(directory.name, "zubax"), [b"/my/path"])  # type: ignore
+        _namespace.read_namespace(Path(directory.name, "zubax"), [b"/my/path"])  # type: ignore
 
     assert print_output is not None
     assert "300.Spartans" in print_output[0]
@@ -1093,18 +1095,18 @@ def _unittest_parse_namespace() -> None:
     )
     with raises(_namespace.DataTypeNameCollisionError):
         _namespace.read_namespace(
-            os.path.join(directory.name, "zubax"),
+            Path(directory.name, "zubax"),
             [
-                os.path.join(directory.name, "zubax"),
+                Path(directory.name, "zubax"),
             ],
         )
 
     # Do again to test single lookup-directory override
     with raises(_namespace.DataTypeNameCollisionError):
-        _namespace.read_namespace(os.path.join(directory.name, "zubax"), os.path.join(directory.name, "zubax"))
+        _namespace.read_namespace(Path(directory.name, "zubax"), Path(directory.name, "zubax"))
 
     try:
-        os.unlink(os.path.join(directory.name, "zubax/colliding/iceberg/300.Ice.30.0.uavcan"))
+        os.unlink(Path(directory.name, "zubax/colliding/iceberg/300.Ice.30.0.uavcan"))
         _define(
             "zubax/COLLIDING/300.Iceberg.30.0.uavcan",
             dedent(
@@ -1117,9 +1119,9 @@ def _unittest_parse_namespace() -> None:
         )
         with raises(_namespace.DataTypeNameCollisionError, match=".*letter case.*"):
             _namespace.read_namespace(
-                os.path.join(directory.name, "zubax"),
+                Path(directory.name, "zubax"),
                 [
-                    os.path.join(directory.name, "zubax"),
+                    Path(directory.name, "zubax"),
                 ],
             )
     except _namespace.FixedPortIDCollisionError:  # pragma: no cover
@@ -1134,14 +1136,13 @@ def _unittest_parse_namespace_versioning() -> None:
 
     # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
-        path = os.path.join(directory.name, rel_path)
+        path = Path(directory.name, rel_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(text)
 
     def _undefine_glob(rel_path_glob: str) -> None:
-        path = os.path.join(directory.name, rel_path_glob)
-        for g in glob.glob(path):
+        for g in glob.glob(str(Path(directory.name, rel_path_glob))):
             os.remove(g)
 
     _define(
@@ -1176,7 +1177,7 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(parsed)
     assert len(parsed) == 2
 
@@ -1195,7 +1196,7 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.VersionsOfDifferentKindError):
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
 
     _undefine_glob("ns/Spartans.30.[01].uavcan")
 
@@ -1213,7 +1214,7 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(parsed)
     assert len(parsed) == 2
 
@@ -1246,11 +1247,11 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.MultipleDefinitionsUnderSameVersionError):
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
 
     _undefine_glob("ns/Spartans.30.2.uavcan")
 
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
     assert len(parsed) == 3
 
     _undefine_glob("ns/Spartans.30.0.uavcan")
@@ -1269,7 +1270,7 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.MinorVersionFixedPortIDError):
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
 
     _undefine_glob("ns/Spartans.30.1.uavcan")
     _define(
@@ -1286,7 +1287,7 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
     assert len(parsed) == 3
 
     _undefine_glob("ns/6700.Spartans.30.1.uavcan")
@@ -1305,7 +1306,7 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.MinorVersionFixedPortIDError):
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
 
     # Adding new major version under the same FPID
     _undefine_glob("ns/6701.Spartans.30.1.uavcan")
@@ -1324,7 +1325,7 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.FixedPortIDCollisionError):
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
 
     # Major version zero allows us to re-use the same FPID under a different (non-zero) major version
     _undefine_glob("ns/6700.Spartans.31.0.uavcan")
@@ -1349,7 +1350,7 @@ def _unittest_parse_namespace_versioning() -> None:
     _define("ns/6800.Empty.3.0.uavcan", "@extent 0")
     _define("ns/6801.Empty.4.0.uavcan", "@extent 0")
 
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 8
 
     # Check ordering - the definitions must be sorted properly by name (lexicographically) and version (newest first).
@@ -1367,24 +1368,24 @@ def _unittest_parse_namespace_versioning() -> None:
     # Extent consistency -- non-service type
     _define("ns/Consistency.1.0.uavcan", "uint8 a\n@extent 128")
     _define("ns/Consistency.1.1.uavcan", "uint8 a\nuint8 b\n@extent 128")
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define("ns/Consistency.1.2.uavcan", "uint8 a\nuint8 b\nuint8 c\n@extent 256")
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency\.1\.2 is 256 bits.*"
     ) as ei_extent:
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(ei_extent.value)
-    assert ei_extent.value.path and "Consistency.1" in ei_extent.value.path
+    assert ei_extent.value.path and "Consistency.1" in str(ei_extent.value.path)
     _undefine_glob("ns/Consistency*")
 
     # Extent consistency -- non-service type, zero major version
     _define("ns/Consistency.0.1.uavcan", "uint8 a\n@extent 128")
     _define("ns/Consistency.0.2.uavcan", "uint8 a\nuint8 b\n@extent 128")
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define("ns/Consistency.0.3.uavcan", "uint8 a\nuint8 b\nuint8 c\n@extent 256")  # no error
-    _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+    _namespace.read_namespace(Path(directory.name, "ns"), [])
     _undefine_glob("ns/Consistency*")
 
     # Extent consistency -- request
@@ -1413,7 +1414,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define(
         "ns/Consistency.1.2.uavcan",
@@ -1431,9 +1432,9 @@ def _unittest_parse_namespace_versioning() -> None:
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency.* is 256 bits.*"
     ) as ei_extent:
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(ei_extent.value)
-    assert ei_extent.value.path and "Consistency.1" in ei_extent.value.path
+    assert ei_extent.value.path and "Consistency.1" in str(ei_extent.value.path)
     _undefine_glob("ns/Consistency*")
 
     # Extent consistency -- response
@@ -1462,7 +1463,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define(
         "ns/Consistency.1.2.uavcan",
@@ -1479,21 +1480,21 @@ def _unittest_parse_namespace_versioning() -> None:
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency.* is 256 bits.*"
     ) as ei_extent:
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(ei_extent.value)
-    assert ei_extent.value.path and "Consistency.1" in ei_extent.value.path
+    assert ei_extent.value.path and "Consistency.1" in str(ei_extent.value.path)
     _undefine_glob("ns/Consistency*")
 
     # Sealing consistency -- non-service type
     _define("ns/Consistency.1.0.uavcan", "uint64 a\n@extent 64")
     _define("ns/Consistency.1.1.uavcan", "uint64 a\n@extent 64")
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define("ns/Consistency.1.2.uavcan", "uint64 a\n@sealed")
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency\.1\.2 is sealed.*") as ei_sealing:
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(ei_sealing.value)
-    assert ei_sealing.value.path and "Consistency.1" in ei_sealing.value.path
+    assert ei_sealing.value.path and "Consistency.1" in str(ei_sealing.value.path)
     _undefine_glob("ns/Consistency*")
 
     # Sealing consistency -- request
@@ -1521,7 +1522,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define(
         "ns/Consistency.1.2.uavcan",
@@ -1536,9 +1537,9 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency.* is sealed.*") as ei_sealing:
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(ei_sealing.value)
-    assert ei_sealing.value.path and "Consistency.1" in ei_sealing.value.path
+    assert ei_sealing.value.path and "Consistency.1" in str(ei_sealing.value.path)
     _undefine_glob("ns/Consistency*")
 
     # Sealing consistency -- response
@@ -1566,7 +1567,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(os.path.join(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
     assert len(parsed) == 10
     _define(
         "ns/Consistency.1.2.uavcan",
@@ -1581,9 +1582,9 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency.* is sealed.*") as ei_sealing:
-        _namespace.read_namespace(os.path.join(directory.name, "ns"), [])
+        _namespace.read_namespace(Path(directory.name, "ns"), [])
     print(ei_sealing.value)
-    assert ei_sealing.value.path and "Consistency.1" in ei_sealing.value.path
+    assert ei_sealing.value.path and "Consistency.1" in str(ei_sealing.value.path)
     _undefine_glob("ns/Consistency*")
 
 
