@@ -412,13 +412,11 @@ def _ensure_no_nested_root_namespaces(directories: Iterable[Path]) -> None:
 
 
 def _ensure_no_namespace_name_collisions(directories: Iterable[Path]) -> None:
-    def get_namespace_name(d: Path) -> str:
-        return str(os.path.split(d))[-1]
-
     directories = list(sorted([x.resolve() for x in set(directories)]))
     for a in directories:
         for b in directories:
-            if (a != b) and get_namespace_name(a).lower() == get_namespace_name(b).lower():
+            if (a != b) and a.name.lower() == b.name.lower():
+                _logger.info("Collision: %r [%r] == %r [%r]", a, a.name, b, b.name)
                 raise RootNamespaceNameCollisionError("The name of this namespace conflicts with %s" % b, path=a)
 
 
