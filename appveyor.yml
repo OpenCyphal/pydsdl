@@ -27,6 +27,10 @@ environment:
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.7"
 
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.6"
+
     - job_name: deploy
       job_depends_on: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004

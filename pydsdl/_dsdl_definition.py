@@ -2,10 +2,9 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-from __future__ import annotations
 import os
 import time
-from typing import Iterable, Callable
+from typing import Iterable, Callable, Optional, List
 import logging
 from pathlib import Path
 from ._error import FrontendError, InvalidDefinitionError, InternalError
@@ -57,7 +56,7 @@ class DSDLDefinition:
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.uavcan
         basename_components = basename.split(".")[:-1]
-        str_fixed_port_id: str | None = None
+        str_fixed_port_id: Optional[str] = None
         if len(basename_components) == 4:
             str_fixed_port_id, short_name, str_major_version, str_minor_version = basename_components
         elif len(basename_components) == 3:
@@ -68,7 +67,7 @@ class DSDLDefinition:
         # Parsing the fixed port ID, if specified; None if not
         if str_fixed_port_id is not None:
             try:
-                self._fixed_port_id: int | None = int(str_fixed_port_id)
+                self._fixed_port_id: Optional[int] = int(str_fixed_port_id)
             except ValueError:
                 raise FileNameFormatError(
                     "Not a valid fixed port-ID: %s. "
@@ -94,7 +93,7 @@ class DSDLDefinition:
 
         self._name: str = CompositeType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])
 
-        self._cached_type: CompositeType | None = None
+        self._cached_type: Optional[CompositeType] = None
 
     def read(
         self,
@@ -167,7 +166,7 @@ class DSDLDefinition:
         return self._name
 
     @property
-    def name_components(self) -> list[str]:
+    def name_components(self) -> List[str]:
         """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
         return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
 
@@ -196,7 +195,7 @@ class DSDLDefinition:
         return self._version
 
     @property
-    def fixed_port_id(self) -> int | None:
+    def fixed_port_id(self) -> Optional[int]:
         """Either the fixed port ID as integer, or None if not defined for this type."""
         return self._fixed_port_id
 

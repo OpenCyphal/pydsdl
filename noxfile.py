@@ -9,7 +9,7 @@ from pathlib import Path
 import nox
 
 
-PYTHONS = ["3.7", "3.8", "3.9", "3.10"]
+PYTHONS = ["3.6", "3.7", "3.8", "3.9", "3.10"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -49,8 +49,8 @@ def test(session):
     session.install("-e", ".")
     session.install(
         "pytest          ~= 7.0",
-        "pytest-randomly ~= 3.11",
-        "coverage        ~= 6.3",
+        "pytest-randomly ~= 3.10",
+        "coverage        ~= 6.2",
     )
     session.run("coverage", "run", "-m", "pytest")
     session.run("coverage", "report", "--fail-under=95")

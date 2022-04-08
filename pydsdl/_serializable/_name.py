@@ -2,10 +2,9 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-from __future__ import annotations
 import re
 import string
-from typing import Pattern
+from typing import Pattern, List, Union
 from ._serializable import TypeParameterError
 
 
@@ -43,7 +42,7 @@ _VALID_CONTINUATION_CHARACTERS_OF_NAME = _VALID_FIRST_CHARACTERS_OF_NAME + strin
 
 # Disallowed name patterns apply to any part of any name, e.g., an attribute name, a namespace component,
 # type name, etc. The pattern must produce an exact match to trigger a name error. All patterns are case-insensitive.
-_DISALLOWED_NAME_PATTERNS: list[str | Pattern[str]] = [
+_DISALLOWED_NAME_PATTERNS: List[Union[str, Pattern[str]]] = [
     "truncated",
     "saturated",
     "true",
