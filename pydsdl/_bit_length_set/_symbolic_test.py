@@ -140,7 +140,7 @@ def _unittest_repetition() -> None:
     )
     assert op.min == 7 * 3
     assert op.max == 17 * 3
-    assert set(op.expand()) == set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 3)))
+    assert set(op.expand()) == set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 3)))  # type: ignore
     assert set(op.expand()) == {21, 25, 29, 31, 33, 35, 39, 41, 45, 51}
     assert set(op.modulo(7)) == {0, 1, 2, 3, 4, 5, 6}
     assert set(op.modulo(8)) == {1, 3, 5, 7}
@@ -149,7 +149,7 @@ def _unittest_repetition() -> None:
     for _ in range(1):
         child = NullaryOperator(random.randint(0, 100) for _ in range(random.randint(1, 10)))
         k = random.randint(0, 10)
-        ref = set(map(sum, itertools.combinations_with_replacement(child.expand(), k)))
+        ref = set(map(sum, itertools.combinations_with_replacement(child.expand(), k)))  # type: ignore
         op = RepetitionOperator(child, k)
         assert set(op.expand()) == ref
 
@@ -173,9 +173,9 @@ def _unittest_range_repetition() -> None:
     assert op.max == 17 * 3
     assert set(op.expand()) == (
         {0}
-        | set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 1)))
-        | set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 2)))
-        | set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 3)))
+        | set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 1)))  # type: ignore
+        | set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 2)))  # type: ignore
+        | set(map(sum, itertools.combinations_with_replacement([7, 11, 17], 3)))  # type: ignore
     )
     assert set(op.expand()) == {0, 7, 11, 14, 17, 18, 21, 22, 24, 25, 28, 29, 31, 33, 34, 35, 39, 41, 45, 51}
     assert set(op.modulo(7)) == {0, 1, 2, 3, 4, 5, 6}
@@ -197,7 +197,10 @@ def _unittest_range_repetition() -> None:
         k_max = random.randint(0, 10)
         ref = set(
             itertools.chain(
-                *(map(sum, itertools.combinations_with_replacement(child.expand(), k)) for k in range(k_max + 1))
+                *(
+                    map(sum, itertools.combinations_with_replacement(child.expand(), k))  # type: ignore
+                    for k in range(k_max + 1)
+                )
             )
         )
         op = RangeRepetitionOperator(child, k_max)

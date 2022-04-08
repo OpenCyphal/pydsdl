@@ -64,8 +64,8 @@ def test(session):
 def lint(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install(
-        "mypy   == 0.931",
-        "pylint == 2.12.*",
+        "mypy   == 0.942",
+        "pylint == 2.13.*",
     )
     session.run(
         "mypy",
