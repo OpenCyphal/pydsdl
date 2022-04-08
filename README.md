@@ -5,10 +5,10 @@
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/pydsdl)](https://pypi.org/project/pydsdl/)
 [![Forum](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
 
-PyDSDL is a [UAVCAN](https://uavcan.org) DSDL compiler front-end implemented in Python.
+PyDSDL is a [Cyphal](https://opencyphal.org) DSDL compiler front-end implemented in Python.
 It accepts a DSDL namespace at the input and produces a well-annotated abstract syntax tree (AST) at the output,
 evaluating all constant expressions in the process.
-All DSDL features defined in the UAVCAN Specification are supported.
+All DSDL features defined in the Cyphal Specification are supported.
 The library should, in theory, work on any platform and with any Python implementation.
 
 **Read the docs at [pydsdl.readthedocs.io](https://pydsdl.readthedocs.io/).**

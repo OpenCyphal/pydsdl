@@ -23,7 +23,7 @@ class SerializableType(_expression.Any):
 
     BITS_PER_BYTE = 8
     """
-    This is dictated by the UAVCAN Specification.
+    This is dictated by the Cyphal Specification.
     """
 
     def __init__(self) -> None:

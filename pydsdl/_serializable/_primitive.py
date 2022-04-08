@@ -26,7 +26,7 @@ class InvalidCastModeError(TypeParameterError):
 
 class PrimitiveType(SerializableType):
     MAX_BIT_LENGTH = 64
-    BITS_IN_BYTE = 8  # Defined in the UAVCAN specification
+    BITS_IN_BYTE = 8  # Defined in the Cyphal specification
 
     class CastMode(enum.Enum):
         SATURATED = 0
