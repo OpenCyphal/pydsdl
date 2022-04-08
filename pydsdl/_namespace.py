@@ -46,9 +46,9 @@ class MultipleDefinitionsUnderSameVersionError(_error.InvalidDefinitionError):
     """
     For example::
 
-        Type.1.0.uavcan
-        2800.Type.1.0.uavcan
-        2801.Type.1.0.uavcan
+        Type.1.0.dsdl
+        2800.Type.1.0.dsdl
+        2801.Type.1.0.dsdl
     """
 
 
@@ -194,7 +194,10 @@ def read_namespace(
     return types
 
 
-_DSDL_FILE_GLOB = "*.uavcan"
+_DSDL_FILE_GLOBS = [
+    "*.dsdl",  # https://forum.uavcan.org/t/uavcan-file-extension/438
+    "*.uavcan",  # Legacy name, not for new projects.
+]
 _LOG_LIST_ITEM_PREFIX = " " * 4
 
 _logger = logging.getLogger(__name__)
@@ -436,8 +439,9 @@ def _construct_dsdl_definitions_from_namespace(
 
     source_file_paths: set[Path] = set()
     for root, _dirnames, filenames in walker:
-        for filename in fnmatch.filter(filenames, _DSDL_FILE_GLOB):
-            source_file_paths.add(Path(root, filename).resolve())
+        for glb in _DSDL_FILE_GLOBS:
+            for filename in fnmatch.filter(filenames, glb):
+                source_file_paths.add(Path(root, filename).resolve())
 
     output = []  # type: list[_dsdl_definition.DSDLDefinition]
     for fp in sorted(source_file_paths):
@@ -465,9 +469,9 @@ def _unittest_dsdl_definition_constructor() -> None:
     def discard(relative_path: str) -> None:
         os.unlink(os.path.join(root_ns_dir, relative_path))
 
-    touchy("123.Qwerty.123.234.uavcan")
-    touchy("nested/2.Asd.21.32.uavcan")
-    touchy("nested/Foo.32.43.uavcan")
+    touchy("123.Qwerty.123.234.dsdl")
+    touchy("nested/2.Asd.21.32.dsdl")
+    touchy("nested/Foo.32.43.dsdl")
 
     dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
     print(dsdl_defs)
@@ -488,7 +492,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     )
 
     t = lut["foo.Qwerty"]
-    assert t.file_path == root_ns_dir / "123.Qwerty.123.234.uavcan"
+    assert t.file_path == root_ns_dir / "123.Qwerty.123.234.dsdl"
     assert t.has_fixed_port_id
     assert t.fixed_port_id == 123
     assert t.text == "# TEST TEXT"
@@ -500,7 +504,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.full_namespace == "foo"
 
     t = lut["foo.nested.Asd"]
-    assert t.file_path == root_ns_dir / "nested" / "2.Asd.21.32.uavcan"
+    assert t.file_path == root_ns_dir / "nested" / "2.Asd.21.32.dsdl"
     assert t.has_fixed_port_id
     assert t.fixed_port_id == 2
     assert t.text == "# TEST TEXT"
@@ -512,7 +516,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.full_namespace == "foo.nested"
 
     t = lut["foo.nested.Foo"]
-    assert t.file_path == root_ns_dir / "nested" / "Foo.32.43.uavcan"
+    assert t.file_path == root_ns_dir / "nested" / "Foo.32.43.dsdl"
     assert not t.has_fixed_port_id
     assert t.fixed_port_id is None
     assert t.text == "# TEST TEXT"
@@ -523,36 +527,36 @@ def _unittest_dsdl_definition_constructor() -> None:
     assert t.root_namespace == "foo"
     assert t.full_namespace == "foo.nested"
 
-    touchy("nested/Malformed.MAJOR.MINOR.uavcan")
+    touchy("nested/Malformed.MAJOR.MINOR.dsdl")
     try:
         _construct_dsdl_definitions_from_namespace(root_ns_dir)
     except FileNameFormatError as ex:
         print(ex)
-        discard("nested/Malformed.MAJOR.MINOR.uavcan")
+        discard("nested/Malformed.MAJOR.MINOR.dsdl")
     else:  # pragma: no cover
         assert False
 
-    touchy("nested/NOT_A_NUMBER.Malformed.1.0.uavcan")
+    touchy("nested/NOT_A_NUMBER.Malformed.1.0.dsdl")
     try:
         _construct_dsdl_definitions_from_namespace(root_ns_dir)
     except FileNameFormatError as ex:
         print(ex)
-        discard("nested/NOT_A_NUMBER.Malformed.1.0.uavcan")
+        discard("nested/NOT_A_NUMBER.Malformed.1.0.dsdl")
     else:  # pragma: no cover
         assert False
 
-    touchy("nested/Malformed.uavcan")
+    touchy("nested/Malformed.dsdl")
     try:
         _construct_dsdl_definitions_from_namespace(root_ns_dir)
     except FileNameFormatError as ex:
         print(ex)
-        discard("nested/Malformed.uavcan")
+        discard("nested/Malformed.dsdl")
     else:  # pragma: no cover
         assert False
 
     _construct_dsdl_definitions_from_namespace(root_ns_dir)  # making sure all errors are cleared
 
-    touchy("nested/super.bad/Unreachable.1.0.uavcan")
+    touchy("nested/super.bad/Unreachable.1.0.dsdl")
     try:
         _construct_dsdl_definitions_from_namespace(root_ns_dir)
     except FileNameFormatError as ex:
@@ -567,7 +571,7 @@ def _unittest_dsdl_definition_constructor() -> None:
     else:  # pragma: no cover
         assert False
 
-    discard("nested/super.bad/Unreachable.1.0.uavcan")
+    discard("nested/super.bad/Unreachable.1.0.dsdl")
 
 
 def _unittest_common_usage_errors() -> None:
@@ -622,6 +626,6 @@ def _unittest_issue_71() -> None:  # https://github.com/UAVCAN/pydsdl/issues/71
         real.mkdir(parents=True)
         link = Path(directory, "link")
         link.symlink_to(real, target_is_directory=True)
-        (real / "Msg.0.1.uavcan").write_text("@sealed")
+        (real / "Msg.0.1.dsdl").write_text("@sealed")
         assert len(read_namespace(real, [real, link])) == 1
         assert len(read_namespace(link, [real, link])) == 1
