@@ -4,10 +4,10 @@
 
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with
 
-from __future__ import annotations
 import os
 import typing
 import tempfile
+from typing import Union, Tuple, Optional
 from pathlib import Path
 from textwrap import dedent
 from . import _expression
@@ -36,7 +36,7 @@ def _parse_definition(
     )
 
 
-def _define(rel_path: str | Path, text: str) -> _dsdl_definition.DSDLDefinition:
+def _define(rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefinition:
     rel_path = str(rel_path).replace("/", os.sep)  # Windows compatibility
     assert _DIRECTORY
     path = Path(_DIRECTORY.name, rel_path)
@@ -739,7 +739,7 @@ def _unittest_error() -> None:
 
 @_in_n_out
 def _unittest_print() -> None:
-    printed_items = None  # type: None | tuple[int, str]
+    printed_items = None  # type: Optional[Tuple[int, str]]
 
     def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
@@ -982,7 +982,7 @@ def _unittest_parse_namespace() -> None:
 
     directory = tempfile.TemporaryDirectory()
 
-    print_output = None  # type: None | tuple[str, int, str]
+    print_output = None  # type: Optional[Tuple[str, int, str]]
 
     def print_handler(d: Path, line: int, text: str) -> None:
         nonlocal print_output

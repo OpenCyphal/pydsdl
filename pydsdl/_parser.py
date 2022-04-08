@@ -2,13 +2,13 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-from __future__ import annotations
 import os
 import typing
 import logging
 import itertools
 import functools
 import fractions
+from typing import List, Tuple
 import parsimonious
 from parsimonious.nodes import Node as _Node
 from . import _error
@@ -302,8 +302,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_mul = parsimonious.NodeVisitor.lift_child
     visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
-    def visit_expression_list(self, _n: _Node, children: _Children) -> tuple[_expression.Any, ...]:
-        out = []  # type: list[_expression.Any]
+    def visit_expression_list(self, _n: _Node, children: _Children) -> Tuple[_expression.Any, ...]:
+        out = []  # type: List[_expression.Any]
         if children:
             children = children[0]
             assert len(children) == 2

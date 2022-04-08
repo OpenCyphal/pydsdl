@@ -2,7 +2,7 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
-from __future__ import annotations
+from typing import List, Optional
 from . import _error
 from . import _serializable
 from . import _bit_length_set
@@ -34,26 +34,26 @@ class SealedSerializationMode(SerializationMode):
 
 class DataSchemaBuilder:
     def __init__(self) -> None:
-        self._fields: list[_serializable.Field] = []
-        self._constants: list[_serializable.Constant] = []
-        self._serialization_mode: SerializationMode | None = None
+        self._fields: List[_serializable.Field] = []
+        self._constants: List[_serializable.Constant] = []
+        self._serialization_mode: Optional[SerializationMode] = None
         self._is_union = False
         self._bit_length_computed_at_least_once = False
         self._doc = ""
 
     @property
-    def fields(self) -> list[_serializable.Field]:
+    def fields(self) -> List[_serializable.Field]:
         assert all(map(lambda x: isinstance(x, _serializable.Field), self._fields))
         return self._fields
 
     @property
-    def constants(self) -> list[_serializable.Constant]:
+    def constants(self) -> List[_serializable.Constant]:
         assert all(map(lambda x: isinstance(x, _serializable.Constant), self._constants))
         return self._constants
 
     @property
-    def attributes(self) -> list[_serializable.Attribute]:  # noinspection PyTypeChecker
-        out = []  # type: list[_serializable.Attribute]
+    def attributes(self) -> List[_serializable.Attribute]:  # noinspection PyTypeChecker
+        out = []  # type: List[_serializable.Attribute]
         out += self.fields
         out += self.constants
         return out
@@ -63,7 +63,7 @@ class DataSchemaBuilder:
         return self._doc
 
     @property
-    def serialization_mode(self) -> SerializationMode | None:
+    def serialization_mode(self) -> Optional[SerializationMode]:
         return self._serialization_mode
 
     @property

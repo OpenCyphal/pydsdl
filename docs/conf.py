@@ -9,7 +9,7 @@ import datetime
 
 GITHUB_USER_REPO = "UAVCAN", "pydsdl"
 
-DESCRIPTION = "A UAVCAN DSDL compiler front-end in Python"
+DESCRIPTION = "A Cyphal DSDL compiler front-end in Python"
 
 DOC_ROOT = pathlib.Path(__file__).absolute().parent
 REPOSITORY_ROOT = DOC_ROOT.parent
@@ -22,7 +22,7 @@ assert "site-packages" not in pydsdl.__file__, "Wrong import source"
 PACKAGE_ROOT = pathlib.Path(pydsdl.__file__).absolute().parent
 
 EXTERNAL_LINKS = {
-    "UAVCAN homepage": "https://uavcan.org/",
+    "OpenCyphal homepage": "https://opencyphal.org/",
     "Support forum": "https://forum.uavcan.org/",
 }
 
