@@ -1,6 +1,6 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 # pylint: disable=logging-not-lazy
 
@@ -107,7 +107,7 @@ def read_namespace(
     :param allow_unregulated_fixed_port_id: Do not reject unregulated fixed port identifiers.
         As demanded by the specification, the frontend rejects unregulated fixed port ID by default.
         This is a dangerous feature that must not be used unless you understand the risks.
-        Please read https://uavcan.org/guide.
+        Please read https://opencyphal.org/guide.
 
     :return: A list of :class:`pydsdl.CompositeType` sorted lexicographically by full data type name,
              then by major version (newest version first), then by minor version (newest version first).
@@ -194,7 +194,7 @@ def read_namespace(
 
 
 _DSDL_FILE_GLOBS = [
-    "*.dsdl",  # https://forum.uavcan.org/t/uavcan-file-extension/438
+    "*.dsdl",  # https://forum.opencyphal.org/t/uavcan-file-extension/438
     "*.uavcan",  # Legacy name, not for new projects.
 ]
 _LOG_LIST_ITEM_PREFIX = " " * 4
@@ -617,7 +617,7 @@ def _unittest_nested_roots() -> None:
     _ensure_no_nested_root_namespaces([Path("a/b"), Path("aa")])
 
 
-def _unittest_issue_71() -> None:  # https://github.com/UAVCAN/pydsdl/issues/71
+def _unittest_issue_71() -> None:  # https://github.com/OpenCyphal/pydsdl/issues/71
     import tempfile
 
     with tempfile.TemporaryDirectory() as directory:

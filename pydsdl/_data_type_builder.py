@@ -1,6 +1,6 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 from typing import Optional, Callable, Iterable
 import logging
@@ -198,7 +198,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
         if not found:
-            # Play Sherlock to help the user with mistakes like https://forum.uavcan.org/t/dsdl-compilation-error/904/2
+            # Play Sherlock to help the user with mistakes like https://forum.opencyphal.org/t/904/2
             requested_ns = full_name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)[0]
             lookup_nss = set(x.root_namespace for x in self._lookup_definitions)
             subroot_ns = self._definition.name_components[1] if len(self._definition.name_components) > 2 else None

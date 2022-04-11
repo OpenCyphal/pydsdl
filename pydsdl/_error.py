@@ -1,6 +1,6 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 # pylint: disable=broad-except
 
@@ -57,7 +57,7 @@ class FrontendError(Exception):  # PEP8 says that the "Exception" suffix is redu
         Nicely formats an error string in the typical error format ``[file:[line:]]description``.
         Example::
 
-            uavcan/internet/udp/500.HandleIncomingPacket.1.0.uavcan:33: Error such and such
+            uavcan/internet/udp/500.HandleIncomingPacket.1.0.dsdl:33: Error such and such
         """
         if self.path and self.line:
             return "%s:%d: %s" % (self.path.as_posix(), self.line, self.text)
@@ -85,8 +85,9 @@ class InternalError(FrontendError):
         culprit: typing.Optional[Exception] = None,
     ):
         if culprit is not None:
-            report_text = "PLEASE REPORT AT https://github.com/UAVCAN/pydsdl/issues/new?title=" + urllib.parse.quote(
-                repr(culprit)
+            report_text = (
+                "PLEASE REPORT AT https://github.com/OpenCyphal/pydsdl/issues/new?title="
+                + urllib.parse.quote(repr(culprit))
             )
             if text:
                 text = text + " " + report_text
@@ -115,16 +116,16 @@ def _unittest_error() -> None:
         assert repr(ex) == "FrontendError: 'Hello world!'"
 
     try:
-        raise FrontendError("Hello world!", path=Path("path/to/file.uavcan"), line=123)
+        raise FrontendError("Hello world!", path=Path("path/to/file.dsdl"), line=123)
     except Exception as ex:
-        assert str(ex) == "path/to/file.uavcan:123: Hello world!"
-        assert repr(ex) == "FrontendError: 'path/to/file.uavcan:123: Hello world!'"
+        assert str(ex) == "path/to/file.dsdl:123: Hello world!"
+        assert repr(ex) == "FrontendError: 'path/to/file.dsdl:123: Hello world!'"
 
     try:
-        raise FrontendError("Hello world!", path=Path("path/to/file.uavcan"))
+        raise FrontendError("Hello world!", path=Path("path/to/file.dsdl"))
     except Exception as ex:
-        assert str(ex) == "path/to/file.uavcan: Hello world!"
-        assert repr(ex) == "FrontendError: 'path/to/file.uavcan: Hello world!'"
+        assert str(ex) == "path/to/file.dsdl: Hello world!"
+        assert repr(ex) == "FrontendError: 'path/to/file.dsdl: Hello world!'"
 
 
 def _unittest_internal_error_github_reporting() -> None:
@@ -155,7 +156,7 @@ def _unittest_internal_error_github_reporting() -> None:
         #   Exception('ERROR TEXT')
         assert str(ex).startswith(
             "FILE_PATH:42: BASE TEXT "
-            "PLEASE REPORT AT https://github.com/UAVCAN/pydsdl/issues/new?title=Exception%28%27ERROR%20TEXT%27"
+            "PLEASE REPORT AT https://github.com/OpenCyphal/pydsdl/issues/new?title=Exception%28%27ERROR%20TEXT%27"
         )
 
     try:

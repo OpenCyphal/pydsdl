@@ -1,13 +1,13 @@
-# Copyright (c) 2020 UAVCAN Consortium
+# Copyright (c) 2020 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 import sys
 import pathlib
 import datetime
 
 
-GITHUB_USER_REPO = "UAVCAN", "pydsdl"
+GITHUB_USER_REPO = "OpenCyphal", "pydsdl"
 
 DESCRIPTION = "A Cyphal DSDL compiler front-end in Python"
 
@@ -23,13 +23,13 @@ PACKAGE_ROOT = pathlib.Path(pydsdl.__file__).absolute().parent
 
 EXTERNAL_LINKS = {
     "OpenCyphal homepage": "https://opencyphal.org/",
-    "Support forum": "https://forum.uavcan.org/",
+    "Support forum": "https://forum.opencyphal.org/",
 }
 
 project = "PyDSDL"
+author = "OpenCyphal"
 # noinspection PyShadowingBuiltins
-copyright = str(datetime.datetime.now().year) + ", UAVCAN Development Team"
-author = "UAVCAN Development Team"
+copyright = str(datetime.datetime.now().year) + ", " + author
 
 version = ".".join(map(str, pydsdl.__version_info__))
 release = pydsdl.__version__  # The full version, including alpha/beta/rc tags

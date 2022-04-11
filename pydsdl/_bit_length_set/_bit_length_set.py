@@ -1,6 +1,6 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 import typing
 import warnings
@@ -14,7 +14,7 @@ class BitLengthSet:
 
     Most of the methods are evaluated analytically in nearly constant time rather than numerically.
     This is critical for complex layouts where numerical methods break due to combinatorial explosion and/or memory
-    limits (see this discussed in https://github.com/UAVCAN/pydsdl/issues/23).
+    limits (see this discussed in https://github.com/OpenCyphal/pydsdl/issues/23).
     There are several methods that trigger numerical expansion of the solution;
     due to the aforementioned combinatorial difficulties, they may be effectively incomputable in reasonable time,
     so production systems should not rely on them.

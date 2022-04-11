@@ -1,6 +1,6 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 import os
 import time
@@ -54,7 +54,7 @@ class DSDLDefinition:
 
         relative_directory, basename = [str(x) for x in os.path.split(relative_path)]  # type: str, str
 
-        # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.uavcan
+        # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.dsdl
         basename_components = basename.split(".")[:-1]
         str_fixed_port_id: Optional[str] = None
         if len(basename_components) == 4:
@@ -72,7 +72,7 @@ class DSDLDefinition:
                 raise FileNameFormatError(
                     "Not a valid fixed port-ID: %s. "
                     "Namespaces are defined as directories; putting the namespace name in the file name will not work. "
-                    'For example: "foo/Bar.1.0.uavcan" is OK (where "foo" is a directory); "foo.Bar.1.0.uavcan" is not.'
+                    'For example: "foo/Bar.1.0.dsdl" is OK (where "foo" is a directory); "foo.Bar.1.0.dsdl" is not.'
                     % str_fixed_port_id,
                     path=self._file_path,
                 ) from None
