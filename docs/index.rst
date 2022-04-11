@@ -6,7 +6,7 @@ It accepts a DSDL namespace at the input and produces a well-annotated abstract 
 evaluating all constant expressions in the process.
 All DSDL features defined in the Cyphal Specification are supported.
 
-If you have questions, please bring them to the `support forum <https://forum.uavcan.org/>`_.
+If you have questions, please bring them to the `support forum <https://forum.opencyphal.org/>`_.
 
 Contributors, please read the :ref:`dev`!
 

@@ -1,18 +1,18 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 # pylint: disable=wrong-import-position
 
 import os as _os
 import sys as _sys
 
-__version__ = "1.15.1"
+__version__ = "1.16.0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
-__author__ = "UAVCAN Consortium"
-__copyright__ = "Copyright (c) 2018 UAVCAN Consortium"
-__email__ = "consortium@uavcan.org"
+__author__ = "OpenCyphal"
+__copyright__ = "Copyright (c) 2018 OpenCyphal"
+__email__ = "maintainers@opencyphal.org"
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.
 # Here, the objective is to allow our library to import stuff from its third-party dependency directory,

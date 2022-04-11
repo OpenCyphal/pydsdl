@@ -3,7 +3,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/lurx5gihhcl9wq1w/branch/master?svg=true)](https://ci.appveyor.com/project/Zubax/pydsdl/branch/master)
 [![Documentation Status](https://readthedocs.org/projects/pydsdl/badge/?version=latest)](https://pydsdl.readthedocs.io/en/latest/?badge=latest)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/pydsdl)](https://pypi.org/project/pydsdl/)
-[![Forum](https://img.shields.io/discourse/https/forum.uavcan.org/users.svg)](https://forum.uavcan.org)
+[![Forum](https://img.shields.io/discourse/https/forum.opencyphal.org/users.svg)](https://forum.opencyphal.org)
 
 PyDSDL is a [Cyphal](https://opencyphal.org) DSDL compiler front-end implemented in Python.
 It accepts a DSDL namespace at the input and produces a well-annotated abstract syntax tree (AST) at the output,

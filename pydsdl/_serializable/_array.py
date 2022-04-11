@@ -1,6 +1,6 @@
-# Copyright (c) 2018 UAVCAN Consortium
+# Copyright (c) 2018 OpenCyphal
 # This software is distributed under the terms of the MIT License.
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 import abc
 import math
@@ -38,7 +38,7 @@ class ArrayType(SerializableType):
         """
         True if the array might contain a text string, in which case it is termed to be "string-like".
         A string-like array is a variable-length array of ``uint8``.
-        See https://github.com/UAVCAN/specification/issues/51.
+        See https://github.com/OpenCyphal/specification/issues/51.
         """
         return False
 

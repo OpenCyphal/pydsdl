@@ -67,7 +67,7 @@ for:
       # MS Windows test.
       - cmd: nox --forcecolor --non-interactive --error-on-missing-interpreters --session test lint
       # Shared test for all platforms.
-      - git clone https://github.com/UAVCAN/public_regulated_data_types .dsdl-test
+      - git clone https://github.com/OpenCyphal/public_regulated_data_types .dsdl-test
       - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
 
   # DEPLOYMENT PIPELINE
@@ -85,7 +85,7 @@ for:
       # Configure git credentials.
       - echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
       - git config --global credential.helper store
-      - git config --global user.email "devnull@uavcan.org"
+      - git config --global user.email "devnull@opencyphal.org"
       - git config --global user.name  "Release Automation"
       # Tag and publish this release. Push the tag after the release is out in case it could not be published.
       - 'git tag $(python3 -c "import pydsdl; print(pydsdl.__version__)")'
