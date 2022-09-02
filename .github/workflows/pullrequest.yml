@@ -8,16 +8,15 @@ jobs:
 
   compat-test-python3:
     runs-on: ubuntu-latest
-    needs: test
     strategy:
       matrix:
         python3-version: ['6', '7', '8', '9', '10']
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: true
     - name: setup python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4.2.0
       with:
         python-version: 3.${{ matrix.python3-version }}
     - name: setup nox
@@ -27,16 +26,15 @@ jobs:
 
   compat-test-windows:
     runs-on: windows-latest
-    needs: test
     strategy:
       matrix:
         python3-version: ['9', '10']
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: true
     - name: setup python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4.2.0
       with:
         python-version: 3.${{ matrix.python3-version }}
     - name: setup nox
