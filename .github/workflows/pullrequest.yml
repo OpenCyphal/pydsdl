@@ -41,3 +41,21 @@ jobs:
       run: pip3 install nox
     - name: python3.${{ matrix.python3-version }} test
       run: nox -e test-3${{ matrix.python3-version }}
+
+  compat-test-mac:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python3-version: ['9', '10']
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - name: setup python
+      uses: actions/setup-python@v4.2.0
+      with:
+        python-version: 3.${{ matrix.python3-version }}
+    - name: setup nox
+      run: pip3 install nox
+    - name: python3.${{ matrix.python3-version }} test
+      run: nox -e test-3${{ matrix.python3-version }}
