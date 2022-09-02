@@ -33,9 +33,9 @@ class DSDLDefinition:
 
     def __init__(self, file_path: Path, root_namespace_path: Path):
         # Normalizing the path and reading the definition text
-        self._file_path = Path(file_path).resolve()
+        self._file_path = Path(file_path)
         del file_path
-        self._root_namespace_path = Path(root_namespace_path).resolve()
+        self._root_namespace_path = Path(root_namespace_path)
         del root_namespace_path
         with open(self._file_path) as f:
             self._text = str(f.read())
@@ -48,7 +48,7 @@ class DSDLDefinition:
         relative_path = str(
             os.path.join(
                 os.path.split(self._root_namespace_path)[-1],
-                os.path.relpath(self._file_path, self._root_namespace_path),
+                self._file_path.relative_to(self._root_namespace_path),
             )
         )
 

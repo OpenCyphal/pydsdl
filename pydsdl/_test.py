@@ -70,8 +70,8 @@ def _unittest_define() -> None:
     assert d.full_name == "uavcan.test.Message"
     assert d.version == (1, 2)
     assert d.fixed_port_id == 5000
-    assert d.file_path == Path(_DIRECTORY.name, "uavcan", "test", "5000.Message.1.2.dsdl").resolve()
-    assert d.root_namespace_path == Path(_DIRECTORY.name, "uavcan").resolve()
+    assert d.file_path.samefile(Path(_DIRECTORY.name, "uavcan", "test", "5000.Message.1.2.dsdl"))
+    assert d.root_namespace_path.samefile(Path(_DIRECTORY.name, "uavcan"))
     assert open(d.file_path).read() == "# empty"
 
     # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
@@ -79,8 +79,8 @@ def _unittest_define() -> None:
     assert d.full_name == "uavcan.Service"
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
-    assert d.file_path == Path(_DIRECTORY.name, "uavcan", "Service.255.254.dsdl").resolve()
-    assert d.root_namespace_path == Path(_DIRECTORY.name, "uavcan").resolve()
+    assert d.file_path.samefile(Path(_DIRECTORY.name, "uavcan", "Service.255.254.dsdl"))
+    assert d.root_namespace_path.samefile(Path(_DIRECTORY.name, "uavcan"))
     assert open(d.file_path).read() == "# empty 2"
 
 
