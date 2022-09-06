@@ -440,7 +440,7 @@ def _construct_dsdl_definitions_from_namespace(
     for root, _dirnames, filenames in walker:
         for glb in _DSDL_FILE_GLOBS:
             for filename in fnmatch.filter(filenames, glb):
-                source_file_paths.add(Path(root, filename).resolve())
+                source_file_paths.add(Path(root, filename))
 
     output = []  # type: List[_dsdl_definition.DSDLDefinition]
     for fp in sorted(source_file_paths):
