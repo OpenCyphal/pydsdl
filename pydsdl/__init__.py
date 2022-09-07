@@ -7,7 +7,7 @@
 import os as _os
 import sys as _sys
 
-__version__ = "1.16.0"
+__version__ = "1.16.1"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"
