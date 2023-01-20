@@ -1151,6 +1151,7 @@ def _unittest_parse_namespace() -> None:
     assert "zubax.noncolliding.iceberg.Ice" in [x.full_name for x in parsed]
     assert "zubax.noncolliding.Iceb" in [x.full_name for x in parsed]
 
+
 def _unittest_parse_namespace_versioning() -> None:
     from pytest import raises
     import glob
@@ -1613,16 +1614,24 @@ def _unittest_parse_namespace_versioning() -> None:
 
 def _unittest_parse_namespace_faults() -> None:
     from pytest import raises
-    
+
     with raises(_namespace.NestedRootNamespaceError):
-        _namespace.read_namespace("/foo/bar/baz", ["/bat/wot", "/foo/bar/baz/bad"], allow_root_namespace_name_collision=False)
+        _namespace.read_namespace(
+            "/foo/bar/baz", ["/bat/wot", "/foo/bar/baz/bad"], allow_root_namespace_name_collision=False
+        )
 
     with raises(_namespace.RootNamespaceNameCollisionError):
-        _namespace.read_namespace("/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/BAZ"], allow_root_namespace_name_collision=False)  # Notice the letter case
-    
+        _namespace.read_namespace(
+            "/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/BAZ"], allow_root_namespace_name_collision=False
+        )  # Notice the letter case
+
     with raises(_namespace.RootNamespaceNameCollisionError):
-        _namespace.read_namespace("/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/zoo", "/foo/bar/doo/roo/baz"], allow_root_namespace_name_collision=False)
-   
+        _namespace.read_namespace(
+            "/foo/bar/baz",
+            ["/foo/bar/zoo", "/foo/bar/doo/roo/zoo", "/foo/bar/doo/roo/baz"],
+            allow_root_namespace_name_collision=False,
+        )
+
 
 @_in_n_out
 def _unittest_inconsistent_deprecation() -> None:

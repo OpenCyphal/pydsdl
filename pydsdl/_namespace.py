@@ -84,7 +84,7 @@ def read_namespace(
     lookup_directories: Union[None, Path, str, Iterable[Union[Path, str]]] = None,
     print_output_handler: Optional[PrintOutputHandler] = None,
     allow_unregulated_fixed_port_id: bool = False,
-    allow_root_namespace_name_collision: bool = True
+    allow_root_namespace_name_collision: bool = True,
 ) -> List[_serializable.CompositeType]:
     """
     This function is the main entry point of the library.
@@ -111,8 +111,8 @@ def read_namespace(
         Please read https://opencyphal.org/guide.
 
     :param allow_root_namespace_name_collision: Allow using the source root namespace name in the look up dirs or
-             the same root namespace name multiple times in the lookup dirs. This will enable defining a namespace 
-             partially and let other entities define new messages or new sub-namespaces in the same root namespace.    
+             the same root namespace name multiple times in the lookup dirs. This will enable defining a namespace
+             partially and let other entities define new messages or new sub-namespaces in the same root namespace.
 
     :return: A list of :class:`pydsdl.CompositeType` sorted lexicographically by full data type name,
              then by major version (newest version first), then by minor version (newest version first).
@@ -150,7 +150,7 @@ def read_namespace(
 
     # Check the namespaces.
     _ensure_no_nested_root_namespaces(lookup_directories_path_list)
-    
+
     if not allow_root_namespace_name_collision:
         _ensure_no_namespace_name_collisions(lookup_directories_path_list)
 
