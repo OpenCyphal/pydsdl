@@ -1126,7 +1126,10 @@ def _unittest_parse_namespace() -> None:
 
     # Test namespece can intersect with type name
     os.unlink(Path(directory.name, "zubax/COLLIDING/300.Iceberg.30.0.dsdl"))
-    os.unlink(Path(directory.name, "zubax/colliding/300.Iceberg.30.0.dsdl"))
+    try:
+        os.unlink(Path(directory.name, "zubax/colliding/300.Iceberg.30.0.dsdl"))
+    except FileNotFoundError:
+        pass  # We're running on a platform where paths are not case-sensitive.
     _define(
         "zubax/noncolliding/iceberg/Ice.1.0.dsdl",
         dedent(
