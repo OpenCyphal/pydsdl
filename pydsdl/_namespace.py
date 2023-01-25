@@ -84,6 +84,7 @@ def read_namespace(
     lookup_directories: Union[None, Path, str, Iterable[Union[Path, str]]] = None,
     print_output_handler: Optional[PrintOutputHandler] = None,
     allow_unregulated_fixed_port_id: bool = False,
+    allow_root_namespace_name_collision: bool = True,
 ) -> List[_serializable.CompositeType]:
     """
     This function is the main entry point of the library.
@@ -108,6 +109,10 @@ def read_namespace(
         As demanded by the specification, the frontend rejects unregulated fixed port ID by default.
         This is a dangerous feature that must not be used unless you understand the risks.
         Please read https://opencyphal.org/guide.
+
+    :param allow_root_namespace_name_collision: Allow using the source root namespace name in the look up dirs or
+             the same root namespace name multiple times in the lookup dirs. This will enable defining a namespace
+             partially and let other entities define new messages or new sub-namespaces in the same root namespace.
 
     :return: A list of :class:`pydsdl.CompositeType` sorted lexicographically by full data type name,
              then by major version (newest version first), then by minor version (newest version first).
@@ -145,7 +150,9 @@ def read_namespace(
 
     # Check the namespaces.
     _ensure_no_nested_root_namespaces(lookup_directories_path_list)
-    _ensure_no_namespace_name_collisions(lookup_directories_path_list)
+
+    if not allow_root_namespace_name_collision:
+        _ensure_no_namespace_name_collisions(lookup_directories_path_list)
 
     # Construct DSDL definitions from the target and the lookup dirs.
     target_dsdl_definitions = _construct_dsdl_definitions_from_namespace(root_namespace_directory)
@@ -247,20 +254,34 @@ def _ensure_no_name_collisions(
     lookup_definitions: List[_dsdl_definition.DSDLDefinition],
 ) -> None:
     for tg in target_definitions:
+        tg_full_namespace_period = tg.full_namespace.lower() + "."
+        tg_full_name_period = tg.full_name.lower() + "."
         for lu in lookup_definitions:
+            lu_full_namespace_period = lu.full_namespace.lower() + "."
+            lu_full_name_period = lu.full_name.lower() + "."
+            """
+            This is to allow the following messages to coexist happily:
+
+            zubax/noncolliding/iceberg/Ice.0.1.dsdl
+            zubax/noncolliding/Iceb.0.1.dsdl
+
+            The following is still not allowed:
+
+            zubax/colliding/iceberg/Ice.0.1.dsdl
+            zubax/colliding/Iceberg.0.1.dsdl
+
+            """
             if tg.full_name != lu.full_name and tg.full_name.lower() == lu.full_name.lower():
                 raise DataTypeNameCollisionError(
                     "Full name of this definition differs from %s only by letter case, "
                     "which is not permitted" % lu.file_path,
                     path=tg.file_path,
                 )
-
-            if tg.full_namespace.lower().startswith(lu.full_name.lower()):  # pragma: no cover
+            if (tg_full_namespace_period).startswith(lu_full_name_period):
                 raise DataTypeNameCollisionError(
                     "The namespace of this type conflicts with %s" % lu.file_path, path=tg.file_path
                 )
-
-            if lu.full_namespace.lower().startswith(tg.full_name.lower()):
+            if (lu_full_namespace_period).startswith(tg_full_name_period):
                 raise DataTypeNameCollisionError(
                     "This type conflicts with the namespace of %s" % lu.file_path, path=tg.file_path
                 )

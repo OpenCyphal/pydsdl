@@ -18,7 +18,6 @@ from . import _dsdl_definition
 from . import _serializable
 from . import _namespace
 
-
 # Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
 #   pydsdl/_test.py:18: error: Missing type parameters for generic type
 #   pydsdl/_test.py: note: In function "_in_n_out":
@@ -1125,6 +1124,36 @@ def _unittest_parse_namespace() -> None:
     except _namespace.FixedPortIDCollisionError:  # pragma: no cover
         pass  # We're running on a platform where paths are not case-sensitive.
 
+    # Test namespece can intersect with type name
+    os.unlink(Path(directory.name, "zubax/COLLIDING/300.Iceberg.30.0.dsdl"))
+    try:
+        os.unlink(Path(directory.name, "zubax/colliding/300.Iceberg.30.0.dsdl"))
+    except FileNotFoundError:
+        pass  # We're running on a platform where paths are not case-sensitive.
+    _define(
+        "zubax/noncolliding/iceberg/Ice.1.0.dsdl",
+        dedent(
+            """
+        @extent 1024
+        ---
+        @extent 1024
+        """
+        ),
+    )
+    _define(
+        "zubax/noncolliding/Iceb.1.0.dsdl",
+        dedent(
+            """
+        @extent 1024
+        ---
+        @extent 1024
+        """
+        ),
+    )
+    parsed = _namespace.read_namespace(Path(directory.name, "zubax"), Path(directory.name, "zubax"))
+    assert "zubax.noncolliding.iceberg.Ice" in [x.full_name for x in parsed]
+    assert "zubax.noncolliding.Iceb" in [x.full_name for x in parsed]
+
 
 def _unittest_parse_namespace_versioning() -> None:
     from pytest import raises
@@ -1587,25 +1616,24 @@ def _unittest_parse_namespace_versioning() -> None:
 
 
 def _unittest_parse_namespace_faults() -> None:
-    try:
-        _namespace.read_namespace("/foo/bar/baz", ["/bat/wot", "/foo/bar/baz/bad"])
-    except _namespace.NestedRootNamespaceError as ex:
-        print(ex)
-    else:  # pragma: no cover
-        assert False
+    from pytest import raises
 
-    try:
-        _namespace.read_namespace("/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/BAZ"])  # Notice the letter case
-    except _namespace.RootNamespaceNameCollisionError as ex:
-        print(ex)
-    else:  # pragma: no cover
-        assert False
-    try:
-        _namespace.read_namespace("/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/zoo", "/foo/bar/doo/roo/baz"])
-    except _namespace.RootNamespaceNameCollisionError as ex:
-        print(ex)
-    else:  # pragma: no cover
-        assert False
+    with raises(_namespace.NestedRootNamespaceError):
+        _namespace.read_namespace(
+            "/foo/bar/baz", ["/bat/wot", "/foo/bar/baz/bad"], allow_root_namespace_name_collision=False
+        )
+
+    with raises(_namespace.RootNamespaceNameCollisionError):
+        _namespace.read_namespace(
+            "/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/BAZ"], allow_root_namespace_name_collision=False
+        )  # Notice the letter case
+
+    with raises(_namespace.RootNamespaceNameCollisionError):
+        _namespace.read_namespace(
+            "/foo/bar/baz",
+            ["/foo/bar/zoo", "/foo/bar/doo/roo/zoo", "/foo/bar/doo/roo/baz"],
+            allow_root_namespace_name_collision=False,
+        )
 
 
 @_in_n_out
