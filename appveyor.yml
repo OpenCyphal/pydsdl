@@ -13,6 +13,10 @@ environment:
 
     - job_group: tests
       APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
+      PYTHON: "3.11"
+
+    - job_group: tests
+      APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu2004
       PYTHON: "3.10"
 
     - job_group: tests
