@@ -2,7 +2,7 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
-# pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with
+# pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with,redefined-outer-name
 
 import tempfile
 from typing import Union, Tuple, Optional, Sequence, Type, Iterable
@@ -17,11 +17,47 @@ from . import _dsdl_definition
 from . import _serializable
 from . import _namespace
 
-# TODO: remove global state and use pytest fixtures instead
-_DIRECTORY = None  # type : Optional[tempfile.TemporaryDirectory]
+__all__ = []  # type: ignore
 
 
-def _parse_definition(
+class Workspace:
+    def __init__(self) -> None:
+        self._tmp_dir = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
+
+    @property
+    def directory(self) -> Path:
+        return Path(self._tmp_dir.name)
+
+    def new(self, rel_path: Union[str, Path], text: str) -> None:
+        """
+        Simply creates a new DSDL source file with the given contents at the specified path inside the workspace.
+        """
+        rel_path = Path(rel_path)
+        path = self.directory / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf8")
+
+    def parse_new(self, rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefinition:
+        """
+        Creates a new DSDL source file with the given contents at the specified path inside the workspace,
+        then parses it and returns the resulting definition object.
+        """
+        rel_path = Path(rel_path)
+        self.new(rel_path, text)
+        path = self.directory / rel_path
+        root_namespace_path = self.directory / rel_path.parts[0]
+        out = _dsdl_definition.DSDLDefinition(path, root_namespace_path)
+        return out
+
+    def drop(self, rel_path_glob: str) -> None:
+        """
+        Deletes all files matching the specified glob pattern.
+        """
+        for g in self.directory.glob(rel_path_glob):
+            g.unlink()
+
+
+def parse_definition(
     definition: _dsdl_definition.DSDLDefinition, lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition]
 ) -> _serializable.CompositeType:
     return definition.read(
@@ -31,47 +67,31 @@ def _parse_definition(
     )
 
 
-def _define(rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefinition:
-    rel_path = Path(rel_path)
-    assert _DIRECTORY
-    path = Path(_DIRECTORY.name, rel_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf8")
-    root_namespace_path = Path(_DIRECTORY.name, rel_path.parts[0])
-    out = _dsdl_definition.DSDLDefinition(path, root_namespace_path)
-    print("New definition:", out, "Root NS:", root_namespace_path)
-    return out
+@pytest.fixture()  # type: ignore
+def wrkspc() -> Workspace:
+    return Workspace()
 
 
-@pytest.fixture(autouse=True)  # type: ignore
-def _with_temp_dir() -> Iterable[None]:
-    global _DIRECTORY
-    _DIRECTORY = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
-    yield
-    _DIRECTORY = None  # Preserving the contents for future inspection if needed
-
-
-def _unittest_define() -> None:
-    d = _define("uavcan/test/5000.Message.1.2.dsdl", "# empty")
-    assert _DIRECTORY is not None
+def _unittest_define(wrkspc: Workspace) -> None:
+    d = wrkspc.parse_new("uavcan/test/5000.Message.1.2.dsdl", "# empty")
     assert d.full_name == "uavcan.test.Message"
     assert d.version == (1, 2)
     assert d.fixed_port_id == 5000
-    assert d.file_path.samefile(Path(_DIRECTORY.name, "uavcan", "test", "5000.Message.1.2.dsdl"))
-    assert d.root_namespace_path.samefile(Path(_DIRECTORY.name, "uavcan"))
+    assert d.file_path.samefile(Path(wrkspc.directory, "uavcan", "test", "5000.Message.1.2.dsdl"))
+    assert d.root_namespace_path.samefile(wrkspc.directory / "uavcan")
     assert d.file_path.read_text() == "# empty"
 
-    d = _define("uavcan/Service.255.254.dsdl", "# empty 2")
+    d = wrkspc.parse_new("uavcan/Service.255.254.dsdl", "# empty 2")
     assert d.full_name == "uavcan.Service"
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
-    assert d.file_path.samefile(Path(_DIRECTORY.name, "uavcan", "Service.255.254.dsdl"))
-    assert d.root_namespace_path.samefile(Path(_DIRECTORY.name, "uavcan"))
+    assert d.file_path.samefile(Path(wrkspc.directory, "uavcan", "Service.255.254.dsdl"))
+    assert d.root_namespace_path.samefile(wrkspc.directory / "uavcan")
     assert d.file_path.read_text() == "# empty 2"
 
 
-def _unittest_simple() -> None:
-    abc = _define(
+def _unittest_simple(wrkspc: Workspace) -> None:
+    abc = wrkspc.parse_new(
         "vendor/nested/7000.Abc.1.2.dsdl",
         dedent(
             """
@@ -87,7 +107,7 @@ def _unittest_simple() -> None:
     assert abc.full_name == "vendor.nested.Abc"
     assert abc.version == (1, 2)
 
-    p = _parse_definition(abc, [])
+    p = parse_definition(abc, [])
     print("Parsed:", p)
     assert isinstance(p, _serializable.DelimitedType)
     assert isinstance(p.inner_type, _serializable.StructureType)
@@ -117,11 +137,11 @@ def _unittest_simple() -> None:
     assert isinstance(t, _serializable.ArrayType)
     assert str(t.element_type) == "saturated int64"
 
-    empty_new = _define("vendor/nested/Empty.255.255.dsdl", """@sealed""")
+    empty_new = wrkspc.parse_new("vendor/nested/Empty.255.255.dsdl", """@sealed""")
 
-    empty_old = _define("vendor/nested/Empty.255.254.dsdl", """@sealed""")
+    empty_old = wrkspc.parse_new("vendor/nested/Empty.255.254.dsdl", """@sealed""")
 
-    constants = _define(
+    constants = wrkspc.parse_new(
         "another/Constants.5.0.dsdl",
         dedent(
             """
@@ -131,7 +151,7 @@ def _unittest_simple() -> None:
         ),
     )
 
-    service = _define(
+    service = wrkspc.parse_new(
         "another/300.Service.0.1.dsdl",
         dedent(
             """
@@ -149,7 +169,7 @@ def _unittest_simple() -> None:
         ),
     )
 
-    p = _parse_definition(
+    p = parse_definition(
         service,
         [
             abc,
@@ -229,7 +249,7 @@ def _unittest_simple() -> None:
     assert t.full_name == "vendor.nested.Abc"
     assert t.version == (1, 2)
 
-    p2 = _parse_definition(
+    p2 = parse_definition(
         abc,
         [
             service,
@@ -242,7 +262,7 @@ def _unittest_simple() -> None:
     assert hash(p2) != hash(p)
     assert hash(p) == hash(p)
 
-    union = _define(
+    union = wrkspc.parse_new(
         "another/Union.5.9.dsdl",
         dedent(
             """
@@ -256,7 +276,7 @@ def _unittest_simple() -> None:
         ),
     )
 
-    p = _parse_definition(
+    p = parse_definition(
         union,
         [
             empty_old,
@@ -282,8 +302,8 @@ def _unittest_simple() -> None:
     assert str(p.fields[2]) == "saturated bool[<=255] c"
 
 
-def _unittest_comments() -> None:
-    abc = _define(
+def _unittest_comments(wrkspc: Workspace) -> None:
+    abc = wrkspc.parse_new(
         "vendor/nested/7000.Abc.1.2.dsdl",
         dedent(
             """\
@@ -305,7 +325,7 @@ def _unittest_comments() -> None:
         ),
     )
 
-    p = _parse_definition(abc, [])
+    p = parse_definition(abc, [])
     print("Parsed:", p)
     print(p.doc.__repr__())
     # assert p.doc == "header comment here\nmultiline"
@@ -314,11 +334,11 @@ def _unittest_comments() -> None:
     assert p.fields[2].doc == "comment on padding field"
     assert p.fields[3].doc == "comment on array\nand another"
 
-    empty_new = _define("vendor/nested/Empty.255.255.dsdl", """@sealed""")
+    empty_new = wrkspc.parse_new("vendor/nested/Empty.255.255.dsdl", """@sealed""")
 
-    empty_old = _define("vendor/nested/Empty.255.254.dsdl", """@sealed""")
+    empty_old = wrkspc.parse_new("vendor/nested/Empty.255.254.dsdl", """@sealed""")
 
-    constants = _define(
+    constants = wrkspc.parse_new(
         "another/Constants.5.0.dsdl",
         dedent(
             """
@@ -328,11 +348,11 @@ def _unittest_comments() -> None:
         ),
     )
 
-    p = _parse_definition(constants, [])
+    p = parse_definition(constants, [])
     assert p.doc == ""
     assert p.constants[0].doc == "no header comment"
 
-    service = _define(
+    service = wrkspc.parse_new(
         "another/300.Service.0.1.dsdl",
         dedent(
             """\
@@ -354,7 +374,7 @@ def _unittest_comments() -> None:
         ),
     )
 
-    p = _parse_definition(
+    p = parse_definition(
         service,
         [
             abc,
@@ -368,7 +388,7 @@ def _unittest_comments() -> None:
     assert req.doc == "first header comment here\nmultiline"  # type: ignore
     assert res.doc == "second header comment here\nmultiline"  # type: ignore
 
-    union = _define(
+    union = wrkspc.parse_new(
         "another/Union.5.9.dsdl",
         dedent(
             """
@@ -383,7 +403,7 @@ def _unittest_comments() -> None:
         ),
     )
 
-    p = _parse_definition(
+    p = parse_definition(
         union,
         [
             empty_old,
@@ -397,11 +417,13 @@ def _unittest_comments() -> None:
 # noinspection PyProtectedMember,PyProtectedMember
 
 
-def _unittest_error() -> None:
+def _unittest_error(wrkspc: Workspace) -> None:
     from pytest import raises
 
     def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> _serializable.CompositeType:
-        return _define(rel_path, definition + "\n").read([], lambda *_: None, allow_unregulated)  # pragma: no branch
+        return wrkspc.parse_new(rel_path, definition + "\n").read(
+            [], lambda *_: None, allow_unregulated
+        )  # pragma: no branch
 
     with raises(_error.InvalidDefinitionError, match="(?i).*port ID.*"):
         standalone("vendor/1000.InvalidRegulatedSubjectID.1.0.dsdl", "uint2 value\n@sealed")
@@ -545,59 +567,61 @@ def _unittest_error() -> None:
         )
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r".*ns.Type_.*1\.0"):
-        _parse_definition(
-            _define("vendor/types/A.1.0.dsdl", "ns.Type_.1.0 field\n@sealed"),
+        parse_definition(
+            wrkspc.parse_new("vendor/types/A.1.0.dsdl", "ns.Type_.1.0 field\n@sealed"),
             [
-                _define("ns/Type_.2.0.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.2.0.dsdl", "@sealed"),
             ],
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*Bit length cannot exceed.*"):
-        _parse_definition(
-            _define("vendor/types/A.1.0.dsdl", "int128 field\n@sealed"),
+        parse_definition(
+            wrkspc.parse_new("vendor/types/A.1.0.dsdl", "int128 field\n@sealed"),
             [
-                _define("ns/Type_.2.0.dsdl", "@sealed"),
-                _define("ns/Type_.1.1.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.2.0.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.1.1.dsdl", "@sealed"),
             ],
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*type.*"):
-        _parse_definition(
-            _define("vendor/invalid_constant_value/A.1.0.dsdl", "ns.Type_.1.1 VALUE = 123\n@sealed"),
+        parse_definition(
+            wrkspc.parse_new("vendor/invalid_constant_value/A.1.0.dsdl", "ns.Type_.1.1 VALUE = 123\n@sealed"),
             [
-                _define("ns/Type_.2.0.dsdl", "@sealed"),
-                _define("ns/Type_.1.1.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.2.0.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.1.1.dsdl", "@sealed"),
             ],
         )
 
     with raises(_data_type_builder.UndefinedDataTypeError):
         defs = [
-            _define("vendor/circular_dependency/A.1.0.dsdl", "B.1.0 b\n@sealed"),
-            _define("vendor/circular_dependency/B.1.0.dsdl", "A.1.0 b\n@sealed"),
+            wrkspc.parse_new("vendor/circular_dependency/A.1.0.dsdl", "B.1.0 b\n@sealed"),
+            wrkspc.parse_new("vendor/circular_dependency/B.1.0.dsdl", "A.1.0 b\n@sealed"),
         ]
-        _parse_definition(defs[0], defs)
+        parse_definition(defs[0], defs)
 
     with raises(_error.InvalidDefinitionError, match="(?i).*union directive.*"):
-        _parse_definition(
-            _define("vendor/misplaced_directive/A.1.0.dsdl", "ns.Type_.2.0 field\n@union\n@sealed"),
+        parse_definition(
+            wrkspc.parse_new("vendor/misplaced_directive/A.1.0.dsdl", "ns.Type_.2.0 field\n@union\n@sealed"),
             [
-                _define("ns/Type_.2.0.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.2.0.dsdl", "@sealed"),
             ],
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*deprecated directive.*"):
-        _parse_definition(
-            _define("vendor/misplaced_directive/A.1.0.dsdl", "ns.Type_.2.0 field\n@deprecated\n@sealed"),
+        parse_definition(
+            wrkspc.parse_new("vendor/misplaced_directive/A.1.0.dsdl", "ns.Type_.2.0 field\n@deprecated\n@sealed"),
             [
-                _define("ns/Type_.2.0.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.2.0.dsdl", "@sealed"),
             ],
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*deprecated directive.*"):
-        _parse_definition(
-            _define("vendor/misplaced_directive/A.1.0.dsdl", "ns.Type_.2.0 field\n@sealed\n---\n@deprecated\n@sealed"),
+        parse_definition(
+            wrkspc.parse_new(
+                "vendor/misplaced_directive/A.1.0.dsdl", "ns.Type_.2.0 field\n@sealed\n---\n@deprecated\n@sealed"
+            ),
             [
-                _define("ns/Type_.2.0.dsdl", "@sealed"),
+                wrkspc.parse_new("ns/Type_.2.0.dsdl", "@sealed"),
             ],
         )
 
@@ -720,14 +744,14 @@ def _unittest_error() -> None:
         )
 
 
-def _unittest_print() -> None:
+def _unittest_print(wrkspc: Workspace) -> None:
     printed_items = None  # type: Optional[Tuple[int, str]]
 
     def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
         printed_items = line_number, text
 
-    _define(
+    wrkspc.parse_new(
         "ns/A.1.0.dsdl",
         "# line number 1\n" "# line number 2\n" "@print 2 + 2 == 4   # line number 3\n" "# line number 4\n" "@sealed\n",
     ).read([], print_handler, False)
@@ -736,12 +760,12 @@ def _unittest_print() -> None:
     assert printed_items[0] == 3
     assert printed_items[1] == "true"
 
-    _define("ns/B.1.0.dsdl", "@print false\n@sealed").read([], print_handler, False)
+    wrkspc.parse_new("ns/B.1.0.dsdl", "@print false\n@sealed").read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 1
     assert printed_items[1] == "false"
 
-    _define(
+    wrkspc.parse_new(
         "ns/Offset.1.0.dsdl", "@print _offset_    # Not recorded\n" "uint8 a\n" "@print _offset_\n" "@extent 800\n"
     ).read([], print_handler, False)
     assert printed_items
@@ -752,11 +776,11 @@ def _unittest_print() -> None:
 # noinspection PyProtectedMember
 
 
-def _unittest_assert() -> None:
+def _unittest_assert(wrkspc: Workspace) -> None:
     from pytest import raises
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/A.1.0.dsdl",
             dedent(
                 """
@@ -789,12 +813,12 @@ def _unittest_assert() -> None:
             """
             ),
         ),
-        [_define("ns/Array.1.0.dsdl", "uint8[<=2] foo\n@sealed")],
+        [wrkspc.parse_new("ns/Array.1.0.dsdl", "uint8[<=2] foo\n@sealed")],
     )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*operator is not defined.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
                 dedent(
                     """
@@ -808,25 +832,27 @@ def _unittest_assert() -> None:
         )
 
     with raises(_expression.UndefinedAttributeError):
-        _parse_definition(
-            _define("ns/C.1.0.dsdl", "@print Service.1.0._bit_length_"),
-            [_define("ns/Service.1.0.dsdl", "uint8 a\n@sealed\n---\nuint16 b\n@sealed")],
+        parse_definition(
+            wrkspc.parse_new("ns/C.1.0.dsdl", "@print Service.1.0._bit_length_"),
+            [wrkspc.parse_new("ns/Service.1.0.dsdl", "uint8 a\n@sealed\n---\nuint16 b\n@sealed")],
         )
 
     with raises(_expression.UndefinedAttributeError):
-        _parse_definition(_define("ns/C.1.0.dsdl", """uint64 LENGTH = uint64.nonexistent_attribute\n@extent 0"""), [])
+        parse_definition(
+            wrkspc.parse_new("ns/C.1.0.dsdl", """uint64 LENGTH = uint64.nonexistent_attribute\n@extent 0"""), []
+        )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*void.*"):
-        _parse_definition(_define("ns/C.1.0.dsdl", "void2 name\n@sealed"), [])
+        parse_definition(wrkspc.parse_new("ns/C.1.0.dsdl", "void2 name\n@sealed"), [])
 
     with raises(_serializable._attribute.InvalidConstantValueError):
-        _parse_definition(_define("ns/C.1.0.dsdl", "int8 name = true\n@sealed"), [])
+        parse_definition(wrkspc.parse_new("ns/C.1.0.dsdl", "int8 name = true\n@sealed"), [])
 
     with raises(_error.InvalidDefinitionError, match=".*value.*"):
-        _parse_definition(_define("ns/C.1.0.dsdl", "int8 name = {1, 2, 3}\n@sealed"), [])
+        parse_definition(wrkspc.parse_new("ns/C.1.0.dsdl", "int8 name = {1, 2, 3}\n@sealed"), [])
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/D.1.0.dsdl",
             dedent(
                 """
@@ -841,8 +867,8 @@ def _unittest_assert() -> None:
         [],
     )
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/E.1.0.dsdl",
             dedent(
                 """
@@ -862,8 +888,8 @@ def _unittest_assert() -> None:
     )
 
     with raises(_error.InvalidDefinitionError):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/F.1.0.dsdl",
                 dedent(
                     """
@@ -880,8 +906,8 @@ def _unittest_assert() -> None:
         )
 
     with raises(_data_type_builder.AssertionCheckFailureError):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/G.1.0.dsdl",
                 dedent(
                     """
@@ -895,8 +921,8 @@ def _unittest_assert() -> None:
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*yield a boolean.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/H.1.0.dsdl",
                 dedent(
                     """
@@ -910,8 +936,8 @@ def _unittest_assert() -> None:
         )
 
     # Extent verification
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/I.1.0.dsdl",
             dedent(
                 """
@@ -924,14 +950,14 @@ def _unittest_assert() -> None:
             ),
         ),
         [
-            _define("ns/J.1.0.dsdl", "uint8 foo\n@extent 64"),
-            _define("ns/K.1.0.dsdl", "uint8 foo\n@sealed"),
+            wrkspc.parse_new("ns/J.1.0.dsdl", "uint8 foo\n@extent 64"),
+            wrkspc.parse_new("ns/K.1.0.dsdl", "uint8 foo\n@sealed"),
         ],
     )
 
     # Alignment
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/L.1.0.dsdl",
             dedent(
                 """
@@ -954,16 +980,14 @@ def _unittest_assert() -> None:
             ),
         ),
         [
-            _define("ns/M.1.0.dsdl", "@extent 16"),
-            _define("ns/N.1.0.dsdl", "@sealed"),
+            wrkspc.parse_new("ns/M.1.0.dsdl", "@extent 16"),
+            wrkspc.parse_new("ns/N.1.0.dsdl", "@sealed"),
         ],
     )
 
 
-def _unittest_parse_namespace() -> None:
+def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     from pytest import raises
-
-    directory = tempfile.TemporaryDirectory()
 
     print_output = None  # type: Optional[Tuple[str, int, str]]
 
@@ -971,16 +995,10 @@ def _unittest_parse_namespace() -> None:
         nonlocal print_output
         print_output = str(d), line, text
 
-    # noinspection PyShadowingNames
-    def _define(rel_path: str, text: str) -> None:
-        path = Path(directory.name, rel_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-
     # Empty namespace.
-    assert [] == _namespace.read_namespace(directory.name)
+    assert [] == _namespace.read_namespace(wrkspc.directory)
 
-    _define(
+    wrkspc.new(
         "zubax/First.1.0.dsdl",
         dedent(
             """
@@ -992,7 +1010,7 @@ def _unittest_parse_namespace() -> None:
         ),
     )
 
-    _define(
+    wrkspc.new(
         "zubax/7001.Message.1.0.dsdl",
         dedent(
             """
@@ -1004,7 +1022,7 @@ def _unittest_parse_namespace() -> None:
         ),
     )
 
-    _define(
+    wrkspc.new(
         "zubax/nested/300.Spartans.30.0.dsdl",
         dedent(
             """
@@ -1021,12 +1039,12 @@ def _unittest_parse_namespace() -> None:
         ),
     )
 
-    _define("zubax/nested/300.Spartans.30.0.txt", "completely unrelated stuff")
-    _define("zubax/300.Spartans.30.0", "completely unrelated stuff")
+    wrkspc.new("zubax/nested/300.Spartans.30.0.txt", "completely unrelated stuff")
+    wrkspc.new("zubax/300.Spartans.30.0", "completely unrelated stuff")
 
     parsed = _namespace.read_namespace(
-        Path(directory.name, "zubax"),
-        [Path(directory.name, "zubax", ".")],  # Intentional duplicate
+        wrkspc.directory / "zubax",
+        [Path(wrkspc.directory, "zubax", ".")],  # Intentional duplicate
         print_handler,
     )
     print(parsed)
@@ -1036,10 +1054,10 @@ def _unittest_parse_namespace() -> None:
     assert "zubax.nested.Spartans" in [x.full_name for x in parsed]
 
     # try again with minimal arguments to read_namespace
-    parsed_minimal_args = _namespace.read_namespace(Path(directory.name, "zubax"))
+    parsed_minimal_args = _namespace.read_namespace(wrkspc.directory / "zubax")
     assert len(parsed_minimal_args) == 3
 
-    _define(
+    wrkspc.new(
         "zubax/colliding/300.Iceberg.30.0.dsdl",
         dedent(
             """
@@ -1051,21 +1069,21 @@ def _unittest_parse_namespace() -> None:
     )
 
     with raises(_namespace.FixedPortIDCollisionError):
-        _namespace.read_namespace(Path(directory.name, "zubax"), [], print_handler)
+        _namespace.read_namespace(wrkspc.directory / "zubax", [], print_handler)
 
     with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
-        _namespace.read_namespace(Path(directory.name, "zubax"), b"/my/path")  # type: ignore
+        _namespace.read_namespace(wrkspc.directory / "zubax", b"/my/path")  # type: ignore
 
     with raises(TypeError):  # Invalid usage: expected path-like object, not bytes.
         # noinspection PyTypeChecker
-        _namespace.read_namespace(Path(directory.name, "zubax"), [b"/my/path"])  # type: ignore
+        _namespace.read_namespace(wrkspc.directory / "zubax", [b"/my/path"])  # type: ignore
 
     assert print_output is not None
     assert "300.Spartans" in print_output[0]
     assert print_output[1] == 9
     assert print_output[2] == "{0}"
 
-    _define(
+    wrkspc.new(
         "zubax/colliding/iceberg/300.Ice.30.0.dsdl",
         dedent(
             """
@@ -1077,19 +1095,19 @@ def _unittest_parse_namespace() -> None:
     )
     with raises(_namespace.DataTypeNameCollisionError):
         _namespace.read_namespace(
-            Path(directory.name, "zubax"),
+            wrkspc.directory / "zubax",
             [
-                Path(directory.name, "zubax"),
+                wrkspc.directory / "zubax",
             ],
         )
 
     # Do again to test single lookup-directory override
     with raises(_namespace.DataTypeNameCollisionError):
-        _namespace.read_namespace(Path(directory.name, "zubax"), Path(directory.name, "zubax"))
+        _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
 
     try:
-        Path(directory.name, "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
-        _define(
+        (wrkspc.directory / "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
+        wrkspc.new(
             "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
             dedent(
                 """
@@ -1101,21 +1119,21 @@ def _unittest_parse_namespace() -> None:
         )
         with raises(_namespace.DataTypeNameCollisionError, match=".*letter case.*"):
             _namespace.read_namespace(
-                Path(directory.name, "zubax"),
+                wrkspc.directory / "zubax",
                 [
-                    Path(directory.name, "zubax"),
+                    wrkspc.directory / "zubax",
                 ],
             )
     except _namespace.FixedPortIDCollisionError:  # pragma: no cover
         pass  # We're running on a platform where paths are not case-sensitive.
 
     # Test namespace can intersect with type name
-    Path(directory.name, "zubax/COLLIDING/300.Iceberg.30.0.dsdl").unlink()
+    (wrkspc.directory / "zubax/COLLIDING/300.Iceberg.30.0.dsdl").unlink()
     try:
-        (Path(directory.name, "zubax/colliding/300.Iceberg.30.0.dsdl")).unlink()
+        ((wrkspc.directory / "zubax/colliding/300.Iceberg.30.0.dsdl")).unlink()
     except FileNotFoundError:
         pass  # We're running on a platform where paths are not case-sensitive.
-    _define(
+    wrkspc.new(
         "zubax/noncolliding/iceberg/Ice.1.0.dsdl",
         dedent(
             """
@@ -1125,7 +1143,7 @@ def _unittest_parse_namespace() -> None:
         """
         ),
     )
-    _define(
+    wrkspc.new(
         "zubax/noncolliding/Iceb.1.0.dsdl",
         dedent(
             """
@@ -1135,27 +1153,15 @@ def _unittest_parse_namespace() -> None:
         """
         ),
     )
-    parsed = _namespace.read_namespace(Path(directory.name, "zubax"), Path(directory.name, "zubax"))
+    parsed = _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
     assert "zubax.noncolliding.iceberg.Ice" in [x.full_name for x in parsed]
     assert "zubax.noncolliding.Iceb" in [x.full_name for x in parsed]
 
 
-def _unittest_parse_namespace_versioning() -> None:
+def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     from pytest import raises
 
-    directory = tempfile.TemporaryDirectory()
-
-    # noinspection PyShadowingNames
-    def _define(rel_path: str, text: str) -> None:
-        path = Path(directory.name, rel_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-
-    def _undefine_glob(rel_path_glob: str) -> None:
-        for g in Path(directory.name).glob(rel_path_glob):
-            g.unlink()
-
-    _define(
+    wrkspc.new(
         "ns/Spartans.30.0.dsdl",
         dedent(
             """
@@ -1171,7 +1177,7 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    _define(
+    wrkspc.new(
         "ns/Spartans.30.1.dsdl",
         dedent(
             """
@@ -1187,11 +1193,11 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(parsed)
     assert len(parsed) == 2
 
-    _define(
+    wrkspc.new(
         "ns/Spartans.30.2.dsdl",
         dedent(
             """
@@ -1206,11 +1212,11 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.VersionsOfDifferentKindError):
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
-    _undefine_glob("ns/Spartans.30.[01].dsdl")
+    wrkspc.drop("ns/Spartans.30.[01].dsdl")
 
-    _define(
+    wrkspc.new(
         "ns/Spartans.30.0.dsdl",
         dedent(
             """
@@ -1224,11 +1230,11 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(parsed)
     assert len(parsed) == 2
 
-    _define(
+    wrkspc.new(
         "ns/Spartans.30.1.dsdl",
         dedent(
             """
@@ -1242,7 +1248,7 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    _define(
+    wrkspc.new(
         "ns/6700.Spartans.30.2.dsdl",
         dedent(
             """
@@ -1257,15 +1263,15 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.MultipleDefinitionsUnderSameVersionError):
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
-    _undefine_glob("ns/Spartans.30.2.dsdl")
+    wrkspc.drop("ns/Spartans.30.2.dsdl")
 
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
     assert len(parsed) == 3
 
-    _undefine_glob("ns/Spartans.30.0.dsdl")
-    _define(
+    wrkspc.drop("ns/Spartans.30.0.dsdl")
+    wrkspc.new(
         "ns/6700.Spartans.30.0.dsdl",
         dedent(
             """
@@ -1280,10 +1286,10 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.MinorVersionFixedPortIDError):
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
-    _undefine_glob("ns/Spartans.30.1.dsdl")
-    _define(
+    wrkspc.drop("ns/Spartans.30.1.dsdl")
+    wrkspc.new(
         "ns/6700.Spartans.30.1.dsdl",
         dedent(
             """
@@ -1297,11 +1303,11 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
 
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
     assert len(parsed) == 3
 
-    _undefine_glob("ns/6700.Spartans.30.1.dsdl")
-    _define(
+    wrkspc.drop("ns/6700.Spartans.30.1.dsdl")
+    wrkspc.new(
         "ns/6701.Spartans.30.1.dsdl",
         dedent(
             """
@@ -1316,11 +1322,11 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.MinorVersionFixedPortIDError):
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
     # Adding new major version under the same FPID
-    _undefine_glob("ns/6701.Spartans.30.1.dsdl")
-    _define(
+    wrkspc.drop("ns/6701.Spartans.30.1.dsdl")
+    wrkspc.new(
         "ns/6700.Spartans.31.0.dsdl",
         dedent(
             """
@@ -1335,11 +1341,11 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     with raises(_namespace.FixedPortIDCollisionError):
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
     # Major version zero allows us to re-use the same FPID under a different (non-zero) major version
-    _undefine_glob("ns/6700.Spartans.31.0.dsdl")
-    _define(
+    wrkspc.drop("ns/6700.Spartans.31.0.dsdl")
+    wrkspc.new(
         "ns/6700.Spartans.0.1.dsdl",
         dedent(
             """
@@ -1354,13 +1360,13 @@ def _unittest_parse_namespace_versioning() -> None:
     )
 
     # These are needed to ensure full branch coverage, see the checking code.
-    _define("ns/Empty.1.0.dsdl", "@extent 0")
-    _define("ns/Empty.1.1.dsdl", "@extent 0")
-    _define("ns/Empty.2.0.dsdl", "@extent 0")
-    _define("ns/6800.Empty.3.0.dsdl", "@extent 0")
-    _define("ns/6801.Empty.4.0.dsdl", "@extent 0")
+    wrkspc.new("ns/Empty.1.0.dsdl", "@extent 0")
+    wrkspc.new("ns/Empty.1.1.dsdl", "@extent 0")
+    wrkspc.new("ns/Empty.2.0.dsdl", "@extent 0")
+    wrkspc.new("ns/6800.Empty.3.0.dsdl", "@extent 0")
+    wrkspc.new("ns/6801.Empty.4.0.dsdl", "@extent 0")
 
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 8
 
     # Check ordering - the definitions must be sorted properly by name (lexicographically) and version (newest first).
@@ -1376,30 +1382,30 @@ def _unittest_parse_namespace_versioning() -> None:
     ]
 
     # Extent consistency -- non-service type
-    _define("ns/Consistency.1.0.dsdl", "uint8 a\n@extent 128")
-    _define("ns/Consistency.1.1.dsdl", "uint8 a\nuint8 b\n@extent 128")
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    wrkspc.new("ns/Consistency.1.0.dsdl", "uint8 a\n@extent 128")
+    wrkspc.new("ns/Consistency.1.1.dsdl", "uint8 a\nuint8 b\n@extent 128")
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define("ns/Consistency.1.2.dsdl", "uint8 a\nuint8 b\nuint8 c\n@extent 256")
+    wrkspc.new("ns/Consistency.1.2.dsdl", "uint8 a\nuint8 b\nuint8 c\n@extent 256")
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency\.1\.2 is 256 bits.*"
     ) as ei_extent:
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(ei_extent.value)
     assert ei_extent.value.path and "Consistency.1" in str(ei_extent.value.path)
-    _undefine_glob("ns/Consistency*")
+    wrkspc.drop("ns/Consistency*")
 
     # Extent consistency -- non-service type, zero major version
-    _define("ns/Consistency.0.1.dsdl", "uint8 a\n@extent 128")
-    _define("ns/Consistency.0.2.dsdl", "uint8 a\nuint8 b\n@extent 128")
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    wrkspc.new("ns/Consistency.0.1.dsdl", "uint8 a\n@extent 128")
+    wrkspc.new("ns/Consistency.0.2.dsdl", "uint8 a\nuint8 b\n@extent 128")
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define("ns/Consistency.0.3.dsdl", "uint8 a\nuint8 b\nuint8 c\n@extent 256")  # no error
-    _namespace.read_namespace(Path(directory.name, "ns"), [])
-    _undefine_glob("ns/Consistency*")
+    wrkspc.new("ns/Consistency.0.3.dsdl", "uint8 a\nuint8 b\nuint8 c\n@extent 256")  # no error
+    _namespace.read_namespace((wrkspc.directory / "ns"), [])
+    wrkspc.drop("ns/Consistency*")
 
     # Extent consistency -- request
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.0.dsdl",
         dedent(
             """
@@ -1411,7 +1417,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.1.dsdl",
         dedent(
             """
@@ -1424,9 +1430,9 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.2.dsdl",
         dedent(
             """
@@ -1442,13 +1448,13 @@ def _unittest_parse_namespace_versioning() -> None:
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency.* is 256 bits.*"
     ) as ei_extent:
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(ei_extent.value)
     assert ei_extent.value.path and "Consistency.1" in str(ei_extent.value.path)
-    _undefine_glob("ns/Consistency*")
+    wrkspc.drop("ns/Consistency*")
 
     # Extent consistency -- response
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.0.dsdl",
         dedent(
             """
@@ -1460,7 +1466,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.1.dsdl",
         dedent(
             """
@@ -1473,9 +1479,9 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.2.dsdl",
         dedent(
             """
@@ -1490,25 +1496,25 @@ def _unittest_parse_namespace_versioning() -> None:
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency.* is 256 bits.*"
     ) as ei_extent:
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(ei_extent.value)
     assert ei_extent.value.path and "Consistency.1" in str(ei_extent.value.path)
-    _undefine_glob("ns/Consistency*")
+    wrkspc.drop("ns/Consistency*")
 
     # Sealing consistency -- non-service type
-    _define("ns/Consistency.1.0.dsdl", "uint64 a\n@extent 64")
-    _define("ns/Consistency.1.1.dsdl", "uint64 a\n@extent 64")
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    wrkspc.new("ns/Consistency.1.0.dsdl", "uint64 a\n@extent 64")
+    wrkspc.new("ns/Consistency.1.1.dsdl", "uint64 a\n@extent 64")
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define("ns/Consistency.1.2.dsdl", "uint64 a\n@sealed")
+    wrkspc.new("ns/Consistency.1.2.dsdl", "uint64 a\n@sealed")
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency\.1\.2 is sealed.*") as ei_sealing:
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(ei_sealing.value)
     assert ei_sealing.value.path and "Consistency.1" in str(ei_sealing.value.path)
-    _undefine_glob("ns/Consistency*")
+    wrkspc.drop("ns/Consistency*")
 
     # Sealing consistency -- request
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.0.dsdl",
         dedent(
             """
@@ -1520,7 +1526,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.1.dsdl",
         dedent(
             """
@@ -1532,9 +1538,9 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.2.dsdl",
         dedent(
             """
@@ -1547,13 +1553,13 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency.* is sealed.*") as ei_sealing:
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(ei_sealing.value)
     assert ei_sealing.value.path and "Consistency.1" in str(ei_sealing.value.path)
-    _undefine_glob("ns/Consistency*")
+    wrkspc.drop("ns/Consistency*")
 
     # Sealing consistency -- response
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.0.dsdl",
         dedent(
             """
@@ -1565,7 +1571,7 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.1.dsdl",
         dedent(
             """
@@ -1577,9 +1583,9 @@ def _unittest_parse_namespace_versioning() -> None:
             """
         ),
     )
-    parsed = _namespace.read_namespace(Path(directory.name, "ns"), [])  # no error
+    parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
-    _define(
+    wrkspc.new(
         "ns/Consistency.1.2.dsdl",
         dedent(
             """
@@ -1592,10 +1598,10 @@ def _unittest_parse_namespace_versioning() -> None:
         ),
     )
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency.* is sealed.*") as ei_sealing:
-        _namespace.read_namespace(Path(directory.name, "ns"), [])
+        _namespace.read_namespace((wrkspc.directory / "ns"), [])
     print(ei_sealing.value)
     assert ei_sealing.value.path and "Consistency.1" in str(ei_sealing.value.path)
-    _undefine_glob("ns/Consistency*")
+    wrkspc.drop("ns/Consistency*")
 
 
 def _unittest_parse_namespace_faults() -> None:
@@ -1629,13 +1635,13 @@ def _unittest_parse_namespace_faults() -> None:
             )
 
 
-def _unittest_inconsistent_deprecation() -> None:
+def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
     from pytest import raises
 
-    _parse_definition(
-        _define("ns/A.1.0.dsdl", "@sealed"),
+    parse_definition(
+        wrkspc.parse_new("ns/A.1.0.dsdl", "@sealed"),
         [
-            _define(
+            wrkspc.parse_new(
                 "ns/B.1.0.dsdl",
                 dedent(
                     """
@@ -1649,8 +1655,8 @@ def _unittest_inconsistent_deprecation() -> None:
     )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
                 dedent(
                     """
@@ -1659,11 +1665,11 @@ def _unittest_inconsistent_deprecation() -> None:
                 """
                 ),
             ),
-            [_define("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
+            [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/D.1.0.dsdl",
             dedent(
                 """
@@ -1673,15 +1679,15 @@ def _unittest_inconsistent_deprecation() -> None:
                 """
             ),
         ),
-        [_define("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
+        [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
     )
 
 
-def _unittest_repeated_directives() -> None:
+def _unittest_repeated_directives(wrkspc: Workspace) -> None:
     from pytest import raises
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/A.1.0.dsdl",
             dedent(
                 """
@@ -1697,8 +1703,8 @@ def _unittest_repeated_directives() -> None:
     )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*deprecated.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
                 dedent(
                     """
@@ -1712,8 +1718,8 @@ def _unittest_repeated_directives() -> None:
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*deprecated.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
                 dedent(
                     """
@@ -1728,8 +1734,8 @@ def _unittest_repeated_directives() -> None:
             [],
         )
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/A.1.0.dsdl",
             dedent(
                 """
@@ -1749,8 +1755,8 @@ def _unittest_repeated_directives() -> None:
     )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*union.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
                 dedent(
                     """
@@ -1766,8 +1772,8 @@ def _unittest_repeated_directives() -> None:
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*sealed.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
                 dedent(
                     """
@@ -1783,8 +1789,8 @@ def _unittest_repeated_directives() -> None:
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*already set.*"):
-        _parse_definition(
-            _define(
+        parse_definition(
+            wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
                 dedent(
                     """
@@ -1800,12 +1806,12 @@ def _unittest_repeated_directives() -> None:
         )
 
 
-def _unittest_dsdl_parser_basics() -> None:
+def _unittest_dsdl_parser_basics(wrkspc: Workspace) -> None:
     # This is how you can run one test only for development needs:
     #   pytest pydsdl -k _unittest_dsdl_parser_basics --capture=no
     # noinspection SpellCheckingInspection
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/A.1.0.dsdl",
             dedent(
                 r"""
@@ -1828,18 +1834,18 @@ def _unittest_dsdl_parser_basics() -> None:
             ),
         ),
         [
-            _define("ns/Foo.1.0.dsdl", "int8 THE_CONSTANT = 42\n@extent 1024"),
-            _define("ns/Bar.1.23.dsdl", "int8 the_field\nint8 A = 0xA\nint8 B = 0xB\n@extent 1024"),
+            wrkspc.parse_new("ns/Foo.1.0.dsdl", "int8 THE_CONSTANT = 42\n@extent 1024"),
+            wrkspc.parse_new("ns/Bar.1.23.dsdl", "int8 the_field\nint8 A = 0xA\nint8 B = 0xB\n@extent 1024"),
         ],
     )
 
 
-def _unittest_dsdl_parser_expressions() -> None:
+def _unittest_dsdl_parser_expressions(wrkspc: Workspace) -> None:
     from pytest import raises
 
     def throws(definition: str, exc: Type[Exception] = _expression.InvalidOperandError) -> None:
         with raises(exc):
-            _parse_definition(_define("ns/Throws.0.1.dsdl", dedent(definition + "\n@sealed")), [])
+            parse_definition(wrkspc.parse_new("ns/Throws.0.1.dsdl", dedent(definition + "\n@sealed")), [])
 
     throws("bool R = true && 0")
     throws("bool R = true || 0")
@@ -1874,8 +1880,8 @@ def _unittest_dsdl_parser_expressions() -> None:
     throws('bool R = true % "0"')
     throws('bool R = true ** "0"')
 
-    _parse_definition(
-        _define(
+    parse_definition(
+        wrkspc.parse_new(
             "ns/A.1.0.dsdl",
             dedent(
                 r"""
@@ -1931,11 +1937,11 @@ def _unittest_dsdl_parser_expressions() -> None:
     )
 
 
-def _unittest_pickle() -> None:
+def _unittest_pickle(wrkspc: Workspace) -> None:
     import pickle
 
-    p = _parse_definition(
-        _define(
+    p = parse_definition(
+        wrkspc.parse_new(
             "ns/A.1.0.dsdl",
             dedent(
                 r"""
