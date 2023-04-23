@@ -40,7 +40,7 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if CompositeType.NAME_COMPONENT_SEPARATOR in str(self._root_namespace_path.name):
+        if CompositeType.NAME_COMPONENT_SEPARATOR in self._root_namespace_path.name:
             raise FileNameFormatError("Invalid namespace name", path=self._root_namespace_path)
 
         # Determining the relative path within the root namespace directory
