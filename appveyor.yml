@@ -65,11 +65,11 @@ for:
       - python --version
     test_script:
       # GNU/Linux test.
-      - sh: nox --non-interactive --error-on-missing-interpreters --session test test_eol lint --python $PYTHON
+      - sh: nox --non-interactive --error-on-missing-interpreters --session test test_eol pristine lint --python $PYTHON
       # skip macOS docs build
       - sh: 'if [ "$APPVEYOR_BUILD_WORKER_IMAGE" != "macos" ]; then nox --non-interactive --session docs; fi'
       # MS Windows test.
-      - cmd: nox --forcecolor --non-interactive --error-on-missing-interpreters --session test test_eol lint
+      - cmd: nox --forcecolor --non-interactive --error-on-missing-interpreters --session test test_eol pristine lint
       # Shared test for all platforms.
       - git clone https://github.com/OpenCyphal/public_regulated_data_types .dsdl-test
       - python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"

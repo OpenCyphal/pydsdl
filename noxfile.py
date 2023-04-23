@@ -6,6 +6,7 @@
 import os
 import shutil
 from pathlib import Path
+from functools import partial
 import nox
 
 
@@ -66,6 +67,18 @@ def test_eol(session):
     session.install("-e", ".")
     session.install("pytest")
     session.run("pytest")
+
+
+@nox.session(python=PYTHONS)
+def pristine(session):
+    """
+    Install the library into a pristine environment and ensure that it is importable.
+    This is needed to catch errors caused by accidental reliance on test dependencies in the main codebase.
+    """
+    exe = partial(session.run, "python", "-c", silent=True)
+    session.cd(session.create_tmp())  # Change the directory to reveal spurious dependencies from the project root.
+    session.install(f"{ROOT_DIR}")  # Testing bare installation first.
+    exe("import pydsdl")
 
 
 @nox.session(python=PYTHONS, reuse_venv=True)
