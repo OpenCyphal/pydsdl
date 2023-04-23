@@ -4,10 +4,8 @@
 
 # pylint: disable=logging-not-lazy
 
-import os
 from typing import Iterable, Callable, DefaultDict, List, Optional, Union, Set, Dict
 import logging
-import fnmatch
 import collections
 from pathlib import Path
 from . import _serializable
@@ -200,10 +198,8 @@ def read_namespace(
     return types
 
 
-_DSDL_FILE_GLOBS = [
-    "*.dsdl",  # https://forum.opencyphal.org/t/uavcan-file-extension/438
-    "*.uavcan",  # Legacy name, not for new projects.
-]
+DSDL_FILE_GLOB = "*.dsdl"
+DSDL_FILE_GLOB_LEGACY = "*.uavcan"
 _LOG_LIST_ITEM_PREFIX = " " * 4
 
 _logger = logging.getLogger(__name__)
@@ -389,9 +385,6 @@ def _ensure_no_common_usage_errors(
         "dsdl",
     ]
 
-    def base(s: Path) -> str:
-        return str(os.path.basename(os.path.normpath(s)))
-
     def is_valid_name(s: str) -> bool:
         try:
             _serializable.check_name(s)
@@ -400,62 +393,65 @@ def _ensure_no_common_usage_errors(
         else:
             return True
 
-    all_paths = set([root_namespace_directory] + list(lookup_directories))
+    # resolve() will also normalize the case in case-insensitive filesystems.
+    all_paths = {root_namespace_directory.resolve()} | {x.resolve() for x in lookup_directories}
     for p in all_paths:
-        p = Path(os.path.normcase(p.resolve()))
         try:
-            candidates = [x for x in os.listdir(p) if os.path.isdir(os.path.join(p, x)) and is_valid_name(str(x))]
+            candidates = [x for x in p.iterdir() if x.is_dir() and is_valid_name(x.name)]
         except OSError:  # pragma: no cover
             candidates = []
-        if candidates and base(p) in suspicious_base_names:
+        if candidates and p.name in suspicious_base_names:
             report = (
                 "Possibly incorrect usage detected: input path %s is likely incorrect because the last path component "
                 "should be the root namespace name rather than its parent directory. You probably meant:\n%s"
             ) % (
                 p,
-                "\n".join(("- %s" % os.path.join(p, s)) for s in candidates),
+                "\n".join(("- %s" % (p / s)) for s in candidates),
             )
             reporter(report)
 
 
 def _ensure_no_nested_root_namespaces(directories: Iterable[Path]) -> None:
-    dir_str = list(sorted([os.path.join(os.path.abspath(x), "") for x in set(directories)]))
-    for a in dir_str:
-        for b in dir_str:
-            if (a != b) and a.startswith(b):
+    dirs = {x.resolve() for x in directories}  # normalize the case in case-insensitive filesystems
+    for a in dirs:
+        for b in dirs:
+            if a.samefile(b):
+                continue
+            try:
+                a.relative_to(b)
+            except ValueError:
+                pass
+            else:
                 raise NestedRootNamespaceError(
-                    "The following namespace is nested inside this one, which is not permitted: %s" % a, path=Path(b)
+                    "The following namespace is nested inside this one, which is not permitted: %s" % a, path=b
                 )
 
 
 def _ensure_no_namespace_name_collisions(directories: Iterable[Path]) -> None:
-    directories = list(sorted([x.resolve() for x in set(directories)]))
+    directories = {x.resolve() for x in directories}  # normalize the case in case-insensitive filesystems
     for a in directories:
         for b in directories:
-            if (a != b) and a.name.lower() == b.name.lower():
+            if a.samefile(b):
+                continue
+            if a.name.lower() == b.name.lower():
                 _logger.info("Collision: %r [%r] == %r [%r]", a, a.name, b, b.name)
                 raise RootNamespaceNameCollisionError("The name of this namespace conflicts with %s" % b, path=a)
 
 
-def _construct_dsdl_definitions_from_namespace(
-    root_namespace_path: Path,
-) -> List[_dsdl_definition.DSDLDefinition]:
+def _construct_dsdl_definitions_from_namespace(root_namespace_path: Path) -> List[_dsdl_definition.DSDLDefinition]:
     """
     Accepts a directory path, returns a sorted list of abstract DSDL file representations. Those can be read later.
     The definitions are sorted by name lexicographically, then by major version (greatest version first),
     then by minor version (same ordering as the major version).
     """
-
-    def on_walk_error(os_ex: Exception) -> None:
-        raise os_ex  # pragma: no cover
-
-    walker = os.walk(root_namespace_path, onerror=on_walk_error, followlinks=True)
-
     source_file_paths: Set[Path] = set()
-    for root, _dirnames, filenames in walker:
-        for glb in _DSDL_FILE_GLOBS:
-            for filename in fnmatch.filter(filenames, glb):
-                source_file_paths.add(Path(root, filename))
+    for p in root_namespace_path.rglob(DSDL_FILE_GLOB):
+        source_file_paths.add(p)
+    for p in root_namespace_path.rglob(DSDL_FILE_GLOB_LEGACY):
+        source_file_paths.add(p)
+        _logger.warning(
+            "File uses deprecated extension %r, please rename to use %r: %s", DSDL_FILE_GLOB_LEGACY, DSDL_FILE_GLOB, p
+        )
 
     output = []  # type: List[_dsdl_definition.DSDLDefinition]
     for fp in sorted(source_file_paths):
@@ -470,166 +466,168 @@ def _unittest_dsdl_definition_constructor() -> None:
     import tempfile
     from ._dsdl_definition import FileNameFormatError
 
-    directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
-    root_ns_dir = Path(directory.name, "foo").resolve()
-    (root_ns_dir / "nested").mkdir(parents=True)
+    with tempfile.TemporaryDirectory() as directory:
+        di = Path(directory).resolve()
+        root = di / "foo"
+        (root / "nested").mkdir(parents=True)
 
-    def touchy(relative_path: str) -> None:
-        p = os.path.join(root_ns_dir, relative_path.replace("/", os.path.sep))
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w") as f:
-            f.write("# TEST TEXT")
+        (root / "123.Qwerty.123.234.dsdl").write_text("# TEST A")
+        (root / "nested/2.Asd.21.32.dsdl").write_text("# TEST B")
+        (root / "nested/Foo.32.43.dsdl").write_text("# TEST C")
 
-    def discard(relative_path: str) -> None:
-        os.unlink(os.path.join(root_ns_dir, relative_path))
+        dsdl_defs = _construct_dsdl_definitions_from_namespace(root)
+        print(dsdl_defs)
+        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, _dsdl_definition.DSDLDefinition]
+        assert len(lut) == 3
 
-    touchy("123.Qwerty.123.234.dsdl")
-    touchy("nested/2.Asd.21.32.dsdl")
-    touchy("nested/Foo.32.43.dsdl")
+        assert str(lut["foo.Qwerty"]) == repr(lut["foo.Qwerty"])
+        assert (
+            str(lut["foo.Qwerty"])
+            == "DSDLDefinition(full_name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, "
+            "file_path=%s)" % lut["foo.Qwerty"].file_path
+        )
 
-    dsdl_defs = _construct_dsdl_definitions_from_namespace(root_ns_dir)
-    print(dsdl_defs)
-    lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, _dsdl_definition.DSDLDefinition]
-    assert len(lut) == 3
+        assert (
+            str(lut["foo.nested.Foo"])
+            == "DSDLDefinition(full_name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, "
+            "file_path=%s)" % lut["foo.nested.Foo"].file_path
+        )
 
-    assert str(lut["foo.Qwerty"]) == repr(lut["foo.Qwerty"])
-    assert (
-        str(lut["foo.Qwerty"])
-        == "DSDLDefinition(full_name='foo.Qwerty', version=Version(major=123, minor=234), fixed_port_id=123, "
-        "file_path=%s)" % lut["foo.Qwerty"].file_path
-    )
+        t = lut["foo.Qwerty"]
+        assert t.file_path == root / "123.Qwerty.123.234.dsdl"
+        assert t.has_fixed_port_id
+        assert t.fixed_port_id == 123
+        assert t.text == "# TEST A"
+        assert t.version.major == 123
+        assert t.version.minor == 234
+        assert t.name_components == ["foo", "Qwerty"]
+        assert t.short_name == "Qwerty"
+        assert t.root_namespace == "foo"
+        assert t.full_namespace == "foo"
 
-    assert (
-        str(lut["foo.nested.Foo"])
-        == "DSDLDefinition(full_name='foo.nested.Foo', version=Version(major=32, minor=43), fixed_port_id=None, "
-        "file_path=%s)" % lut["foo.nested.Foo"].file_path
-    )
+        t = lut["foo.nested.Asd"]
+        assert t.file_path == root / "nested" / "2.Asd.21.32.dsdl"
+        assert t.has_fixed_port_id
+        assert t.fixed_port_id == 2
+        assert t.text == "# TEST B"
+        assert t.version.major == 21
+        assert t.version.minor == 32
+        assert t.name_components == ["foo", "nested", "Asd"]
+        assert t.short_name == "Asd"
+        assert t.root_namespace == "foo"
+        assert t.full_namespace == "foo.nested"
 
-    t = lut["foo.Qwerty"]
-    assert t.file_path == root_ns_dir / "123.Qwerty.123.234.dsdl"
-    assert t.has_fixed_port_id
-    assert t.fixed_port_id == 123
-    assert t.text == "# TEST TEXT"
-    assert t.version.major == 123
-    assert t.version.minor == 234
-    assert t.name_components == ["foo", "Qwerty"]
-    assert t.short_name == "Qwerty"
-    assert t.root_namespace == "foo"
-    assert t.full_namespace == "foo"
+        t = lut["foo.nested.Foo"]
+        assert t.file_path == root / "nested" / "Foo.32.43.dsdl"
+        assert not t.has_fixed_port_id
+        assert t.fixed_port_id is None
+        assert t.text == "# TEST C"
+        assert t.version.major == 32
+        assert t.version.minor == 43
+        assert t.name_components == ["foo", "nested", "Foo"]
+        assert t.short_name == "Foo"
+        assert t.root_namespace == "foo"
+        assert t.full_namespace == "foo.nested"
 
-    t = lut["foo.nested.Asd"]
-    assert t.file_path == root_ns_dir / "nested" / "2.Asd.21.32.dsdl"
-    assert t.has_fixed_port_id
-    assert t.fixed_port_id == 2
-    assert t.text == "# TEST TEXT"
-    assert t.version.major == 21
-    assert t.version.minor == 32
-    assert t.name_components == ["foo", "nested", "Asd"]
-    assert t.short_name == "Asd"
-    assert t.root_namespace == "foo"
-    assert t.full_namespace == "foo.nested"
+        (root / "nested/Malformed.MAJOR.MINOR.dsdl").touch()
+        try:
+            _construct_dsdl_definitions_from_namespace(root)
+        except FileNameFormatError as ex:
+            print(ex)
+            (root / "nested/Malformed.MAJOR.MINOR.dsdl").unlink()
+        else:  # pragma: no cover
+            assert False
 
-    t = lut["foo.nested.Foo"]
-    assert t.file_path == root_ns_dir / "nested" / "Foo.32.43.dsdl"
-    assert not t.has_fixed_port_id
-    assert t.fixed_port_id is None
-    assert t.text == "# TEST TEXT"
-    assert t.version.major == 32
-    assert t.version.minor == 43
-    assert t.name_components == ["foo", "nested", "Foo"]
-    assert t.short_name == "Foo"
-    assert t.root_namespace == "foo"
-    assert t.full_namespace == "foo.nested"
+        (root / "nested/NOT_A_NUMBER.Malformed.1.0.dsdl").touch()
+        try:
+            _construct_dsdl_definitions_from_namespace(root)
+        except FileNameFormatError as ex:
+            print(ex)
+            (root / "nested/NOT_A_NUMBER.Malformed.1.0.dsdl").unlink()
+        else:  # pragma: no cover
+            assert False
 
-    touchy("nested/Malformed.MAJOR.MINOR.dsdl")
-    try:
-        _construct_dsdl_definitions_from_namespace(root_ns_dir)
-    except FileNameFormatError as ex:
-        print(ex)
-        discard("nested/Malformed.MAJOR.MINOR.dsdl")
-    else:  # pragma: no cover
-        assert False
+        (root / "nested/Malformed.dsdl").touch()
+        try:
+            _construct_dsdl_definitions_from_namespace(root)
+        except FileNameFormatError as ex:
+            print(ex)
+            (root / "nested/Malformed.dsdl").unlink()
+        else:  # pragma: no cover
+            assert False
 
-    touchy("nested/NOT_A_NUMBER.Malformed.1.0.dsdl")
-    try:
-        _construct_dsdl_definitions_from_namespace(root_ns_dir)
-    except FileNameFormatError as ex:
-        print(ex)
-        discard("nested/NOT_A_NUMBER.Malformed.1.0.dsdl")
-    else:  # pragma: no cover
-        assert False
+        _construct_dsdl_definitions_from_namespace(root)  # making sure all errors are cleared
 
-    touchy("nested/Malformed.dsdl")
-    try:
-        _construct_dsdl_definitions_from_namespace(root_ns_dir)
-    except FileNameFormatError as ex:
-        print(ex)
-        discard("nested/Malformed.dsdl")
-    else:  # pragma: no cover
-        assert False
+        (root / "nested/super.bad").mkdir()
+        (root / "nested/super.bad/Unreachable.1.0.dsdl").touch()
+        try:
+            _construct_dsdl_definitions_from_namespace(root)
+        except FileNameFormatError as ex:
+            print(ex)
+        else:  # pragma: no cover
+            assert False
 
-    _construct_dsdl_definitions_from_namespace(root_ns_dir)  # making sure all errors are cleared
+        try:
+            _construct_dsdl_definitions_from_namespace(root / "nested/super.bad")
+        except FileNameFormatError as ex:
+            print(ex)
+        else:  # pragma: no cover
+            assert False
 
-    touchy("nested/super.bad/Unreachable.1.0.dsdl")
-    try:
-        _construct_dsdl_definitions_from_namespace(root_ns_dir)
-    except FileNameFormatError as ex:
-        print(ex)
-    else:  # pragma: no cover
-        assert False
-
-    try:
-        _construct_dsdl_definitions_from_namespace(root_ns_dir / "nested/super.bad")
-    except FileNameFormatError as ex:
-        print(ex)
-    else:  # pragma: no cover
-        assert False
-
-    discard("nested/super.bad/Unreachable.1.0.dsdl")
+        (root / "nested/super.bad/Unreachable.1.0.dsdl").unlink()
 
 
 def _unittest_common_usage_errors() -> None:
     import tempfile
 
-    directory = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
-    root_ns_dir = Path(os.path.join(directory.name, "foo"))
-    os.mkdir(root_ns_dir)
+    with tempfile.TemporaryDirectory() as directory:
+        di = Path(directory)
+        root_ns_dir = di / "foo"
+        root_ns_dir.mkdir()
 
-    reports = []  # type: List[str]
+        reports = []  # type: List[str]
 
-    _ensure_no_common_usage_errors(root_ns_dir, [], reports.append)
-    assert not reports
-    _ensure_no_common_usage_errors(root_ns_dir, [Path("/baz")], reports.append)
-    assert not reports
+        _ensure_no_common_usage_errors(root_ns_dir, [], reports.append)
+        assert not reports
+        _ensure_no_common_usage_errors(root_ns_dir, [di / "baz"], reports.append)
+        assert not reports
 
-    dir_dsdl = root_ns_dir / "dsdl"
-    os.mkdir(dir_dsdl)
-    _ensure_no_common_usage_errors(dir_dsdl, [Path("/baz")], reports.append)
-    assert not reports  # Because empty.
+        dir_dsdl = root_ns_dir / "dsdl"
+        dir_dsdl.mkdir()
+        _ensure_no_common_usage_errors(dir_dsdl, [di / "baz"], reports.append)
+        assert not reports  # Because empty.
 
-    dir_dsdl_vscode = os.path.join(dir_dsdl, ".vscode")
-    os.mkdir(dir_dsdl_vscode)
-    _ensure_no_common_usage_errors(dir_dsdl, [Path("/baz")], reports.append)
-    assert not reports  # Because the name is not valid.
+        dir_dsdl_vscode = dir_dsdl / ".vscode"
+        dir_dsdl_vscode.mkdir()
+        _ensure_no_common_usage_errors(dir_dsdl, [di / "baz"], reports.append)
+        assert not reports  # Because the name is not valid.
 
-    dir_dsdl_uavcan = os.path.join(dir_dsdl, "uavcan")
-    os.mkdir(dir_dsdl_uavcan)
-    _ensure_no_common_usage_errors(dir_dsdl, [Path("/baz")], reports.append)
-    (rep,) = reports
-    reports.clear()
-    assert os.path.normcase(dir_dsdl_uavcan) in rep
+        dir_dsdl_uavcan = dir_dsdl / "uavcan"
+        dir_dsdl_uavcan.mkdir()
+        _ensure_no_common_usage_errors(dir_dsdl, [di / "baz"], reports.append)
+        (rep,) = reports
+        reports.clear()
+        assert str(dir_dsdl_uavcan).lower() in rep.lower()
 
 
 def _unittest_nested_roots() -> None:
     from pytest import raises
+    import tempfile
 
-    _ensure_no_nested_root_namespaces([])
-    _ensure_no_nested_root_namespaces([Path("a")])
-    _ensure_no_nested_root_namespaces([Path("a/b"), Path("a/c")])
-    with raises(NestedRootNamespaceError):
-        _ensure_no_nested_root_namespaces([Path("a/b"), Path("a")])
-    _ensure_no_nested_root_namespaces([Path("aa/b"), Path("a")])
-    _ensure_no_nested_root_namespaces([Path("a/b"), Path("aa")])
+    with tempfile.TemporaryDirectory() as directory:
+        di = Path(directory)
+        (di / "a").mkdir()
+        (di / "aa").mkdir()
+        (di / "a/b").mkdir()
+        (di / "a/c").mkdir()
+        (di / "aa/b").mkdir()
+        _ensure_no_nested_root_namespaces([])
+        _ensure_no_nested_root_namespaces([di / "a"])
+        _ensure_no_nested_root_namespaces([di / "a/b", di / "a/c"])
+        with raises(NestedRootNamespaceError):
+            _ensure_no_nested_root_namespaces([di / "a/b", di / "a"])
+        _ensure_no_nested_root_namespaces([di / "aa/b", di / "a"])
+        _ensure_no_nested_root_namespaces([di / "a/b", di / "aa"])
 
 
 def _unittest_issue_71() -> None:  # https://github.com/OpenCyphal/pydsdl/issues/71

@@ -2,12 +2,12 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
-import os
 import typing
 import logging
 import itertools
 import functools
 import fractions
+from pathlib import Path
 from typing import List, Tuple
 import parsimonious
 from parsimonious.nodes import Node as _Node
@@ -89,8 +89,7 @@ class StatementStreamProcessor:
 
 @functools.lru_cache(None)
 def _get_grammar() -> parsimonious.Grammar:
-    with open(os.path.join(os.path.dirname(__file__), "grammar.parsimonious")) as _grammar_file:
-        return parsimonious.Grammar(_grammar_file.read())  # type: ignore
+    return parsimonious.Grammar((Path(__file__).parent / "grammar.parsimonious").read_text())  # type: ignore
 
 
 _logger = logging.getLogger(__name__)

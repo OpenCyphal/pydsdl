@@ -4,7 +4,6 @@
 
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with
 
-import os
 import typing
 import tempfile
 from typing import Union, Tuple, Optional
@@ -20,7 +19,7 @@ from . import _namespace
 
 # Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
 #   pydsdl/_test.py:18: error: Missing type parameters for generic type
-#   pydsdl/_test.py: note: In function "_in_n_out":
+#   pydsdl/_test.py: note: In function "_with_temp_dir":
 #   pydsdl/_test.py:18: error: Missing type parameters for generic type
 _DIRECTORY = None  # type : typing.Optional[tempfile.TemporaryDirectory]
 
@@ -36,20 +35,18 @@ def _parse_definition(
 
 
 def _define(rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefinition:
-    rel_path = str(rel_path).replace("/", os.sep)  # Windows compatibility
+    rel_path = Path(rel_path)
     assert _DIRECTORY
     path = Path(_DIRECTORY.name, rel_path)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf8") as f:
-        f.write(text)
-
-    root_namespace_path = Path(_DIRECTORY.name, rel_path.strip(os.sep).split(os.sep, maxsplit=1)[0])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf8")
+    root_namespace_path = Path(_DIRECTORY.name, rel_path.parts[0])
     out = _dsdl_definition.DSDLDefinition(path, root_namespace_path)
     print("New definition:", out, "Root NS:", root_namespace_path)
     return out
 
 
-def _in_n_out(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
+def _with_temp_dir(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
     def decorator() -> None:
         global _DIRECTORY
         _DIRECTORY = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
@@ -61,9 +58,8 @@ def _in_n_out(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
     return decorator
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_define() -> None:
-    # I DON'T ALWAYS WRITE UNIT TESTS
     d = _define("uavcan/test/5000.Message.1.2.dsdl", "# empty")
     assert _DIRECTORY is not None
     assert d.full_name == "uavcan.test.Message"
@@ -71,19 +67,18 @@ def _unittest_define() -> None:
     assert d.fixed_port_id == 5000
     assert d.file_path.samefile(Path(_DIRECTORY.name, "uavcan", "test", "5000.Message.1.2.dsdl"))
     assert d.root_namespace_path.samefile(Path(_DIRECTORY.name, "uavcan"))
-    assert open(d.file_path).read() == "# empty"
+    assert d.file_path.read_text() == "# empty"
 
-    # BUT WHEN I DO, I WRITE UNIT TESTS FOR MY UNIT TESTS
     d = _define("uavcan/Service.255.254.dsdl", "# empty 2")
     assert d.full_name == "uavcan.Service"
     assert d.version == (255, 254)
     assert d.fixed_port_id is None
     assert d.file_path.samefile(Path(_DIRECTORY.name, "uavcan", "Service.255.254.dsdl"))
     assert d.root_namespace_path.samefile(Path(_DIRECTORY.name, "uavcan"))
-    assert open(d.file_path).read() == "# empty 2"
+    assert d.file_path.read_text() == "# empty 2"
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_simple() -> None:
     abc = _define(
         "vendor/nested/7000.Abc.1.2.dsdl",
@@ -106,8 +101,8 @@ def _unittest_simple() -> None:
     assert isinstance(p, _serializable.DelimitedType)
     assert isinstance(p.inner_type, _serializable.StructureType)
     assert p.full_name == "vendor.nested.Abc"
-    assert str(p.source_file_path).endswith(os.path.join("vendor", "nested", "7000.Abc.1.2.dsdl"))
-    assert p.source_file_path == abc.file_path
+    assert p.source_file_path.parts[-3:] == ("vendor", "nested", "7000.Abc.1.2.dsdl")
+    assert p.source_file_path.samefile(abc.file_path)
     assert p.fixed_port_id == 7000
     assert p.deprecated
     assert p.version == (1, 2)
@@ -296,7 +291,7 @@ def _unittest_simple() -> None:
     assert str(p.fields[2]) == "saturated bool[<=255] c"
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_comments() -> None:
     abc = _define(
         "vendor/nested/7000.Abc.1.2.dsdl",
@@ -410,7 +405,7 @@ def _unittest_comments() -> None:
 
 
 # noinspection PyProtectedMember,PyProtectedMember
-@_in_n_out
+@_with_temp_dir
 def _unittest_error() -> None:
     from pytest import raises
 
@@ -629,7 +624,7 @@ def _unittest_error() -> None:
             ),
         )
     except _error.FrontendError as ex:
-        assert ex.path and str(ex.path).endswith(os.path.join("vendor", "types", "A.1.0.dsdl"))
+        assert ex.path and ex.path.parts[-3:] == ("vendor", "types", "A.1.0.dsdl")
         assert ex.line and ex.line == 4
     else:  # pragma: no cover
         assert False
@@ -734,7 +729,7 @@ def _unittest_error() -> None:
         )
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_print() -> None:
     printed_items = None  # type: Optional[Tuple[int, str]]
 
@@ -765,7 +760,7 @@ def _unittest_print() -> None:
 
 
 # noinspection PyProtectedMember
-@_in_n_out
+@_with_temp_dir
 def _unittest_assert() -> None:
     from pytest import raises
 
@@ -988,9 +983,8 @@ def _unittest_parse_namespace() -> None:
     # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
         path = Path(directory.name, rel_path)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(text)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
 
     # Empty namespace.
     assert [] == _namespace.read_namespace(directory.name)
@@ -1103,7 +1097,7 @@ def _unittest_parse_namespace() -> None:
         _namespace.read_namespace(Path(directory.name, "zubax"), Path(directory.name, "zubax"))
 
     try:
-        os.unlink(Path(directory.name, "zubax/colliding/iceberg/300.Ice.30.0.dsdl"))
+        Path(directory.name, "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
         _define(
             "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
             dedent(
@@ -1124,10 +1118,10 @@ def _unittest_parse_namespace() -> None:
     except _namespace.FixedPortIDCollisionError:  # pragma: no cover
         pass  # We're running on a platform where paths are not case-sensitive.
 
-    # Test namespece can intersect with type name
-    os.unlink(Path(directory.name, "zubax/COLLIDING/300.Iceberg.30.0.dsdl"))
+    # Test namespace can intersect with type name
+    Path(directory.name, "zubax/COLLIDING/300.Iceberg.30.0.dsdl").unlink()
     try:
-        os.unlink(Path(directory.name, "zubax/colliding/300.Iceberg.30.0.dsdl"))
+        (Path(directory.name, "zubax/colliding/300.Iceberg.30.0.dsdl")).unlink()
     except FileNotFoundError:
         pass  # We're running on a platform where paths are not case-sensitive.
     _define(
@@ -1157,20 +1151,18 @@ def _unittest_parse_namespace() -> None:
 
 def _unittest_parse_namespace_versioning() -> None:
     from pytest import raises
-    import glob
 
     directory = tempfile.TemporaryDirectory()
 
     # noinspection PyShadowingNames
     def _define(rel_path: str, text: str) -> None:
         path = Path(directory.name, rel_path)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(text)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
 
     def _undefine_glob(rel_path_glob: str) -> None:
-        for g in glob.glob(str(Path(directory.name, rel_path_glob))):
-            os.remove(g)
+        for g in Path(directory.name).glob(rel_path_glob):
+            g.unlink()
 
     _define(
         "ns/Spartans.30.0.dsdl",
@@ -1618,25 +1610,35 @@ def _unittest_parse_namespace_versioning() -> None:
 def _unittest_parse_namespace_faults() -> None:
     from pytest import raises
 
-    with raises(_namespace.NestedRootNamespaceError):
-        _namespace.read_namespace(
-            "/foo/bar/baz", ["/bat/wot", "/foo/bar/baz/bad"], allow_root_namespace_name_collision=False
-        )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        di = Path(tmp_dir)
+        (di / "foo/bar/baz").mkdir(parents=True)
+        (di / "bat/wot").mkdir(parents=True)
+        (di / "foo/bar/baz/bad").mkdir(parents=True)
+        (di / "foo/bar/zoo").mkdir(parents=True)
+        (di / "foo/bar/doo/roo/BAZ").mkdir(parents=True)
+        (di / "foo/bar/doo/roo/zoo").mkdir(parents=True)
+        (di / "foo/bar/doo/roo/baz").mkdir(parents=True)
+        with raises(_namespace.NestedRootNamespaceError):
+            _namespace.read_namespace(
+                di / "foo/bar/baz",
+                [di / "bat/wot", di / "foo/bar/baz/bad"],
+            )
+        with raises(_namespace.RootNamespaceNameCollisionError):
+            _namespace.read_namespace(
+                di / "foo/bar/baz",
+                [di / "foo/bar/zoo", di / "foo/bar/doo/roo/BAZ"],  # Notice the letter case
+                allow_root_namespace_name_collision=False,
+            )
+        with raises(_namespace.RootNamespaceNameCollisionError):
+            _namespace.read_namespace(
+                di / "foo/bar/baz",
+                [di / "foo/bar/zoo", di / "foo/bar/doo/roo/zoo", di / "foo/bar/doo/roo/baz"],
+                allow_root_namespace_name_collision=False,
+            )
 
-    with raises(_namespace.RootNamespaceNameCollisionError):
-        _namespace.read_namespace(
-            "/foo/bar/baz", ["/foo/bar/zoo", "/foo/bar/doo/roo/BAZ"], allow_root_namespace_name_collision=False
-        )  # Notice the letter case
 
-    with raises(_namespace.RootNamespaceNameCollisionError):
-        _namespace.read_namespace(
-            "/foo/bar/baz",
-            ["/foo/bar/zoo", "/foo/bar/doo/roo/zoo", "/foo/bar/doo/roo/baz"],
-            allow_root_namespace_name_collision=False,
-        )
-
-
-@_in_n_out
+@_with_temp_dir
 def _unittest_inconsistent_deprecation() -> None:
     from pytest import raises
 
@@ -1685,7 +1687,7 @@ def _unittest_inconsistent_deprecation() -> None:
     )
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_repeated_directives() -> None:
     from pytest import raises
 
@@ -1809,7 +1811,7 @@ def _unittest_repeated_directives() -> None:
         )
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_dsdl_parser_basics() -> None:
     # This is how you can run one test only for development needs:
     #   pytest pydsdl -k _unittest_dsdl_parser_basics --capture=no
@@ -1844,7 +1846,7 @@ def _unittest_dsdl_parser_basics() -> None:
     )
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_dsdl_parser_expressions() -> None:
     from pytest import raises
 
@@ -1942,7 +1944,7 @@ def _unittest_dsdl_parser_expressions() -> None:
     )
 
 
-@_in_n_out
+@_with_temp_dir
 def _unittest_pickle() -> None:
     import pickle
 
