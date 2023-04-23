@@ -4,11 +4,11 @@
 
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with
 
-import typing
 import tempfile
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Sequence, Type, Iterable
 from pathlib import Path
 from textwrap import dedent
+import pytest  # This is only safe to import in test files!
 from . import _expression
 from . import _error
 from . import _parser
@@ -17,15 +17,12 @@ from . import _dsdl_definition
 from . import _serializable
 from . import _namespace
 
-# Type annotation disabled here because MyPy is misbehaving, reporting these nonsensical error messages:
-#   pydsdl/_test.py:18: error: Missing type parameters for generic type
-#   pydsdl/_test.py: note: In function "_with_temp_dir":
-#   pydsdl/_test.py:18: error: Missing type parameters for generic type
-_DIRECTORY = None  # type : typing.Optional[tempfile.TemporaryDirectory]
+# TODO: remove global state and use pytest fixtures instead
+_DIRECTORY = None  # type : Optional[tempfile.TemporaryDirectory]
 
 
 def _parse_definition(
-    definition: _dsdl_definition.DSDLDefinition, lookup_definitions: typing.Sequence[_dsdl_definition.DSDLDefinition]
+    definition: _dsdl_definition.DSDLDefinition, lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition]
 ) -> _serializable.CompositeType:
     return definition.read(
         lookup_definitions,
@@ -46,19 +43,14 @@ def _define(rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefin
     return out
 
 
-def _with_temp_dir(test: typing.Callable[[], None]) -> typing.Callable[[], None]:
-    def decorator() -> None:
-        global _DIRECTORY
-        _DIRECTORY = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
-        try:
-            test()
-        finally:
-            _DIRECTORY = None  # Preserving the contents for future inspection if needed
-
-    return decorator
+@pytest.fixture(autouse=True)  # type: ignore
+def _with_temp_dir() -> Iterable[None]:
+    global _DIRECTORY
+    _DIRECTORY = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
+    yield
+    _DIRECTORY = None  # Preserving the contents for future inspection if needed
 
 
-@_with_temp_dir
 def _unittest_define() -> None:
     d = _define("uavcan/test/5000.Message.1.2.dsdl", "# empty")
     assert _DIRECTORY is not None
@@ -78,7 +70,6 @@ def _unittest_define() -> None:
     assert d.file_path.read_text() == "# empty 2"
 
 
-@_with_temp_dir
 def _unittest_simple() -> None:
     abc = _define(
         "vendor/nested/7000.Abc.1.2.dsdl",
@@ -291,7 +282,6 @@ def _unittest_simple() -> None:
     assert str(p.fields[2]) == "saturated bool[<=255] c"
 
 
-@_with_temp_dir
 def _unittest_comments() -> None:
     abc = _define(
         "vendor/nested/7000.Abc.1.2.dsdl",
@@ -405,7 +395,8 @@ def _unittest_comments() -> None:
 
 
 # noinspection PyProtectedMember,PyProtectedMember
-@_with_temp_dir
+
+
 def _unittest_error() -> None:
     from pytest import raises
 
@@ -729,7 +720,6 @@ def _unittest_error() -> None:
         )
 
 
-@_with_temp_dir
 def _unittest_print() -> None:
     printed_items = None  # type: Optional[Tuple[int, str]]
 
@@ -760,7 +750,8 @@ def _unittest_print() -> None:
 
 
 # noinspection PyProtectedMember
-@_with_temp_dir
+
+
 def _unittest_assert() -> None:
     from pytest import raises
 
@@ -1618,7 +1609,7 @@ def _unittest_parse_namespace_faults() -> None:
         (di / "foo/bar/zoo").mkdir(parents=True)
         (di / "foo/bar/doo/roo/BAZ").mkdir(parents=True)
         (di / "foo/bar/doo/roo/zoo").mkdir(parents=True)
-        (di / "foo/bar/doo/roo/baz").mkdir(parents=True)
+        (di / "foo/bar/doo/roo/baz").mkdir(parents=True, exist_ok=True)
         with raises(_namespace.NestedRootNamespaceError):
             _namespace.read_namespace(
                 di / "foo/bar/baz",
@@ -1638,7 +1629,6 @@ def _unittest_parse_namespace_faults() -> None:
             )
 
 
-@_with_temp_dir
 def _unittest_inconsistent_deprecation() -> None:
     from pytest import raises
 
@@ -1687,7 +1677,6 @@ def _unittest_inconsistent_deprecation() -> None:
     )
 
 
-@_with_temp_dir
 def _unittest_repeated_directives() -> None:
     from pytest import raises
 
@@ -1811,7 +1800,6 @@ def _unittest_repeated_directives() -> None:
         )
 
 
-@_with_temp_dir
 def _unittest_dsdl_parser_basics() -> None:
     # This is how you can run one test only for development needs:
     #   pytest pydsdl -k _unittest_dsdl_parser_basics --capture=no
@@ -1846,11 +1834,10 @@ def _unittest_dsdl_parser_basics() -> None:
     )
 
 
-@_with_temp_dir
 def _unittest_dsdl_parser_expressions() -> None:
     from pytest import raises
 
-    def throws(definition: str, exc: typing.Type[Exception] = _expression.InvalidOperandError) -> None:
+    def throws(definition: str, exc: Type[Exception] = _expression.InvalidOperandError) -> None:
         with raises(exc):
             _parse_definition(_define("ns/Throws.0.1.dsdl", dedent(definition + "\n@sealed")), [])
 
@@ -1944,7 +1931,6 @@ def _unittest_dsdl_parser_expressions() -> None:
     )
 
 
-@_with_temp_dir
 def _unittest_pickle() -> None:
     import pickle
 
@@ -1978,7 +1964,7 @@ def _unittest_pickle() -> None:
     assert repr(pp) == repr(p)
 
 
-def _collect_descendants(cls: typing.Type[object]) -> typing.Iterable[typing.Type[object]]:
+def _collect_descendants(cls: Type[object]) -> Iterable[Type[object]]:
     # noinspection PyArgumentList
     for t in cls.__subclasses__():
         yield t
