@@ -259,18 +259,12 @@ def _ensure_no_name_collisions(
         for lu in lookup_definitions:
             lu_full_namespace_period = lu.full_namespace.lower() + "."
             lu_full_name_period = lu.full_name.lower() + "."
-            """
-            This is to allow the following messages to coexist happily:
-
-            zubax/noncolliding/iceberg/Ice.0.1.dsdl
-            zubax/noncolliding/Iceb.0.1.dsdl
-
-            The following is still not allowed:
-
-            zubax/colliding/iceberg/Ice.0.1.dsdl
-            zubax/colliding/Iceberg.0.1.dsdl
-
-            """
+            # This is to allow the following messages to coexist happily:
+            #   zubax/non_colliding/iceberg/Ice.0.1.dsdl
+            #   zubax/non_colliding/IceB.0.1.dsdl
+            # The following is still not allowed:
+            #   zubax/colliding/iceberg/Ice.0.1.dsdl
+            #   zubax/colliding/Iceberg.0.1.dsdl
             if tg.full_name != lu.full_name and tg.full_name.lower() == lu.full_name.lower():
                 raise DataTypeNameCollisionError(
                     "Full name of this definition differs from %s only by letter case, "

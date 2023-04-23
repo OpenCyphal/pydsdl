@@ -132,7 +132,7 @@ class ConcatenationOperator(Operator):
         mods = [ch.modulo(divisor) for ch in self._children]
         prod = itertools.product(*mods)
         sums = set(map(sum, prod))
-        return {typing.cast(int, x) % divisor for x in sums}
+        return {x % divisor for x in sums}
 
     @property
     def min(self) -> int:
