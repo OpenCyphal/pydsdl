@@ -577,6 +577,31 @@ def _unittest_dsdl_definition_constructor() -> None:
         (root / "nested/super.bad/Unreachable.1.0.dsdl").unlink()
 
 
+def _unittest_dsdl_definition_constructor_legacy() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        di = Path(directory).resolve()
+        root = di / "foo"
+        root.mkdir()
+        (root / "123.Qwerty.123.234.uavcan").write_text("# TEST A")
+        dsdl_defs = _construct_dsdl_definitions_from_namespace(root)
+        print(dsdl_defs)
+        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, _dsdl_definition.DSDLDefinition]
+        assert len(lut) == 1
+        t = lut["foo.Qwerty"]
+        assert t.file_path == root / "123.Qwerty.123.234.uavcan"
+        assert t.has_fixed_port_id
+        assert t.fixed_port_id == 123
+        assert t.text == "# TEST A"
+        assert t.version.major == 123
+        assert t.version.minor == 234
+        assert t.name_components == ["foo", "Qwerty"]
+        assert t.short_name == "Qwerty"
+        assert t.root_namespace == "foo"
+        assert t.full_namespace == "foo"
+
+
 def _unittest_common_usage_errors() -> None:
     import tempfile
 

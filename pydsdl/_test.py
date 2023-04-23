@@ -1131,7 +1131,7 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     (wrkspc.directory / "zubax/COLLIDING/300.Iceberg.30.0.dsdl").unlink()
     try:
         ((wrkspc.directory / "zubax/colliding/300.Iceberg.30.0.dsdl")).unlink()
-    except FileNotFoundError:
+    except FileNotFoundError:  # pragma: no cover
         pass  # We're running on a platform where paths are not case-sensitive.
     wrkspc.new(
         "zubax/noncolliding/iceberg/Ice.1.0.dsdl",
