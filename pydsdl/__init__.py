@@ -4,10 +4,10 @@
 
 # pylint: disable=wrong-import-position
 
-import os as _os
 import sys as _sys
+from pathlib import Path as _Path
 
-__version__ = "1.18.0"
+__version__ = "1.19.0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"
@@ -22,7 +22,7 @@ __email__ = "maintainers@opencyphal.org"
 # to import stuff dynamically after the initialization is finished (e.g., function-local imports won't be
 # able to reach the third-party stuff), but we don't care.
 _original_sys_path = _sys.path
-_sys.path = [_os.path.join(_os.path.dirname(__file__), "third_party")] + _sys.path
+_sys.path = [str(_Path(__file__).parent / "third_party")] + _sys.path
 
 # Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
 from ._namespace import read_namespace as read_namespace

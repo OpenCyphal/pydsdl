@@ -6,10 +6,11 @@
 import os
 import shutil
 from pathlib import Path
+from functools import partial
 import nox
 
 
-PYTHONS = ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11"]
+PYTHONS = ["3.8", "3.9", "3.10", "3.11"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -48,9 +49,9 @@ def test(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install("-e", ".")
     session.install(
-        "pytest          ~= 7.0",
-        "pytest-randomly ~= 3.10",
-        "coverage        ~= 6.2",
+        "pytest          ~= 7.3",
+        "pytest-randomly ~= 3.12",
+        "coverage        ~= 7.2",
     )
     session.run("coverage", "run", "-m", "pytest")
     session.run("coverage", "report", "--fail-under=95")
@@ -60,12 +61,32 @@ def test(session):
         session.log(f"OPEN IN WEB BROWSER: file://{report_file}")
 
 
+@nox.session(python=["3.6", "3.7"])
+def test_eol(session):
+    """This is a minimal test session for those old Pythons that have EOLed."""
+    session.install("-e", ".")
+    session.install("pytest")
+    session.run("pytest")
+
+
+@nox.session(python=PYTHONS)
+def pristine(session):
+    """
+    Install the library into a pristine environment and ensure that it is importable.
+    This is needed to catch errors caused by accidental reliance on test dependencies in the main codebase.
+    """
+    exe = partial(session.run, "python", "-c", silent=True)
+    session.cd(session.create_tmp())  # Change the directory to reveal spurious dependencies from the project root.
+    session.install(f"{ROOT_DIR}")  # Testing bare installation first.
+    exe("import pydsdl")
+
+
 @nox.session(python=PYTHONS, reuse_venv=True)
 def lint(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install(
-        "mypy   == 0.942",
-        "pylint == 2.13.*",
+        "mypy   ~= 1.2.0",
+        "pylint ~= 2.17.2",
     )
     session.run(
         "mypy",
@@ -84,7 +105,7 @@ def lint(session):
         },
     )
     if is_latest_python(session):
-        session.install("black == 22.*")
+        session.install("black ~= 23.3")
         session.run("black", "--check", ".")
 
 

@@ -2,7 +2,6 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
-import os
 import time
 from typing import Iterable, Callable, Optional, List
 import logging
@@ -41,21 +40,14 @@ class DSDLDefinition:
             self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
-        if CompositeType.NAME_COMPONENT_SEPARATOR in os.path.split(self._root_namespace_path)[-1]:
+        if CompositeType.NAME_COMPONENT_SEPARATOR in self._root_namespace_path.name:
             raise FileNameFormatError("Invalid namespace name", path=self._root_namespace_path)
 
         # Determining the relative path within the root namespace directory
-        relative_path = str(
-            os.path.join(
-                os.path.split(self._root_namespace_path)[-1],
-                self._file_path.relative_to(self._root_namespace_path),
-            )
-        )
-
-        relative_directory, basename = [str(x) for x in os.path.split(relative_path)]  # type: str, str
+        relative_path = self._root_namespace_path.name / self._file_path.relative_to(self._root_namespace_path)
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.dsdl
-        basename_components = basename.split(".")[:-1]
+        basename_components = relative_path.name.split(".")[:-1]
         str_fixed_port_id: Optional[str] = None
         if len(basename_components) == 4:
             str_fixed_port_id, short_name, str_major_version, str_minor_version = basename_components
@@ -86,11 +78,10 @@ class DSDLDefinition:
             raise FileNameFormatError("Could not parse the version numbers", path=self._file_path) from None
 
         # Finally, constructing the name
-        namespace_components = list(relative_directory.strip(os.sep).split(os.sep))
+        namespace_components = list(relative_path.parent.parts)
         for nc in namespace_components:
             if CompositeType.NAME_COMPONENT_SEPARATOR in nc:
                 raise FileNameFormatError(f"Invalid name for namespace component: {nc!r}", path=self._file_path)
-
         self._name: str = CompositeType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])
 
         self._cached_type: Optional[CompositeType] = None
