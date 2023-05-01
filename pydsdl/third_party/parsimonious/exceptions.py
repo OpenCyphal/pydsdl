@@ -1,10 +1,14 @@
-from six import text_type, python_2_unicode_compatible
+from textwrap import dedent
 
 from parsimonious.utils import StrAndRepr
 
 
-@python_2_unicode_compatible
-class ParseError(StrAndRepr, Exception):
+class ParsimoniousError(Exception):
+    """A base exception class to allow library users to catch any Parsimonious error."""
+    pass
+
+
+class ParseError(StrAndRepr, ParsimoniousError):
     """A call to ``Expression.parse()`` or ``match()`` didn't match."""
 
     def __init__(self, text, pos=-1, expr=None):
@@ -16,9 +20,9 @@ class ParseError(StrAndRepr, Exception):
         self.expr = expr
 
     def __str__(self):
-        rule_name = ((u"'%s'" % self.expr.name) if self.expr.name else
-                     text_type(self.expr))
-        return u"Rule %s didn't match at '%s' (line %s, column %s)." % (
+        rule_name = (("'%s'" % self.expr.name) if self.expr.name else
+                     str(self.expr))
+        return "Rule %s didn't match at '%s' (line %s, column %s)." % (
                 rule_name,
                 self.text[self.pos:self.pos + 20],
                 self.line(),
@@ -32,31 +36,47 @@ class ParseError(StrAndRepr, Exception):
         match."""
         # This is a method rather than a property in case we ever wanted to
         # pass in which line endings we want to use.
-        return self.text.count('\n', 0, self.pos) + 1
+        if isinstance(self.text, list):  # TokenGrammar
+            return None
+        else:
+            return self.text.count('\n', 0, self.pos) + 1
 
     def column(self):
         """Return the 1-based column where the expression ceased to match."""
         # We choose 1-based because that's what Python does with SyntaxErrors.
         try:
             return self.pos - self.text.rindex('\n', 0, self.pos)
-        except ValueError:
+        except (ValueError, AttributeError):
             return self.pos + 1
 
 
-@python_2_unicode_compatible
+class LeftRecursionError(ParseError):
+    def __str__(self):
+        rule_name = self.expr.name if self.expr.name else str(self.expr)
+        window = self.text[self.pos:self.pos + 20]
+        return dedent(f"""
+            Left recursion in rule {rule_name!r} at {window!r} (line {self.line()}, column {self.column()}).
+
+            Parsimonious is a packrat parser, so it can't handle left recursion.
+            See https://en.wikipedia.org/wiki/Parsing_expression_grammar#Indirect_left_recursion
+            for how to rewrite your grammar into a rule that does not use left-recursion.
+            """
+        ).strip()
+
+
 class IncompleteParseError(ParseError):
     """A call to ``parse()`` matched a whole Expression but did not consume the
     entire text."""
 
     def __str__(self):
-        return u"Rule '%s' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '%s' (line %s, column %s)." % (
+        return "Rule '%s' matched in its entirety, but it didn't consume all the text. The non-matching portion of the text begins with '%s' (line %s, column %s)." % (
                 self.expr.name,
                 self.text[self.pos:self.pos + 20],
                 self.line(),
                 self.column())
 
 
-class VisitationError(Exception):
+class VisitationError(ParsimoniousError):
     """Something went wrong while traversing a parse tree.
 
     This exception exists to augment an underlying exception with information
@@ -76,7 +96,7 @@ class VisitationError(Exception):
 
         """
         self.original_class = exc_class
-        super(VisitationError, self).__init__(
+        super().__init__(
             '%s: %s\n\n'
             'Parse tree:\n'
             '%s' %
@@ -85,7 +105,7 @@ class VisitationError(Exception):
              node.prettily(error=node)))
 
 
-class BadGrammar(StrAndRepr, Exception):
+class BadGrammar(StrAndRepr, ParsimoniousError):
     """Something was wrong with the definition of a grammar.
 
     Note that a ParseError might be raised instead if the error is in the
@@ -94,7 +114,6 @@ class BadGrammar(StrAndRepr, Exception):
     """
 
 
-@python_2_unicode_compatible
 class UndefinedLabel(BadGrammar):
     """A rule referenced in a grammar was never defined.
 
@@ -106,4 +125,4 @@ class UndefinedLabel(BadGrammar):
         self.label = label
 
     def __str__(self):
-        return u'The label "%s" was never defined.' % self.label
+        return 'The label "%s" was never defined.' % self.label
