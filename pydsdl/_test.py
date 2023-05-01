@@ -1262,7 +1262,7 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
         ),
     )
 
-    with raises(_namespace.MultipleDefinitionsUnderSameVersionError):
+    with raises(_namespace.DataTypeCollisionError):
         _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
     wrkspc.drop("ns/Spartans.30.2.dsdl")

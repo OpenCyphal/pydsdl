@@ -32,16 +32,6 @@ class DataTypeNameCollisionError(DataTypeCollisionError):
     """
 
 
-class MultipleDefinitionsUnderSameVersionError(DataTypeCollisionError):
-    """
-    For example::
-
-        Type.1.0.dsdl
-        2800.Type.1.0.dsdl
-        2801.Type.1.0.dsdl
-    """
-
-
 class NestedRootNamespaceError(_error.InvalidDefinitionError):
     """
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
@@ -332,14 +322,9 @@ def _ensure_minor_version_compatibility_pairwise(
     a: _serializable.CompositeType, b: _serializable.CompositeType
 ) -> None:
     assert a is not b
-    assert a.version.major == b.version.major
     assert a.full_name == b.full_name
-
-    # Version collision
-    if a.version.minor == b.version.minor:
-        raise MultipleDefinitionsUnderSameVersionError(
-            "This definition shares its version number with %s" % b.source_file_path, path=a.source_file_path
-        )
+    assert a.version.major == b.version.major
+    assert a.version.minor != b.version.minor  # This is the whole point of this function.
 
     # Must be of the same kind: both messages or both services
     if isinstance(a, _serializable.ServiceType) != isinstance(b, _serializable.ServiceType):
