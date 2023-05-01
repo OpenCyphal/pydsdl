@@ -20,9 +20,25 @@ class RootNamespaceNameCollisionError(_error.InvalidDefinitionError):
     """
 
 
-class DataTypeNameCollisionError(_error.InvalidDefinitionError):
+class DataTypeCollisionError(_error.InvalidDefinitionError):
+    """
+    Raised when there are conflicting data type definitions.
+    """
+
+
+class DataTypeNameCollisionError(DataTypeCollisionError):
     """
     Raised when there are conflicting data type names.
+    """
+
+
+class MultipleDefinitionsUnderSameVersionError(DataTypeCollisionError):
+    """
+    For example::
+
+        Type.1.0.dsdl
+        2800.Type.1.0.dsdl
+        2801.Type.1.0.dsdl
     """
 
 
@@ -36,16 +52,6 @@ class FixedPortIDCollisionError(_error.InvalidDefinitionError):
     """
     Raised when there is more than one data type, or different major versions of the same data type
     using the same fixed port ID.
-    """
-
-
-class MultipleDefinitionsUnderSameVersionError(_error.InvalidDefinitionError):
-    """
-    For example::
-
-        Type.1.0.dsdl
-        2800.Type.1.0.dsdl
-        2801.Type.1.0.dsdl
     """
 
 
@@ -166,7 +172,7 @@ def read_namespace(
         lookup_dsdl_definitions += _construct_dsdl_definitions_from_namespace(ld)
 
     # Check for collisions against the lookup definitions also.
-    _ensure_no_name_collisions(target_dsdl_definitions, lookup_dsdl_definitions)
+    _ensure_no_collisions(target_dsdl_definitions, lookup_dsdl_definitions)
 
     _logger.debug("Lookup DSDL definitions are listed below:")
     for x in lookup_dsdl_definitions:
@@ -245,7 +251,7 @@ def _read_namespace_definitions(
     return types
 
 
-def _ensure_no_name_collisions(
+def _ensure_no_collisions(
     target_definitions: List[_dsdl_definition.DSDLDefinition],
     lookup_definitions: List[_dsdl_definition.DSDLDefinition],
 ) -> None:
@@ -275,6 +281,12 @@ def _ensure_no_name_collisions(
                 raise DataTypeNameCollisionError(
                     "This type conflicts with the namespace of %s" % lu.file_path, path=tg.file_path
                 )
+            if (
+                tg_full_name_period == lu_full_name_period
+                and tg.version == lu.version
+                and not tg.file_path.samefile(lu.file_path)
+            ):  # https://github.com/OpenCyphal/pydsdl/issues/94
+                raise DataTypeCollisionError("This type is redefined in %s" % lu.file_path, path=tg.file_path)
 
 
 def _ensure_no_fixed_port_id_collisions(types: List[_serializable.CompositeType]) -> None:

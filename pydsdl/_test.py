@@ -1604,6 +1604,27 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     wrkspc.drop("ns/Consistency*")
 
 
+def _unittest_issue94(wrkspc: Workspace) -> None:
+    from pytest import raises
+
+    wrkspc.new("outer_a/ns/Foo.1.0.dsdl", "@sealed")
+    wrkspc.new("outer_b/ns/Foo.1.0.dsdl", "@sealed")  # Conflict!
+    wrkspc.new("outer_a/ns/Bar.1.0.dsdl", "Foo.1.0 fo\n@sealed")  # Which Foo.1.0?
+
+    with raises(_namespace.DataTypeCollisionError):
+        _namespace.read_namespace(
+            wrkspc.directory / "outer_a" / "ns",
+            [wrkspc.directory / "outer_b" / "ns"],
+        )
+
+    wrkspc.drop("outer_b/ns/Foo.1.0.dsdl")  # Clear the conflict.
+    defs = _namespace.read_namespace(
+        wrkspc.directory / "outer_a" / "ns",
+        [wrkspc.directory / "outer_b" / "ns"],
+    )
+    assert len(defs) == 2
+
+
 def _unittest_parse_namespace_faults() -> None:
     from pytest import raises
 
