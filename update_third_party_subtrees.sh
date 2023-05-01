@@ -12,9 +12,6 @@ rm -rf $THIRD_PARTY_DIR/* &> /dev/null
 # Updating Parsimonious.
 parsimonious_tag="$1"
 [ -n "$parsimonious_tag" ] || exit 1
-git fetch https://github.com/erikrose/parsimonious $parsimonious_tag || exit 2
+git fetch https://github.com/erikrose/parsimonious "$parsimonious_tag" || exit 2
 git read-tree --prefix=$THIRD_PARTY_DIR/parsimonious/ -vu FETCH_HEAD:parsimonious || exit 3
 rm -rf $THIRD_PARTY_DIR/parsimonious/tests/  # We don't want to keep its tests around, they're no use for us anyway.
-
-# Updating six.py, needed for Parsimonious only.
-wget https://raw.githubusercontent.com/benjaminp/six/1.15.0/six.py -P $THIRD_PARTY_DIR || exit 4
