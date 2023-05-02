@@ -7,7 +7,7 @@ import math
 import typing
 import warnings
 from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType, TypeParameterError, AggregationError
+from ._serializable import SerializableType, TypeParameterError, AggregationFailure
 from ._primitive import UnsignedIntegerType, PrimitiveType
 
 
@@ -22,17 +22,16 @@ class ArrayType(SerializableType):
         self._capacity = int(capacity)
         if self._capacity < 1:
             raise InvalidNumberOfElementsError("Array capacity cannot be less than 1")
-        if not self.element_type.is_valid_aggregate(self):
-            raise AggregationError("Specified element type of %r is not valid" % str(self))
 
     @property
     def deprecated(self) -> bool:
         return self.element_type.deprecated
 
-    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
-        # At the moment, arrays of arrays are not allowed, but this is ensured by the grammar definition.
-        # This restriction will be lifted eventually. All that needs to be done is to update the grammar only.
-        return True
+    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        af = self.element_type.check_aggregation(self)
+        if af is not None:
+            return AggregationFailure(self, aggregate, "Element type of %r is not valid: %s" % (str(self), af.message))
+        return super().check_aggregation(aggregate)
 
     @property
     def element_type(self) -> SerializableType:

@@ -10,7 +10,8 @@ from pathlib import Path
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType, TypeParameterError, AggregationError
+from .._error import InvalidDefinitionError
+from ._serializable import SerializableType, TypeParameterError, AggregationFailure
 from ._attribute import Attribute, Field, PaddingField, Constant
 from ._name import check_name, InvalidNameError
 from ._primitive import PrimitiveType, UnsignedIntegerType
@@ -39,7 +40,7 @@ class MalformedUnionError(TypeParameterError):
     pass
 
 
-class DeprecatedDependencyError(AggregationError):
+class AggregationError(InvalidDefinitionError):
     pass
 
 
@@ -123,22 +124,13 @@ class CompositeType(SerializableType):
                 if not (0 <= port_id <= _port_id_ranges.MAX_SUBJECT_ID):
                     raise InvalidFixedPortIDError("Fixed subject ID %r is not valid" % port_id)
 
-        # Consistent deprecation check.
-        # A non-deprecated type cannot be dependent on deprecated types.
-        # A deprecated type can be dependent on anything.
-        if not self.deprecated:
-            for a in self._attributes:
-                if a.data_type.deprecated:
-                    raise DeprecatedDependencyError(
-                        "A type cannot depend on deprecated types unless it is also deprecated."
-                    )
-
         # Aggregation check. For example:
         #   - Types like utf8 and byte cannot be used outside of arrays.
         #   - A non-deprecated type cannot depend on a deprecated type.
         for a in self._attributes:
-            if not a.data_type.is_valid_aggregate(self):
-                raise AggregationError("Type of %r is not a valid field type for %s" % (str(a), self))
+            af = a.data_type.check_aggregation(self)
+            if af is not None:
+                raise AggregationError("Type of %r is not a valid field type for %s: %s" % (str(a), self, af.message))
 
     @property
     def full_name(self) -> str:
@@ -196,12 +188,8 @@ class CompositeType(SerializableType):
         """
         raise NotImplementedError
 
-    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
-        if self.deprecated:  # Deprecation consistency check: non-deprecated cannot depend on a deprecated type.
-            if isinstance(aggregate, CompositeType) and not aggregate.deprecated:
-                return False
-
-        return True
+    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        return super().check_aggregation(aggregate)
 
     @property
     def deprecated(self) -> bool:
@@ -615,8 +603,11 @@ class DelimitedType(CompositeType):
         base_offset = base_offset + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
-    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
-        return self.inner_type.is_valid_aggregate(aggregate)
+    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        af = self.inner_type.check_aggregation(aggregate)
+        if af is not None:
+            return af
+        return super().check_aggregation(aggregate)
 
     def __repr__(self) -> str:
         return "%s(inner=%r, extent=%r)" % (self.__class__.__name__, self.inner_type, self.extent)

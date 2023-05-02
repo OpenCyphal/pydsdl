@@ -1696,7 +1696,7 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
         ],
     )
 
-    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*"):
+    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*") as exc_info:
         parse_definition(
             wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
@@ -1709,8 +1709,9 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
             ),
             [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
+    print(exc_info.value.text)
 
-    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*"):
+    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*") as exc_info:
         parse_definition(
             wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
@@ -1723,6 +1724,7 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
             ),
             [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
+    print(exc_info.value.text)
 
     parse_definition(
         wrkspc.parse_new(

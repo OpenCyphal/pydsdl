@@ -10,7 +10,7 @@ import math
 import typing
 import fractions
 from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError, AggregationFailure
 
 
 ValueRange = typing.NamedTuple("ValueRange", [("min", fractions.Fraction), ("max", fractions.Fraction)])
@@ -56,8 +56,8 @@ class PrimitiveType(SerializableType):
         """Primitive types cannot be deprecated."""
         return False
 
-    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
-        return True
+    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        return super().check_aggregation(aggregate)
 
     @property
     def bit_length(self) -> int:
@@ -174,10 +174,12 @@ class ByteType(UnsignedIntegerType):
     def __init__(self) -> None:
         super().__init__(bit_length=PrimitiveType.BITS_IN_BYTE, cast_mode=PrimitiveType.CastMode.TRUNCATED)
 
-    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
         from ._array import ArrayType
 
-        return isinstance(aggregate, ArrayType)
+        if not isinstance(aggregate, ArrayType):
+            return AggregationFailure(self, aggregate, "The byte type can only be used as an array element type")
+        return super().check_aggregation(aggregate)
 
     def __str__(self) -> str:
         return "byte"
@@ -187,10 +189,14 @@ class UTF8Type(UnsignedIntegerType):
     def __init__(self) -> None:
         super().__init__(bit_length=8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
 
-    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
         from ._array import VariableLengthArrayType
 
-        return isinstance(aggregate, VariableLengthArrayType)
+        if not isinstance(aggregate, VariableLengthArrayType):
+            return AggregationFailure(
+                self, aggregate, "The utf8 type can only be used as a variable-length array element type"
+            )
+        return super().check_aggregation(aggregate)
 
     def __str__(self) -> str:
         return "utf8"
