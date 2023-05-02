@@ -51,6 +51,9 @@ class PrimitiveType(SerializableType):
     def bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        return True
+
     @property
     def bit_length(self) -> int:
         """
@@ -96,14 +99,11 @@ class PrimitiveType(SerializableType):
 
 
 class BooleanType(PrimitiveType):
-    def __init__(self, cast_mode: PrimitiveType.CastMode):
-        super().__init__(bit_length=1, cast_mode=cast_mode)
-
-        if cast_mode != PrimitiveType.CastMode.SATURATED:
-            raise InvalidCastModeError("Invalid cast mode for boolean: %r" % cast_mode)
+    def __init__(self) -> None:
+        super().__init__(bit_length=1, cast_mode=PrimitiveType.CastMode.SATURATED)
 
     def __str__(self) -> str:
-        return self._cast_mode_name + " bool"
+        return "bool"
 
 
 class ArithmeticType(PrimitiveType):
@@ -165,6 +165,32 @@ class UnsignedIntegerType(IntegerType):
         return self._cast_mode_name + " uint" + str(self.bit_length)
 
 
+class ByteType(UnsignedIntegerType):
+    def __init__(self) -> None:
+        super().__init__(bit_length=PrimitiveType.BITS_IN_BYTE, cast_mode=PrimitiveType.CastMode.TRUNCATED)
+
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        from ._array import ArrayType
+
+        return isinstance(aggregate, ArrayType)
+
+    def __str__(self) -> str:
+        return "byte"
+
+
+class UTF8Type(UnsignedIntegerType):
+    def __init__(self) -> None:
+        super().__init__(bit_length=8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
+
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        from ._array import VariableLengthArrayType
+
+        return isinstance(aggregate, VariableLengthArrayType)
+
+    def __str__(self) -> str:
+        return "utf8"
+
+
 class FloatType(ArithmeticType):
     def __init__(self, bit_length: int, cast_mode: PrimitiveType.CastMode):
         super().__init__(bit_length, cast_mode)
@@ -193,7 +219,17 @@ class FloatType(ArithmeticType):
 def _unittest_primitive() -> None:
     from pytest import raises, approx
 
-    assert str(BooleanType(PrimitiveType.CastMode.SATURATED)) == "saturated bool"
+    assert str(BooleanType()) == "bool"
+
+    assert str(ByteType()) == "byte"
+    assert ByteType().bit_length_set == {8}
+    assert ByteType().inclusive_value_range == (0, 255)  # type: ignore
+    assert ByteType().cast_mode == PrimitiveType.CastMode.TRUNCATED
+
+    assert str(UTF8Type()) == "utf8"
+    assert UTF8Type().bit_length_set == {8}
+    assert UTF8Type().inclusive_value_range == (0, 255)  # type: ignore
+    assert UTF8Type().cast_mode == PrimitiveType.CastMode.TRUNCATED
 
     assert str(SignedIntegerType(15, PrimitiveType.CastMode.SATURATED)) == "saturated int15"
     assert SignedIntegerType(64, PrimitiveType.CastMode.SATURATED).bit_length_set == {64}
@@ -237,18 +273,18 @@ def _unittest_primitive() -> None:
     )
 
     a = UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
-    b = BooleanType(PrimitiveType.CastMode.SATURATED)
+    b = BooleanType()
     assert hash(a) != hash(b)
     assert hash(a) == hash(UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED))
     assert a == UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
     assert b != UnsignedIntegerType(2, PrimitiveType.CastMode.TRUNCATED)
     assert a != b
-    assert b == BooleanType(PrimitiveType.CastMode.SATURATED)
+    assert b == BooleanType()
     assert b != 123  # Not implemented
 
     for bl in range(1, PrimitiveType.MAX_BIT_LENGTH + 1):
         if bl > 1:
             t = UnsignedIntegerType(bl, PrimitiveType.CastMode.SATURATED)  # type: PrimitiveType
         else:
-            t = BooleanType(PrimitiveType.CastMode.SATURATED)
+            t = BooleanType()
         assert t.standard_bit_length == (t.bit_length in {8, 16, 32, 64, 128, 256})

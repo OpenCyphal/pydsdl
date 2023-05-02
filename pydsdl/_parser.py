@@ -159,7 +159,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         """If the node has children, replace the node with them."""
         return tuple(visited_children) or node
 
-    def visit_line(self, node: _Node, children: _Children) -> None:
+    def visit_line(self, node: _Node, _c: _Children) -> None:
         if len(node.text) == 0:
             # Line is empty, flush comment
             self._flush_comment()
@@ -173,7 +173,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
-    def visit_comment(self, node: _Node, children: _Children) -> None:
+    def visit_comment(self, node: _Node, _c: _Children) -> None:
         assert isinstance(node.text, str)
         self._comment += "\n" if self._comment != "" else ""
         self._comment += node.text[2:] if node.text.startswith("# ") else node.text[1:]
@@ -262,6 +262,15 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         assert isinstance(major, _expression.Rational) and isinstance(minor, _expression.Rational)
         return _serializable.Version(major=major.as_native_integer(), minor=minor.as_native_integer())
 
+    def visit_type_primitive_boolean(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
+        return _serializable.BooleanType()
+
+    def visit_type_primitive_byte(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
+        return _serializable.ByteType()
+
+    def visit_type_primitive_utf8(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
+        return _serializable.UTF8Type()
+
     def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
         _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
         return cons(_serializable.PrimitiveType.CastMode.TRUNCATED)
@@ -269,9 +278,6 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
         _, cons = children  # type: _Node, _PrimitiveTypeConstructor
         return cons(_serializable.PrimitiveType.CastMode.SATURATED)
-
-    def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:
-        return typing.cast(_PrimitiveTypeConstructor, _serializable.BooleanType)
 
     def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
         return lambda cm: _serializable.UnsignedIntegerType(children[-1], cm)

@@ -24,6 +24,12 @@ class VoidType(SerializableType):
     def bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        from ._composite import StructureType, CompositeType
+
+        # Unions are not allowed to contain void types.
+        return isinstance(aggregate, CompositeType) and isinstance(aggregate.inner_type, StructureType)
+
     @property
     def bit_length(self) -> int:
         """

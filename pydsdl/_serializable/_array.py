@@ -5,8 +5,9 @@
 import abc
 import math
 import typing
+import warnings
 from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError, AggregationError
 from ._primitive import UnsignedIntegerType, PrimitiveType
 
 
@@ -21,6 +22,13 @@ class ArrayType(SerializableType):
         self._capacity = int(capacity)
         if self._capacity < 1:
             raise InvalidNumberOfElementsError("Array capacity cannot be less than 1")
+        if not self.element_type.is_valid_aggregate(self):
+            raise AggregationError("Specified element type of %r is not valid" % str(self))
+
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        # At the moment, arrays of arrays are not allowed, but this is ensured by the grammar definition.
+        # This restriction will be lifted eventually. All that needs to be done is to update the grammar only.
+        return True
 
     @property
     def element_type(self) -> SerializableType:
@@ -36,10 +44,10 @@ class ArrayType(SerializableType):
     @property
     def string_like(self) -> bool:
         """
-        True if the array might contain a text string, in which case it is termed to be "string-like".
-        A string-like array is a variable-length array of ``uint8``.
-        See https://github.com/OpenCyphal/specification/issues/51.
+        **This property is deprecated** and will be removed in a future release.
+        Replace with an explicit check for ``isinstance(array.element_type, UTF8Type)``.
         """
+        warnings.warn("use isinstance(array.element_type, UTF8Type) instead of string_like", DeprecationWarning)
         return False
 
     @property
@@ -149,9 +157,13 @@ class VariableLengthArrayType(ArrayType):
 
     @property
     def string_like(self) -> bool:
-        """See the base class."""
+        from ._primitive import UTF8Type
+
+        warnings.warn("use isinstance(array.element_type, UTF8Type) instead of string_like", DeprecationWarning)
         et = self.element_type  # Without this temporary MyPy yields a false positive type error
-        return isinstance(et, UnsignedIntegerType) and (et.bit_length == self.BITS_PER_BYTE)
+        return isinstance(et, UTF8Type) or (
+            isinstance(et, UnsignedIntegerType) and (et.bit_length == self.BITS_PER_BYTE)
+        )
 
     @property
     def length_field_type(self) -> UnsignedIntegerType:

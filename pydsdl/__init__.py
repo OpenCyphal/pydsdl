@@ -7,7 +7,7 @@
 import sys as _sys
 from pathlib import Path as _Path
 
-__version__ = "1.20.0"
+__version__ = "1.21.0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"
@@ -41,6 +41,8 @@ from ._serializable import ArithmeticType as ArithmeticType
 from ._serializable import IntegerType as IntegerType
 from ._serializable import SignedIntegerType as SignedIntegerType
 from ._serializable import UnsignedIntegerType as UnsignedIntegerType
+from ._serializable import ByteType as ByteType
+from ._serializable import UTF8Type as UTF8Type
 from ._serializable import FloatType as FloatType
 from ._serializable import VoidType as VoidType
 from ._serializable import ArrayType as ArrayType

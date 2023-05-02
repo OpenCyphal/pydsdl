@@ -12,6 +12,10 @@ class TypeParameterError(_error.InvalidDefinitionError):
     pass
 
 
+class AggregationError(_error.InvalidDefinitionError):
+    pass
+
+
 class SerializableType(_expression.Any):
     """
     Instances are immutable.
@@ -53,6 +57,15 @@ class SerializableType(_expression.Any):
 
         This value is always a non-negative integer power of two. The alignment of one is a degenerate case denoting
         no alignment.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def is_valid_aggregate(self, aggregate: "SerializableType") -> bool:
+        """
+        Returns true iff the argument is a suitable aggregate type for this element type.
+        This is needed to detect incorrect aggregations, such as padding fields in unions,
+        or standalone utf8 or byte, etc.
         """
         raise NotImplementedError
 

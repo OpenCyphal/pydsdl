@@ -12,6 +12,8 @@ from ._primitive import ArithmeticType as ArithmeticType
 from ._primitive import IntegerType as IntegerType
 from ._primitive import SignedIntegerType as SignedIntegerType
 from ._primitive import UnsignedIntegerType as UnsignedIntegerType
+from ._primitive import ByteType as ByteType
+from ._primitive import UTF8Type as UTF8Type
 
 from ._void import VoidType as VoidType
 

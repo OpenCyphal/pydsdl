@@ -10,10 +10,9 @@ from pathlib import Path
 from .. import _expression
 from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType, TypeParameterError
+from ._serializable import SerializableType, TypeParameterError, AggregationError
 from ._attribute import Attribute, Field, PaddingField, Constant
 from ._name import check_name, InvalidNameError
-from ._void import VoidType
 from ._primitive import PrimitiveType, UnsignedIntegerType
 
 
@@ -137,8 +136,13 @@ class CompositeType(SerializableType):
                 if isinstance(t, CompositeType):
                     if t.deprecated:
                         raise DeprecatedDependencyError(
-                            "A type cannot depend on deprecated types " "unless it is also deprecated."
+                            "A type cannot depend on deprecated types unless it is also deprecated."
                         )
+
+        # Aggregation check. For example, types like utf8 and byte cannot be used outside of arrays.
+        for a in self._attributes:
+            if not a.data_type.is_valid_aggregate(self):
+                raise AggregationError("Type of %r is not a valid field type for %s" % (str(a), self))
 
     @property
     def full_name(self) -> str:
@@ -195,6 +199,9 @@ class CompositeType(SerializableType):
         of type ``uint32[2]`` would have a single entry in the bit length set: ``{64}``.
         """
         raise NotImplementedError
+
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        return True
 
     @property
     def deprecated(self) -> bool:
@@ -370,10 +377,6 @@ class UnionType(CompositeType):
             raise MalformedUnionError(
                 "A tagged union cannot contain fewer than %d variants" % self.MIN_NUMBER_OF_VARIANTS
             )
-
-        for a in attributes:
-            if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
-                raise MalformedUnionError("Padding fields not allowed in unions")
 
         self._tag_field_type = UnsignedIntegerType(
             self._compute_tag_bit_length([x.data_type for x in self.fields]), PrimitiveType.CastMode.TRUNCATED
@@ -685,6 +688,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     from pytest import raises
     from ._primitive import SignedIntegerType, FloatType
     from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from ._void import VoidType
 
     def try_name(name: str) -> CompositeType:
         return StructureType(
@@ -737,7 +741,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             has_parent_service=False,
         )
 
-    with raises(MalformedUnionError, match="(?i).*padding.*"):
+    with raises(AggregationError, match="(?i).*not a valid field type.*"):
         UnionType(
             name="a.A",
             version=Version(0, 1),
@@ -947,6 +951,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
     from pytest import raises
     from ._primitive import BooleanType, FloatType
     from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from ._void import VoidType
 
     saturated = PrimitiveType.CastMode.SATURATED
     _seq_no = 0
@@ -979,7 +984,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
         StructureType,
         [
             Field(UnsignedIntegerType(10, saturated), "a"),
-            Field(BooleanType(saturated), "b"),
+            Field(BooleanType(), "b"),
             Field(VariableLengthArrayType(FloatType(32, saturated), 2), "c"),
             Field(FixedLengthArrayType(FloatType(32, saturated), 7), "d"),
             PaddingField(VoidType(3)),
