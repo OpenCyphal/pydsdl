@@ -39,7 +39,7 @@ class MalformedUnionError(TypeParameterError):
     pass
 
 
-class DeprecatedDependencyError(TypeParameterError):
+class DeprecatedDependencyError(AggregationError):
     pass
 
 
@@ -81,10 +81,8 @@ class CompositeType(SerializableType):
         # Name check
         if not self._name:
             raise InvalidNameError("Composite type name cannot be empty")
-
         if self.NAME_COMPONENT_SEPARATOR not in self._name:
             raise InvalidNameError("Root namespace is not specified")
-
         if len(self._name) > self.MAX_NAME_LENGTH:
             # TODO
             # Notice that per the Specification, service request/response types are unnamed,
@@ -95,7 +93,6 @@ class CompositeType(SerializableType):
             raise InvalidNameError(
                 "Name is too long: %r is longer than %d characters" % (self._name, self.MAX_NAME_LENGTH)
             )
-
         for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
             check_name(component)
 
@@ -105,7 +102,6 @@ class CompositeType(SerializableType):
             and (0 <= self._version.minor <= self.MAX_VERSION_NUMBER)
             and ((self._version.major + self._version.minor) > 0)
         )
-
         if not version_valid:
             raise InvalidVersionError("Invalid version numbers: %s.%s" % (self._version.major, self._version.minor))
 
@@ -132,14 +128,14 @@ class CompositeType(SerializableType):
         # A deprecated type can be dependent on anything.
         if not self.deprecated:
             for a in self._attributes:
-                t = a.data_type
-                if isinstance(t, CompositeType):
-                    if t.deprecated:
-                        raise DeprecatedDependencyError(
-                            "A type cannot depend on deprecated types unless it is also deprecated."
-                        )
+                if a.data_type.deprecated:
+                    raise DeprecatedDependencyError(
+                        "A type cannot depend on deprecated types unless it is also deprecated."
+                    )
 
-        # Aggregation check. For example, types like utf8 and byte cannot be used outside of arrays.
+        # Aggregation check. For example:
+        #   - Types like utf8 and byte cannot be used outside of arrays.
+        #   - A non-deprecated type cannot depend on a deprecated type.
         for a in self._attributes:
             if not a.data_type.is_valid_aggregate(self):
                 raise AggregationError("Type of %r is not a valid field type for %s" % (str(a), self))
@@ -201,11 +197,15 @@ class CompositeType(SerializableType):
         raise NotImplementedError
 
     def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        if self.deprecated:  # Deprecation consistency check: non-deprecated cannot depend on a deprecated type.
+            if isinstance(aggregate, CompositeType) and not aggregate.deprecated:
+                return False
+
         return True
 
     @property
     def deprecated(self) -> bool:
-        """Whether the definition is marked ``@deprecated``."""
+        """True if the definition is marked ``@deprecated``."""
         return self._deprecated
 
     @property
@@ -614,6 +614,9 @@ class DelimitedType(CompositeType):
         """
         base_offset = base_offset + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
+
+    def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
+        return self.inner_type.is_valid_aggregate(aggregate)
 
     def __repr__(self) -> str:
         return "%s(inner=%r, extent=%r)" % (self.__class__.__name__, self.inner_type, self.extent)

@@ -24,10 +24,15 @@ class VoidType(SerializableType):
     def bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
+    @property
+    def deprecated(self) -> bool:
+        """Void types cannot be deprecated."""
+        return False
+
     def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
         from ._composite import StructureType, CompositeType
 
-        # Unions are not allowed to contain void types.
+        # Unions are not allowed to contain void types. Only StructureType is allowed to do so.
         return isinstance(aggregate, CompositeType) and isinstance(aggregate.inner_type, StructureType)
 
     @property

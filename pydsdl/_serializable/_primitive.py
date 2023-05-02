@@ -51,6 +51,11 @@ class PrimitiveType(SerializableType):
     def bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
 
+    @property
+    def deprecated(self) -> bool:
+        """Primitive types cannot be deprecated."""
+        return False
+
     def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
         return True
 

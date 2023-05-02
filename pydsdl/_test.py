@@ -1710,6 +1710,20 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
             [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
 
+    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*"):
+        parse_definition(
+            wrkspc.parse_new(
+                "ns/C.1.0.dsdl",
+                dedent(
+                    """
+                X.1.0[<9] b  # Ensure the deprecation property is transitive.
+                @sealed
+                """
+                ),
+            ),
+            [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
+        )
+
     parse_definition(
         wrkspc.parse_new(
             "ns/D.1.0.dsdl",

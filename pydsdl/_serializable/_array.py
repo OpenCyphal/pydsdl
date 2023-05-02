@@ -25,6 +25,10 @@ class ArrayType(SerializableType):
         if not self.element_type.is_valid_aggregate(self):
             raise AggregationError("Specified element type of %r is not valid" % str(self))
 
+    @property
+    def deprecated(self) -> bool:
+        return self.element_type.deprecated
+
     def is_valid_aggregate(self, aggregate: SerializableType) -> bool:
         # At the moment, arrays of arrays are not allowed, but this is ensured by the grammar definition.
         # This restriction will be lifted eventually. All that needs to be done is to update the grammar only.

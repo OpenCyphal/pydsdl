@@ -60,6 +60,15 @@ class SerializableType(_expression.Any):
         """
         raise NotImplementedError
 
+    @property
+    @abc.abstractmethod
+    def deprecated(self) -> bool:
+        """
+        Deprecation is transitive.
+        This property is used to propagate deprecation information from the type to its aggregates.
+        """
+        raise NotImplementedError
+
     @abc.abstractmethod
     def is_valid_aggregate(self, aggregate: "SerializableType") -> bool:
         """
