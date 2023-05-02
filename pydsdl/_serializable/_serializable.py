@@ -22,7 +22,7 @@ AggregationFailure = NamedTuple(
     ],
 )
 """
-This is returned by :meth:`SerializableType.check_aggregation()` to indicate the reason of the failure.
+This is returned by :meth:`SerializableType._check_aggregation()` to indicate the reason of the failure.
 Eventually this will need to be replaced with a dataclass (sadly no dataclasses in Python 3.6).
 """
 
@@ -80,7 +80,7 @@ class SerializableType(_expression.Any):
         """
         raise NotImplementedError
 
-    def check_aggregation(self, aggregate: "SerializableType") -> Optional[AggregationFailure]:
+    def _check_aggregation(self, aggregate: "SerializableType") -> Optional[AggregationFailure]:
         """
         Returns None iff the argument is a suitable aggregate type for this element type;
         otherwise, returns an instance of :class:`AggregationFailure` describing the reason of the failure.

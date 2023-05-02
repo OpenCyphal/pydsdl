@@ -128,7 +128,7 @@ class CompositeType(SerializableType):
         #   - Types like utf8 and byte cannot be used outside of arrays.
         #   - A non-deprecated type cannot depend on a deprecated type.
         for a in self._attributes:
-            af = a.data_type.check_aggregation(self)
+            af = a.data_type._check_aggregation(self)
             if af is not None:
                 raise AggregationError("Type of %r is not a valid field type for %s: %s" % (str(a), self, af.message))
 
@@ -188,8 +188,8 @@ class CompositeType(SerializableType):
         """
         raise NotImplementedError
 
-    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
-        return super().check_aggregation(aggregate)
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        return super()._check_aggregation(aggregate)
 
     @property
     def deprecated(self) -> bool:
@@ -603,11 +603,11 @@ class DelimitedType(CompositeType):
         base_offset = base_offset + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
-    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
-        af = self.inner_type.check_aggregation(aggregate)
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        af = self.inner_type._check_aggregation(aggregate)  # pylint: disable=protected-access
         if af is not None:
             return af
-        return super().check_aggregation(aggregate)
+        return super()._check_aggregation(aggregate)
 
     def __repr__(self) -> str:
         return "%s(inner=%r, extent=%r)" % (self.__class__.__name__, self.inner_type, self.extent)

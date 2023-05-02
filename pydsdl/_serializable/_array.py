@@ -27,11 +27,11 @@ class ArrayType(SerializableType):
     def deprecated(self) -> bool:
         return self.element_type.deprecated
 
-    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
-        af = self.element_type.check_aggregation(self)
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        af = self.element_type._check_aggregation(self)  # pylint: disable=protected-access
         if af is not None:
             return AggregationFailure(self, aggregate, "Element type of %r is not valid: %s" % (str(self), af.message))
-        return super().check_aggregation(aggregate)
+        return super()._check_aggregation(aggregate)
 
     @property
     def element_type(self) -> SerializableType:

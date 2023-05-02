@@ -30,12 +30,12 @@ class VoidType(SerializableType):
         """Void types cannot be deprecated."""
         return False
 
-    def check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
         from ._composite import StructureType, CompositeType
 
         if not isinstance(aggregate, CompositeType) or not isinstance(aggregate.inner_type, StructureType):
             return AggregationFailure(self, aggregate, "Void types can only be aggregated into structures")
-        return super().check_aggregation(aggregate)
+        return super()._check_aggregation(aggregate)
 
     @property
     def bit_length(self) -> int:
