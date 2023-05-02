@@ -171,6 +171,10 @@ class UnsignedIntegerType(IntegerType):
 
 
 class ByteType(UnsignedIntegerType):
+    """
+    This type is used as the array element type for byte strings.
+    """
+
     def __init__(self) -> None:
         super().__init__(bit_length=PrimitiveType.BITS_IN_BYTE, cast_mode=PrimitiveType.CastMode.TRUNCATED)
 
@@ -186,6 +190,10 @@ class ByteType(UnsignedIntegerType):
 
 
 class UTF8Type(UnsignedIntegerType):
+    """
+    This type is used as the array element type for UTF-8 strings.
+    """
+
     def __init__(self) -> None:
         super().__init__(bit_length=8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
 
