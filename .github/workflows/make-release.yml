@@ -1,10 +1,11 @@
 name: 'PyDSDL application builder'
 
-# Builds OpenCyphal PyDSDL release
+# Runs pydsdl-test job on push to any branch and pull request to master and
+# runs both the pydsdl-test and pydsdl-release jobs on push to master branch
 on:
   push:
     branches:
-      - master
+      - '**'
   pull_request:
     branches:
       - master
@@ -15,9 +16,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  #
-  # PyDSDL test
-  #
   pydsdl-test:
     name: Test PyDSDL
     strategy:
@@ -26,8 +24,8 @@ jobs:
         os: [ubuntu-20.04]
         python: ['3.6', '3.7', '3.8', '3.9', '3.10', '3.11']
         include:
-          #- os: windows-2019
-          #  python: '3.10'
+          - os: windows-2019
+            python: '3.10'
           - os: macos-latest
             python: '3.9'
     runs-on: ${{ matrix.os }}
@@ -79,9 +77,6 @@ jobs:
           python -c "import pydsdl; pydsdl.read_namespace('.dsdl-test/uavcan', [])"
         shell: bash
 
-  #
-  # Create release
-  #
   pydsdl-release:
     name: Release PyDSDL
     if: (github.event_name == 'push') && (github.ref == 'refs/heads/master')
