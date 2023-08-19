@@ -629,7 +629,7 @@ def _unittest_common_usage_errors() -> None:
         _ensure_no_common_usage_errors(dir_dsdl, [di / "baz"], reports.append)
         (rep,) = reports
         reports.clear()
-        assert str(dir_dsdl_uavcan).lower() in rep.lower()
+        assert str(dir_dsdl_uavcan.resolve()).lower() in rep.lower()
 
 
 def _unittest_nested_roots() -> None:
