@@ -2,8 +2,9 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+import typing
 from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType
+from ._serializable import SerializableType, AggregationFailure
 from ._primitive import InvalidBitLengthError
 
 
@@ -23,6 +24,18 @@ class VoidType(SerializableType):
     @property
     def bit_length_set(self) -> BitLengthSet:
         return BitLengthSet(self.bit_length)
+
+    @property
+    def deprecated(self) -> bool:
+        """Void types cannot be deprecated."""
+        return False
+
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        from ._composite import StructureType, CompositeType
+
+        if not isinstance(aggregate, CompositeType) or not isinstance(aggregate.inner_type, StructureType):
+            return AggregationFailure(self, aggregate, "Void types can only be aggregated into structures")
+        return super()._check_aggregation(aggregate)
 
     @property
     def bit_length(self) -> int:
