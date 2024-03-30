@@ -108,6 +108,9 @@ class InvalidDefinitionError(FrontendError):
     """
 
 
+# +-[UNIT TESTS]------------------------------------------------------------------------------------------------------+
+
+
 def _unittest_error() -> None:
     try:
         raise FrontendError("Hello world!")
@@ -124,8 +127,8 @@ def _unittest_error() -> None:
     try:
         raise FrontendError("Hello world!", path=Path("path/to/file.dsdl"))
     except Exception as ex:
-        assert str(ex) == "path/to/file.dsdl: Hello world!"
         assert repr(ex) == "FrontendError: 'path/to/file.dsdl: Hello world!'"
+        assert str(ex) == "path/to/file.dsdl: Hello world!"
 
 
 def _unittest_internal_error_github_reporting() -> None:

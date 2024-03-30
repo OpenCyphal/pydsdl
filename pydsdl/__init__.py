@@ -7,7 +7,7 @@
 import sys as _sys
 from pathlib import Path as _Path
 
-__version__ = "1.20.1"
+__version__ = "1.21.0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"
@@ -25,8 +25,9 @@ _original_sys_path = _sys.path
 _sys.path = [str(_Path(__file__).parent / "third_party")] + _sys.path
 
 # Never import anything that is not available here - API stability guarantees are only provided for the exposed items.
+from ._dsdl import PrintOutputHandler as PrintOutputHandler
 from ._namespace import read_namespace as read_namespace
-from ._namespace import PrintOutputHandler as PrintOutputHandler
+from ._namespace import read_files as read_files
 
 # Error model.
 from ._error import FrontendError as FrontendError

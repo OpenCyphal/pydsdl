@@ -9,8 +9,8 @@ import functools
 import fractions
 from pathlib import Path
 from typing import List, Tuple
-import parsimonious
-from parsimonious.nodes import Node as _Node
+import parsimonious  # type: ignore
+from parsimonious.nodes import Node as _Node  # type: ignore
 from . import _error
 from . import _serializable
 from . import _expression
@@ -27,14 +27,14 @@ def parse(text: str, statement_stream_processor: "StatementStreamProcessor") -> 
     """
     pr = _ParseTreeProcessor(statement_stream_processor)
     try:
-        pr.visit(_get_grammar().parse(text))  # type: ignore
+        pr.visit(_get_grammar().parse(text))
     except _error.FrontendError as ex:
         # Inject error location. If this exception is being propagated from a recursive instance, it already has
         # its error location populated, so nothing will happen here.
         ex.set_error_location_if_unknown(line=pr.current_line_number)
         raise ex
     except parsimonious.ParseError as ex:
-        raise DSDLSyntaxError("Syntax error", line=int(ex.line())) from None  # type: ignore
+        raise DSDLSyntaxError("Syntax error", line=int(ex.line())) from None
     except parsimonious.VisitationError as ex:  # pragma: no cover
         # noinspection PyBroadException
         try:
@@ -89,7 +89,7 @@ class StatementStreamProcessor:
 
 @functools.lru_cache(None)
 def _get_grammar() -> parsimonious.Grammar:
-    return parsimonious.Grammar((Path(__file__).parent / "grammar.parsimonious").read_text())  # type: ignore
+    return parsimonious.Grammar((Path(__file__).parent / "grammar.parsimonious").read_text())
 
 
 _logger = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = (_error.FrontendError, SystemError, MemoryError, SystemExit)  # type: ignore
+    unwrapped_exceptions = (_error.FrontendError, SystemError, MemoryError, SystemExit)
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
