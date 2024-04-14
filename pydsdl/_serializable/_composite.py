@@ -97,8 +97,28 @@ class CompositeType(SerializableType):
                 "Name is too long: %r is longer than %d characters" % (self._name, self.MAX_NAME_LENGTH)
             )
 
-        for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
+        self._name_components = self._name.split(self.NAME_COMPONENT_SEPARATOR)
+        for component in self._name_components:
             check_name(component)
+
+        def search_up_for_root(path: Path, namespace_components: typing.List[str]) -> Path:
+            if len(namespace_components) == 0:
+                raise InvalidNameError( "Path to file without a namepace. All dsdl files must be contained within "
+                                        f"folders corresponding to their namespaces ({self._source_file_path})"
+                )
+            if namespace_components[-1] != path.stem:
+                raise InvalidNameError(f"{path.stem} != {namespace_components[-1]}. Source file directory structure "
+                                       f"is not consistent with the type's namespace ({self._name_components}, "
+                                       f"{self._source_file_path})"
+                )
+            if len(namespace_components) == 1:
+                return path
+            return search_up_for_root(path.parent, namespace_components[:-1])
+
+        self._path_to_root_namespace = search_up_for_root(
+            self._source_file_path.parent,
+            (self.namespace_components if not self._has_parent_service else self.namespace_components[:-1])
+        )
 
         # Version check
         version_valid = (
@@ -148,7 +168,12 @@ class CompositeType(SerializableType):
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ``['uavcan', 'node', 'Heartbeat']``."""
-        return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
+        return self._name_components
+
+    @property
+    def namespace_components(self) -> typing.List[str]:
+        """Components of the namspace as a list, e.g., ``['uavcan', 'node']``."""
+        return self._name_components[:-1]
 
     @property
     def short_name(self) -> str:
@@ -163,7 +188,7 @@ class CompositeType(SerializableType):
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., ``uavcan.node`` for ``uavcan.node.Heartbeat``."""
-        return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.namespace_components))
 
     @property
     def root_namespace(self) -> str:
@@ -239,9 +264,29 @@ class CompositeType(SerializableType):
     @property
     def source_file_path(self) -> Path:
         """
-        For synthesized types such as service request/response sections, this property is defined as an empty string.
+        The path to the dsdl file from which this type was read.
+        For synthesized types such as service request/response sections, this property is the path to the service type
+        since request and response types are defined within the service type's dsdl file.
         """
         return self._source_file_path
+
+    @property
+    def source_file_path_to_root(self) -> Path:
+        """
+        The path to the folder that is the root namespace folder for the `source_file_path` this type was read from.
+        The `source_file_path` will always be relative to the `source_file_path_to_root` but not all types that share
+        the same `root_namespace` will have the same path to their root folder since types may be contributed to a
+        root namespace from several different file trees. For example:
+
+        ```
+        path0 = "workspace_0/project_a/types/animal/feline/Tabby.1.0.dsdl"
+        path1 = "workspace_1/project_b/types/animal/canine/Boxer.1.0.dsdl"
+        ```
+
+        In these examples path0 and path1 will produce composite types with `animal` as the root namespace but both
+        with have different `source_file_path_to_root` paths.
+        """
+        return self._path_to_root_namespace
 
     @property
     def alignment_requirement(self) -> int:

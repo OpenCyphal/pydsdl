@@ -93,7 +93,7 @@ def read_namespace(
     allow_root_namespace_name_collision: bool = True,
 ) -> List[_serializable.CompositeType]:
     """
-    This function is the main entry point of the library.
+    This function is a main entry point for the library.
     It reads all DSDL definitions from the specified root namespace directory and produces the annotated AST.
 
     :param root_namespace_directory: The path of the root namespace directory that will be read.
@@ -120,10 +120,10 @@ def read_namespace(
              the same root namespace name multiple times in the lookup dirs. This will enable defining a namespace
              partially and let other entities define new messages or new sub-namespaces in the same root namespace.
 
-    :return: A list of :class:`pydsdl.CompositeType` sorted lexicographically by full data type name,
-             then by major version (newest version first), then by minor version (newest version first).
-             The ordering guarantee allows the caller to always find the newest version simply by picking
-             the first matching occurrence.
+    :return: A list of :class:`pydsdl.CompositeType` found under the `root_namespace_directory` and sorted
+             lexicographically by full data type name, then by major version (newest version first), then by minor
+             version (newest version first). The ordering guarantee allows the caller to always find the newest version
+             simply by picking the first matching occurrence.
 
     :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
         :class:`OSError` if directories do not exist or inaccessible,
@@ -163,17 +163,37 @@ def read_files(
     lookup_directories: Union[None, Path, str, Iterable[Union[Path, str]]] = None,
     print_output_handler: Optional[PrintOutputHandler] = None,
     allow_unregulated_fixed_port_id: bool = False,
-    allow_root_namespace_name_collision: bool = True,
-) -> Tuple[List[DsdlFile], List[DsdlFile]]:
+) -> Tuple[List[_serializable.CompositeType], List[_serializable.CompositeType]]:
     """
-    This function is the main entry point of the library.
-    It reads all DSDL definitions from the specified root namespace directory and produces the annotated AST.
+    This function is a main entry point for the library.
+    It reads all DSDL definitions from the specified `dsdl_files` and produces the annotated AST for these types and
+    the transitive closure of the types they depend on.
 
-    :param root_namespace_directory: The path of the root namespace directory that will be read.
-        For example, ``dsdl/uavcan`` to read the ``uavcan`` namespace.
+    :param dsdl_files: A list of paths to dsdl files to parse.
+
+    :param root_namespace_directories_or_names: This can be a set of names of root namespaces or relative paths to
+        root namespaces. All `dsdl_files` provided must be under one of these roots. For example, given:
+
+        ```
+        dsdl_files = [
+                        Path("workspace/project/types/animals/felines/Tabby.1.0"),
+                        Path("workspace/project/types/animals/canines/Boxer.1.0")
+                        Path("workspace/project/types/plants/trees/DouglasFir.1.0")
+                    ]
+        ```
+
+        then this argument must be one of:
+
+        ```
+        root_namespace_directories_or_names = ["animals", "plants"]
+        root_namespace_directories_or_names = [
+                                                    Path("workspace/project/types/animals"),
+                                                    Path("workspace/project/types/plants")
+                                            ]
+    ```
 
     :param lookup_directories: List of other namespace directories containing data type definitions that are
-        referred to from the target root namespace. For example, if you are reading a vendor-specific namespace,
+        referred to from the target dsdl files. For example, if you are reading vendor-specific types,
         the list of lookup directories should always include a path to the standard root namespace ``uavcan``,
         otherwise the types defined in the vendor-specific namespace won't be able to use data types from the
         standard namespace.
@@ -189,14 +209,11 @@ def read_files(
         This is a dangerous feature that must not be used unless you understand the risks.
         Please read https://opencyphal.org/guide.
 
-    :param allow_root_namespace_name_collision: Allow using the source root namespace name in the look up dirs or
-             the same root namespace name multiple times in the lookup dirs. This will enable defining a namespace
-             partially and let other entities define new messages or new sub-namespaces in the same root namespace.
-
-    :return: A list of :class:`pydsdl.CompositeType` sorted lexicographically by full data type name,
-             then by major version (newest version first), then by minor version (newest version first).
-             The ordering guarantee allows the caller to always find the newest version simply by picking
-             the first matching occurrence.
+    :return: A Tuple of lists of :class:`pydsdl.CompositeType`. The first index in the Tuple are the types parsed from
+        the `dsdl_files` argument. The second index are types that the target `dsdl_files` utilizes.
+        A note for using these values to describe build dependencies: each :class:`pydsdl.CompositeType` has two
+        fields that provide links back to the filesystem where the dsdl files read when parsing the type were found;
+        `source_file_path` and `source_file_path_to_root`.
 
     :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
         :class:`OSError` if directories do not exist or inaccessible,
@@ -219,11 +236,11 @@ def read_files(
     for x in target_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x.file_path))
 
-    root_namespaces = dsdl_file_sort({f.root_namespace.resolve() for f in target_dsdl_definitions})
+    root_namespaces = {f.root_namespace_path.resolve() for f in target_dsdl_definitions}
     lookup_directories_path_list = _construct_lookup_directories_path_list(
         root_namespaces,
         dsdl_normalize_paths_argument(lookup_directories, cast(Callable[[Iterable], List[Path]], list)),
-        allow_root_namespace_name_collision,
+        True,
     )
 
     reader = _complete_read_function(
@@ -232,7 +249,7 @@ def read_files(
         NamespaceClosureReader(allow_unregulated_fixed_port_id, print_output_handler),
     )
 
-    return (reader.direct.files, reader.transitive.files)
+    return (reader.direct.types, reader.transitive.types)
 
 
 # +--[INTERNAL API::PUBLIC API HELPERS]-------------------------------------------------------------------------------+
@@ -284,7 +301,7 @@ def _complete_read_function(
 
 
 def _construct_lookup_directories_path_list(
-    root_namespace_directories: List[Path],
+    root_namespace_directories: Iterable[Path],
     lookup_directories_path_list: List[Path],
     allow_root_namespace_name_collision: bool,
 ) -> List[Path]:
@@ -515,7 +532,7 @@ def _ensure_minor_version_compatibility_pairwise(
 
 
 def _ensure_no_common_usage_errors(
-    root_namespace_directories: List[Path], lookup_directories: Iterable[Path], reporter: Callable[[str], None]
+    root_namespace_directories: Iterable[Path], lookup_directories: Iterable[Path], reporter: Callable[[str], None]
 ) -> None:
     suspicious_base_names = [
         "public_regulated_data_types",

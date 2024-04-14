@@ -15,7 +15,9 @@ PrintOutputHandler = Callable[[Path, int, str], None]
 class DsdlFile(ABC):
     """
     Interface for DSDL files. This interface is used by the parser to abstract DSDL type details inferred from the
-    filesystem.
+    filesystem. Where properties are duplicated between the composite type and this file the composite type is to be
+    considered canonical. The properties directly on this class are inferred from the dsdl file path before the
+    composite type has been parsed.
     """
 
     @property
