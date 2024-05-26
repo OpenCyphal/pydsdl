@@ -68,4 +68,4 @@ def public_types() -> Path:
     """
     Path to the public regulated data types directory used for tests.
     """
-    return Path("test") / "public_regulated_data_types" / "uavcan"
+    return Path(".dsdl-test") / "uavcan"

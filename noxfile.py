@@ -10,7 +10,7 @@ from functools import partial
 import nox
 
 
-PYTHONS = ["3.8", "3.9", "3.10", "3.11"]
+PYTHONS = ["3.8", "3.9", "3.10", "3.11", "3.12"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -61,7 +61,7 @@ def test(session):
         session.log(f"OPEN IN WEB BROWSER: file://{report_file}")
 
 
-@nox.session(python=["3.7"])
+@nox.session(python=["3.8"])
 def test_eol(session):
     """This is a minimal test session for those old Pythons that have EOLed."""
     session.install("-e", ".")
