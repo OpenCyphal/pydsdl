@@ -153,7 +153,7 @@ def _unittest_internal_error_github_reporting() -> None:
         print(ex)
         assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
-        # We have to ignore the last couple of characters because Python before 3.7 reprs Exceptions like this:
+        # We have to ignore the last couple of characters because Python before 3.7 repr's Exceptions like this:
         #   Exception('ERROR TEXT',)
         # But newer Pythons do it like this:
         #   Exception('ERROR TEXT')

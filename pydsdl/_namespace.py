@@ -254,7 +254,7 @@ _LOG_LIST_ITEM_PREFIX = " " * 4
 
 
 def _complete_read_function(
-    target_dsdl_definitions: SortedFileList,
+    target_dsdl_definitions: SortedFileList[DsdlFileBuildable],
     lookup_directories_path_list: List[Path],
     print_output_handler: Optional[PrintOutputHandler],
     allow_unregulated_fixed_port_id: bool,
@@ -347,7 +347,7 @@ def _construct_lookup_directories_path_list(
 def _construct_dsdl_definitions_from_files(
     dsdl_files: List[Path],
     valid_roots: Set[Path],
-) -> SortedFileList:
+) -> SortedFileList[DsdlFileBuildable]:
     """ """
     output = set()  # type:  Set[DsdlFileBuildable]
     for fp in dsdl_files:
@@ -366,7 +366,7 @@ def _construct_dsdl_definitions_from_files(
 
 def _construct_dsdl_definitions_from_namespaces(
     root_namespace_paths: List[Path],
-) -> SortedFileList:
+) -> SortedFileList[DsdlFileBuildable]:
     """
     Accepts a directory path, returns a sorted list of abstract DSDL file representations. Those can be read later.
     The definitions are sorted by name lexicographically, then by major version (greatest version first),
@@ -389,8 +389,8 @@ def _construct_dsdl_definitions_from_namespaces(
 
 
 def _ensure_no_collisions(
-    target_definitions: List[_dsdl_definition.DSDLDefinition],
-    lookup_definitions: List[_dsdl_definition.DSDLDefinition],
+    target_definitions: List[DsdlFileBuildable],
+    lookup_definitions: List[DsdlFileBuildable],
 ) -> None:
     for tg in target_definitions:
         tg_full_namespace_period = tg.full_namespace.lower() + "."
@@ -653,7 +653,7 @@ def _unittest_dsdl_definition_constructor() -> None:
 
         dsdl_defs = _construct_dsdl_definitions_from_namespaces([root])
         print(dsdl_defs)
-        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, _dsdl_definition.DSDLDefinition]
+        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, DsdlFileBuildable]
         assert len(lut) == 3
 
         assert str(lut["foo.Qwerty"]) == repr(lut["foo.Qwerty"])
@@ -763,7 +763,7 @@ def _unittest_dsdl_definition_constructor_legacy() -> None:
         (root / "123.Qwerty.123.234.uavcan").write_text("# TEST A")
         dsdl_defs = _construct_dsdl_definitions_from_namespaces([root])
         print(dsdl_defs)
-        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, _dsdl_definition.DSDLDefinition]
+        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, DsdlFileBuildable]
         assert len(lut) == 1
         t = lut["foo.Qwerty"]
         assert t.file_path == root / "123.Qwerty.123.234.uavcan"

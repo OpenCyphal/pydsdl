@@ -55,7 +55,7 @@ class CompositeType(SerializableType):
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = "."
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-locals
         self,
         name: str,
         version: Version,
@@ -941,7 +941,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     small = VariableLengthArrayType(tu8, 2)
-    outer = FixedLengthArrayType(small, 2)  # unpadded bit length values: {4, 12, 20, 28, 36}
+    outer = FixedLengthArrayType(small, 2)  # un-padded bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
     assert try_union_fields(

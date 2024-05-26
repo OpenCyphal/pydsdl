@@ -24,7 +24,7 @@ class TemporaryDsdlContext:
     def __init__(self) -> None:
         self._base_dir: Optional[Any] = None
 
-    def new_file(self, file_path: Path, text: str | None = None) -> Path:
+    def new_file(self, file_path: Path, text: Optional[str] = None) -> Path:
         if file_path.is_absolute():
             raise ValueError(f"{file_path} is an absolute path. The test fixture requires relative paths to work.")
         file = self.base_dir / file_path

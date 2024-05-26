@@ -243,7 +243,7 @@ def _unittest_dsdl_definition_read_non_existant() -> None:
     target = Path("root", "ns", "Target.1.1.dsdl")
     target_definition = DSDLDefinition(target, target.parent)
 
-    def print_output(line_number: int, text: str) -> None:
+    def print_output(line_number: int, text: str) -> None:  # pragma: no cover
         pass
 
     with expect_raises(InvalidDefinitionError):
@@ -256,3 +256,13 @@ def _unittest_dsdl_definition_read_text(temp_dsdl_factory) -> None:  # type: ign
     dsdl_file = temp_dsdl_factory.new_file(target_root / target_file_path, "@sealed")
     target_definition = DSDLDefinition(dsdl_file, target_root)
     assert "@sealed" == target_definition.text
+
+
+def _unittest_dsdl_definition_get_unparsed_throws() -> None:
+    from pytest import raises as expect_raises
+
+    target = Path("root", "ns", "Target.1.1.dsdl")
+    target_definition = DSDLDefinition(target, target.parent)
+
+    with expect_raises(InvalidDefinitionError):
+        target_definition.get_composite_type()

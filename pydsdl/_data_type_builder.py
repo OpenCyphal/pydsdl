@@ -65,7 +65,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
 
     def finalize(self) -> _serializable.CompositeType:
         if len(self._structs) == 1:  # Structure type
-            (builder,) = self._structs  # type: _data_schema_builder.DataSchemaBuilder,
+            (builder,) = self._structs
             out = self._make_composite(
                 builder=builder,
                 name=self._definition.full_name,
@@ -272,9 +272,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         elif value is None:
             raise InvalidDirectiveError("Assert directive requires an expression")
         else:
-            raise InvalidDirectiveError(
-                "The assertion check expression must yield a boolean, not %s" % value.TYPE_NAME
-            )
+            raise InvalidDirectiveError("The assertion check expression must yield a boolean, not %s" % value.TYPE_NAME)
 
     def _on_extent_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
         if self._structs[-1].serialization_mode is not None:
@@ -308,9 +306,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         if self._structs[-1].union:
             raise InvalidDirectiveError("Duplicated union directive")
         if self._structs[-1].attributes:
-            raise InvalidDirectiveError(
-                "The union directive must be placed before the first " "attribute definition"
-            )
+            raise InvalidDirectiveError("The union directive must be placed before the first " "attribute definition")
         self._structs[-1].make_union()
 
     def _on_deprecated_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:

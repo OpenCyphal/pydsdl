@@ -6,17 +6,18 @@
 import functools
 import logging
 from pathlib import Path
-from typing import NamedTuple, Optional, Set, Dict
+from typing import Dict, List, NamedTuple, Optional, Set, cast
 
-from ._serializable._composite import CompositeType
 from ._dsdl import DsdlFile, DsdlFileBuildable, PrintOutputHandler, SortedFileList
 from ._dsdl import file_sort as dsdl_file_sort
 from ._error import FrontendError, InternalError
+from ._serializable._composite import CompositeType
 
 
+# pylint: disable=too-many-arguments
 def _read_definitions(
-    target_definitions: SortedFileList,
-    lookup_definitions: SortedFileList,
+    target_definitions: SortedFileList[DsdlFileBuildable],
+    lookup_definitions: SortedFileList[DsdlFileBuildable],
     print_output_handler: Optional[PrintOutputHandler],
     allow_unregulated_fixed_port_id: bool,
     direct: Set[CompositeType],
@@ -96,7 +97,9 @@ def _read_definitions(
 
 # +---[FILE: PUBLIC]--------------------------------------------------------------------------------------------------+
 
-DsdlDefinitions = NamedTuple("DsdlDefinitions", [("direct", SortedFileList), ("transitive", SortedFileList)])
+DsdlDefinitions = NamedTuple(
+    "DsdlDefinitions", [("direct", SortedFileList[CompositeType]), ("transitive", SortedFileList[CompositeType])]
+)
 """
 Common DSDL definition set including the direct dependencies requested and the transitive dependencies found. The former
 and latter sets will be disjoint.
@@ -104,8 +107,8 @@ and latter sets will be disjoint.
 
 
 def read_definitions(
-    target_definitions: SortedFileList,
-    lookup_definitions: SortedFileList,
+    target_definitions: SortedFileList[DsdlFileBuildable],
+    lookup_definitions: SortedFileList[DsdlFileBuildable],
     print_output_handler: Optional[PrintOutputHandler],
     allow_unregulated_fixed_port_id: bool,
 ) -> DsdlDefinitions:
@@ -147,8 +150,8 @@ def _unittest_namespace_reader_read_definitions(temp_dsdl_factory) -> None:  # t
     from . import _dsdl_definition
 
     target = temp_dsdl_factory.new_file(Path("root", "ns", "Target.1.1.dsdl"), "@sealed")
-    target_definitions = [_dsdl_definition.DSDLDefinition(target, target.parent)]
-    lookup_definitions: list = []
+    target_definitions = [cast(DsdlFileBuildable, _dsdl_definition.DSDLDefinition(target, target.parent))]
+    lookup_definitions: List[DsdlFileBuildable] = []
 
     read_definitions(target_definitions, lookup_definitions, None, True)
 
@@ -202,8 +205,8 @@ def _unittest_namespace_reader_read_definitions_multiple_no_load(temp_dsdl_facto
         # never be read thus it will not be an error that it does not exist.
     ]
 
-    target_definitions = [_dsdl_definition.DSDLDefinition(t, t.parent) for t in targets]
-    lookup_definitions = [_dsdl_definition.DSDLDefinition(a, a.parent) for a in dependencies]
+    target_definitions = [cast(DsdlFileBuildable, _dsdl_definition.DSDLDefinition(t, t.parent)) for t in targets]
+    lookup_definitions = [cast(DsdlFileBuildable, _dsdl_definition.DSDLDefinition(a, a.parent)) for a in dependencies]
     _ = read_definitions(
         target_definitions,
         lookup_definitions,
@@ -334,6 +337,7 @@ def _unittest_namespace_reader_read_defs_target_dont_allow_unregulated(temp_dsdl
 def _unittest_namespace_reader_type_error() -> None:
 
     from pytest import raises as assert_raises
+
     from . import _dsdl_definition
 
     with assert_raises(TypeError):

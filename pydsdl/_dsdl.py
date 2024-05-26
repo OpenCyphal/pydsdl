@@ -156,7 +156,7 @@ FileSortKey: Callable[[SortedFileT], Tuple[str, int, int]] = lambda d: (
 )
 
 
-def file_sort(file_list: Iterable[SortedFileT]) -> SortedFileList:
+def file_sort(file_list: Iterable[SortedFileT]) -> SortedFileList[SortedFileT]:
     """
     Sorts a list of DSDL files lexicographically by name, newest version first.
     """

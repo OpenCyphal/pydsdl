@@ -2,6 +2,7 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+# cSpell: words iceb
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with,redefined-outer-name
 
 import tempfile
@@ -68,7 +69,7 @@ def parse_definition(
     )
 
 
-@pytest.fixture()
+@pytest.fixture()  # type: ignore
 def wrkspc() -> Workspace:
     return Workspace()
 
@@ -315,7 +316,7 @@ def _unittest_comments(wrkspc: Workspace) -> None:
 
         uint8 CHARACTER = '#' # comment on constant
         int8 a # comment on field
-        int8 aprime
+        int8 a_prime
         @assert 1 == 1 # toss one in for confusion
         void2 # comment on padding field
         saturated int64[<33] b
