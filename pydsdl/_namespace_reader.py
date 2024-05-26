@@ -185,10 +185,7 @@ def _unittest_namespace_reader_read_definitions_multiple_no_load(temp_dsdl_facto
     """
     Ensure that the loader does not load files that are not in the transitive closure of the target files.
     """
-    from pytest import raises as assert_raises
-
     from . import _dsdl_definition
-    from ._error import InvalidDefinitionError
 
     targets = [
         temp_dsdl_factory.new_file(Path("root", "ns", "Adams.1.0.dsdl"), "@sealed\nns.Tacoma.1.0 volcano\n"),
@@ -215,9 +212,13 @@ def _unittest_namespace_reader_read_definitions_multiple_no_load(temp_dsdl_facto
     )
 
     # make sure Shasta.1.0 was never accessed but Tacoma 1.0 was
-    with assert_raises(InvalidDefinitionError):
-        _ = lookup_definitions[-1].get_composite_type()
+    last_item = lookup_definitions[-1]
+    assert isinstance(last_item, _dsdl_definition.DSDLDefinition)
+    assert last_item._text is None  # pylint: disable=protected-access
     assert lookup_definitions[0].composite_type is not None
+
+    # Make sure text is cached.
+    assert lookup_definitions[0].text == lookup_definitions[0].text
 
 
 def _unittest_namespace_reader_read_definitions_promotion(temp_dsdl_factory) -> None:  # type: ignore

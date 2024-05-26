@@ -97,15 +97,6 @@ class DsdlFile(ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
-    def get_composite_type(self) -> CompositeType:
-        """
-        Returns the composite type of the DSDL file or raises an exception if the type has not been parsed yet.
-        :return: The composite type.
-        :raises InvalidDefinitionError: If the type has not been parsed yet.
-        """
-        raise NotImplementedError()
-
 
 class DsdlFileBuildable(DsdlFile):
     """

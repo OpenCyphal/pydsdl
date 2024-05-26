@@ -203,11 +203,6 @@ class DSDLDefinition(DsdlFileBuildable):
     def root_namespace_path(self) -> Path:
         return self._root_namespace_path
 
-    def get_composite_type(self) -> CompositeType:
-        if self._cached_type is None:
-            raise InvalidDefinitionError("The definition has not been read yet", self.file_path)
-        return self._cached_type
-
     # +-----------------------------------------------------------------------+
     # | Python :: SPECIAL FUNCTIONS                                           |
     # +-----------------------------------------------------------------------+
@@ -256,13 +251,3 @@ def _unittest_dsdl_definition_read_text(temp_dsdl_factory) -> None:  # type: ign
     dsdl_file = temp_dsdl_factory.new_file(target_root / target_file_path, "@sealed")
     target_definition = DSDLDefinition(dsdl_file, target_root)
     assert "@sealed" == target_definition.text
-
-
-def _unittest_dsdl_definition_get_unparsed_throws() -> None:
-    from pytest import raises as expect_raises
-
-    target = Path("root", "ns", "Target.1.1.dsdl")
-    target_definition = DSDLDefinition(target, target.parent)
-
-    with expect_raises(InvalidDefinitionError):
-        target_definition.get_composite_type()
