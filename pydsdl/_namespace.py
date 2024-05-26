@@ -161,31 +161,34 @@ def read_files(
 ) -> Tuple[List[_serializable.CompositeType], List[_serializable.CompositeType]]:
     """
     This function is a main entry point for the library.
-    It reads all DSDL definitions from the specified `dsdl_files` and produces the annotated AST for these types and
+    It reads all DSDL definitions from the specified ``dsdl_files`` and produces the annotated AST for these types and
     the transitive closure of the types they depend on.
 
     :param dsdl_files: A list of paths to dsdl files to parse.
 
     :param root_namespace_directories_or_names: This can be a set of names of root namespaces or relative paths to
-        root namespaces. All `dsdl_files` provided must be under one of these roots. For example, given:
+        root namespaces. All ``dsdl_files`` provided must be under one of these roots. For example, given:
 
-        ```
-        dsdl_files = [
-                        Path("workspace/project/types/animals/felines/Tabby.1.0.dsdl"),
-                        Path("workspace/project/types/animals/canines/Boxer.1.0.dsdl"),
-                        Path("workspace/project/types/plants/trees/DouglasFir.1.0.dsdl")
-                     ]
-        ```
+        .. code-block:: python
+
+            dsdl_files = [
+                            Path("workspace/project/types/animals/felines/Tabby.1.0.dsdl"),
+                            Path("workspace/project/types/animals/canines/Boxer.1.0.dsdl"),
+                            Path("workspace/project/types/plants/trees/DouglasFir.1.0.dsdl")
+                         ]
+
 
         then this argument must be one of:
 
-        ```
-        root_namespace_directories_or_names = ["animals", "plants"]
-        root_namespace_directories_or_names = [
+        .. code-block:: python
+
+            root_namespace_directories_or_names = ["animals", "plants"]
+
+            root_namespace_directories_or_names = [
                                                     Path("workspace/project/types/animals"),
                                                     Path("workspace/project/types/plants")
-                                              ]
-        ```
+                                                  ]
+
 
     :param lookup_directories: List of other namespace directories containing data type definitions that are
         referred to from the target dsdl files. For example, if you are reading vendor-specific types,
@@ -205,10 +208,10 @@ def read_files(
         Please read https://opencyphal.org/guide.
 
     :return: A Tuple of lists of :class:`pydsdl.CompositeType`. The first index in the Tuple are the types parsed from
-        the `dsdl_files` argument. The second index are types that the target `dsdl_files` utilizes.
+        the ``dsdl_files`` argument. The second index are types that the target ``dsdl_files`` utilizes.
         A note for using these values to describe build dependencies: each :class:`pydsdl.CompositeType` has two
-        fields that provide links back to the filesystem where the dsdl files read when parsing the type were found;
-        `source_file_path` and `source_file_path_to_root`.
+        fields that provide links back to the filesystem where the dsdl files were located when parsing the type;
+        ``source_file_path`` and ``source_file_path_to_root``.
 
     :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
         :class:`OSError` if directories do not exist or inaccessible,
