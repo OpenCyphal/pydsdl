@@ -1002,3 +1002,9 @@ def _unittest_ensure_no_collisions(temp_dsdl_factory) -> None:  # type: ignore
             [_dsdl_definition.DSDLDefinition(Path("a/b.1.0.dsdl"), Path("a"))],
             [_dsdl_definition.DSDLDefinition(Path("a/B.1.0.dsdl"), Path("a"))],
         )
+
+    with expect_raises(DataTypeNameCollisionError):
+        _ensure_no_collisions(
+            [_dsdl_definition.DSDLDefinition(Path("a/b/c.1.0.dsdl"), Path("a"))],
+            [_dsdl_definition.DSDLDefinition(Path("a/b.1.0.dsdl"), Path("a"))],
+        )

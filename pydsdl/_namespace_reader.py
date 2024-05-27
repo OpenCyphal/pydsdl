@@ -262,6 +262,43 @@ def _unittest_namespace_reader_read_definitions_no_demote(temp_dsdl_factory) -> 
     assert len(definitions.direct) == 2
     assert len(definitions.transitive) == 0
 
+def _unittest_namespace_reader_read_definitions_no_promote(temp_dsdl_factory) -> None:  # type: ignore
+    from . import _dsdl_definition
+
+    targets = [
+        temp_dsdl_factory.new_file(Path("root", "ns", "User.2.0.dsdl"), "@sealed\nns.User.1.0 old_guy\n"),
+        temp_dsdl_factory.new_file(Path("root", "ns", "User.3.0.dsdl"), "@sealed\nns.User.1.0 old_guy\n"),
+    ]
+    lookups = [temp_dsdl_factory.new_file(Path("root", "ns", "User.1.0.dsdl"), "@sealed\n")]
+
+    definitions = read_definitions(
+        [_dsdl_definition.DSDLDefinition(t, t.parent) for t in targets],
+        [_dsdl_definition.DSDLDefinition(l, l.parent) for l in lookups],
+        None,
+        True,
+    )
+
+    assert len(definitions.direct) == 2
+    assert len(definitions.transitive) == 1
+
+def _unittest_namespace_reader_read_definitions_twice(temp_dsdl_factory) -> None:  # type: ignore
+    from . import _dsdl_definition
+
+    targets = [
+        temp_dsdl_factory.new_file(Path("root", "ns", "User.2.0.dsdl"), "@sealed\nns.User.1.0 old_guy\n"),
+        temp_dsdl_factory.new_file(Path("root", "ns", "User.2.0.dsdl"), "@sealed\nns.User.1.0 old_guy\n"),
+    ]
+    lookups = [temp_dsdl_factory.new_file(Path("root", "ns", "User.1.0.dsdl"), "@sealed\n")]
+
+    definitions = read_definitions(
+        [_dsdl_definition.DSDLDefinition(t, t.parent) for t in targets],
+        [_dsdl_definition.DSDLDefinition(l, l.parent) for l in lookups],
+        None,
+        True,
+    )
+
+    assert len(definitions.direct) == 1
+    assert len(definitions.transitive) == 1
 
 def _unittest_namespace_reader_read_definitions_missing_dependency(temp_dsdl_factory) -> None:  # type: ignore
     """

@@ -5,17 +5,15 @@
 import abc
 import math
 import typing
-import itertools
 from pathlib import Path
-from .. import _expression
-from .. import _port_id_ranges
-from .._bit_length_set import BitLengthSet
-from ._serializable import SerializableType, TypeParameterError
-from ._attribute import Attribute, Field, PaddingField, Constant
-from ._name import check_name, InvalidNameError
-from ._void import VoidType
-from ._primitive import PrimitiveType, UnsignedIntegerType
 
+from .. import _expression, _port_id_ranges
+from .._bit_length_set import BitLengthSet
+from ._attribute import Attribute, Constant, Field, PaddingField
+from ._name import InvalidNameError, check_name
+from ._primitive import PrimitiveType, UnsignedIntegerType
+from ._serializable import SerializableType, TypeParameterError
+from ._void import VoidType
 
 Version = typing.NamedTuple("Version", [("major", int), ("minor", int)])
 
@@ -102,11 +100,6 @@ class CompositeType(SerializableType):
             check_name(component)
 
         def search_up_for_root(path: Path, namespace_components: typing.List[str]) -> Path:
-            if len(namespace_components) == 0:
-                raise InvalidNameError(
-                    "Path to file without a namepace. All dsdl files must be contained within "
-                    f"folders corresponding to their namespaces ({self._source_file_path})"
-                )
             if namespace_components[-1] != path.stem:
                 raise InvalidNameError(
                     f"{path.stem} != {namespace_components[-1]}. Source file directory structure "
@@ -732,18 +725,21 @@ class ServiceType(CompositeType):
 
 
 def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
-    from pytest import raises
-    from ._primitive import SignedIntegerType, FloatType
-    from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from typing import Optional
 
-    def try_name(name: str) -> CompositeType:
+    from pytest import raises
+
+    from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from ._primitive import FloatType, SignedIntegerType
+
+    def try_name(name: str, file_path: Optional[Path] = None) -> CompositeType:
         return StructureType(
             name=name,
             version=Version(0, 1),
             attributes=[],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(*name.split(".")),
+            source_file_path=file_path or Path(*name.split(".")),
             has_parent_service=False,
         )
 
@@ -770,6 +766,9 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
 
     with raises(InvalidNameError, match="(?i).*cannot contain.*"):
         try_name("namespace.n-s.T")
+
+    with raises(InvalidNameError, match=".*Source file directory structure is not consistent.*"):
+        try_name("a.Foo", Path("foo/bar/b/Foo.0.1.dsdl"))
 
     assert try_name("root.nested.T").full_name == "root.nested.T"
     assert try_name("root.nested.T").full_namespace == "root.nested"
@@ -994,9 +993,12 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
 
 
 def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
+    import itertools
+
     from pytest import raises
-    from ._primitive import BooleanType, FloatType
+
     from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from ._primitive import BooleanType, FloatType
 
     saturated = PrimitiveType.CastMode.SATURATED
     _seq_no = 0
