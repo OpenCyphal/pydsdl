@@ -2,16 +2,14 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
-import logging
 import time
+from typing import Iterable, Callable, Optional, List
+import logging
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional
-
-from . import _parser
-from ._data_type_builder import DataTypeBuilder
-from ._dsdl import DefinitionVisitor, DsdlFileBuildable
-from ._error import FrontendError, InternalError, InvalidDefinitionError
+from ._error import FrontendError, InvalidDefinitionError, InternalError
 from ._serializable import CompositeType, Version
+from . import _parser
+
 
 _logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ class FileNameFormatError(InvalidDefinitionError):
         super().__init__(text=text, path=Path(path))
 
 
-class DSDLDefinition(DsdlFileBuildable):
+class DSDLDefinition:
     """
     A DSDL type definition source abstracts the filesystem level details away, presenting a higher-level
     interface that operates solely on the level of type names, namespaces, fixed identifiers, and so on.
@@ -38,18 +36,15 @@ class DSDLDefinition(DsdlFileBuildable):
         del file_path
         self._root_namespace_path = Path(root_namespace_path)
         del root_namespace_path
-        self._text: Optional[str] = None
+        with open(self._file_path) as f:
+            self._text = str(f.read())
 
         # Checking the sanity of the root directory path - can't contain separators
         if CompositeType.NAME_COMPONENT_SEPARATOR in self._root_namespace_path.name:
             raise FileNameFormatError("Invalid namespace name", path=self._root_namespace_path)
 
         # Determining the relative path within the root namespace directory
-        try:
-            relative_path = self._root_namespace_path.name / self._file_path.relative_to(self._root_namespace_path)
-        except ValueError:
-            # the file is not under the same root path so we'll have to make an assumption that the
-            relative_path = Path(self._root_namespace_path.name) / self._file_path.name
+        relative_path = self._root_namespace_path.name / self._file_path.relative_to(self._root_namespace_path)
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.dsdl
         basename_components = relative_path.name.split(".")[:-1]
@@ -91,23 +86,30 @@ class DSDLDefinition(DsdlFileBuildable):
 
         self._cached_type: Optional[CompositeType] = None
 
-    # +-----------------------------------------------------------------------+
-    # | DsdlFileBuildable :: INTERFACE                                        |
-    # +-----------------------------------------------------------------------+
     def read(
         self,
-        lookup_definitions: Iterable[DsdlFileBuildable],
-        definition_visitors: Iterable[DefinitionVisitor],
+        lookup_definitions: Iterable["DSDLDefinition"],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
     ) -> CompositeType:
+        """
+        Reads the data type definition and returns its high-level data type representation.
+        The output is cached; all following invocations will read from the cache.
+        Caching is very important, because it is expected that the same definition may be referred to multiple
+        times (e.g., for composition or when accessing external constants). Re-processing a definition every time
+        it is accessed would be a huge waste of time.
+        Note, however, that this may lead to unexpected complications if one is attempting to re-read a definition
+        with different inputs (e.g., different lookup paths) expecting to get a different result: caching would
+        get in the way. That issue is easy to avoid by creating a new instance of the object.
+        :param lookup_definitions:              List of definitions available for referring to.
+        :param print_output_handler:            Used for @print and for diagnostics: (line_number, text) -> None.
+        :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
+        :return: The data type representation.
+        """
         log_prefix = "%s.%d.%d" % (self.full_name, self.version.major, self.version.minor)
         if self._cached_type is not None:
             _logger.debug("%s: Cache hit", log_prefix)
             return self._cached_type
-
-        if not self._file_path.exists():
-            raise InvalidDefinitionError("Attempt to read DSDL file that doesn't exist.", self._file_path)
 
         started_at = time.monotonic()
 
@@ -122,17 +124,17 @@ class DSDLDefinition(DsdlFileBuildable):
             ", ".join(set(sorted(map(lambda x: x.root_namespace, lookup_definitions)))),
         )
         try:
-            builder = DataTypeBuilder(
+            builder = _data_type_builder.DataTypeBuilder(
                 definition=self,
                 lookup_definitions=lookup_definitions,
-                definition_visitors=definition_visitors,
                 print_output_handler=print_output_handler,
                 allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
             )
-
-            _parser.parse(self.text, builder)
+            with open(self.file_path) as f:
+                _parser.parse(f.read(), builder)
 
             self._cached_type = builder.finalize()
+
             _logger.info(
                 "%s: Processed in %.0f ms; category: %s, fixed port ID: %s",
                 log_prefix,
@@ -149,38 +151,34 @@ class DSDLDefinition(DsdlFileBuildable):
         except Exception as ex:  # pragma: no cover
             raise InternalError(culprit=ex, path=self.file_path) from ex
 
-    # +-----------------------------------------------------------------------+
-    # | DsdlFile :: INTERFACE                                                 |
-    # +-----------------------------------------------------------------------+
-    @property
-    def composite_type(self) -> Optional[CompositeType]:
-        return self._cached_type
-
     @property
     def full_name(self) -> str:
+        """The full name, e.g., uavcan.node.Heartbeat"""
         return self._name
 
     @property
     def name_components(self) -> List[str]:
+        """Components of the full name as a list, e.g., ['uavcan', 'node', 'Heartbeat']"""
         return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
     def short_name(self) -> str:
+        """The last component of the full name, e.g., Heartbeat of uavcan.node.Heartbeat"""
         return self.name_components[-1]
 
     @property
     def full_namespace(self) -> str:
+        """The full name without the short name, e.g., uavcan.node for uavcan.node.Heartbeat"""
         return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
 
     @property
     def root_namespace(self) -> str:
+        """The first component of the full name, e.g., uavcan of uavcan.node.Heartbeat"""
         return self.name_components[0]
 
     @property
     def text(self) -> str:
-        if self._text is None:
-            with open(self._file_path) as f:
-                self._text = str(f.read())
+        """The source text in its raw unprocessed form (with comments, formatting intact, and everything)"""
         return self._text
 
     @property
@@ -189,6 +187,7 @@ class DSDLDefinition(DsdlFileBuildable):
 
     @property
     def fixed_port_id(self) -> Optional[int]:
+        """Either the fixed port ID as integer, or None if not defined for this type."""
         return self._fixed_port_id
 
     @property
@@ -202,12 +201,6 @@ class DSDLDefinition(DsdlFileBuildable):
     @property
     def root_namespace_path(self) -> Path:
         return self._root_namespace_path
-
-    # +-----------------------------------------------------------------------+
-    # | Python :: SPECIAL FUNCTIONS                                           |
-    # +-----------------------------------------------------------------------+
-    def __hash__(self) -> int:
-        return hash((self.full_name, self.version))
 
     def __eq__(self, other: object) -> bool:
         """
@@ -229,25 +222,6 @@ class DSDLDefinition(DsdlFileBuildable):
     __repr__ = __str__
 
 
-# +-[UNIT TESTS]------------------------------------------------------------------------------------------------------+
-
-
-def _unittest_dsdl_definition_read_non_existant() -> None:
-    from pytest import raises as expect_raises
-
-    target = Path("root", "ns", "Target.1.1.dsdl")
-    target_definition = DSDLDefinition(target, target.parent)
-
-    def print_output(line_number: int, text: str) -> None:  # pragma: no cover
-        pass
-
-    with expect_raises(InvalidDefinitionError):
-        target_definition.read([], [], print_output, True)
-
-
-def _unittest_dsdl_definition_read_text(temp_dsdl_factory) -> None:  # type: ignore
-    target_root = Path("root", "ns")
-    target_file_path = Path(target_root / "Target.1.1.dsdl")
-    dsdl_file = temp_dsdl_factory.new_file(target_root / target_file_path, "@sealed")
-    target_definition = DSDLDefinition(dsdl_file, target_root)
-    assert "@sealed" == target_definition.text
+# Moved this import here to break recursive dependency.
+# Maybe I have messed up the architecture? Should think about it later.
+from . import _data_type_builder  # pylint: disable=wrong-import-position

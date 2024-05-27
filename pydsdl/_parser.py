@@ -8,7 +8,7 @@ import itertools
 import functools
 import fractions
 from pathlib import Path
-from typing import cast, List, Tuple
+from typing import List, Tuple
 import parsimonious
 from parsimonious.nodes import Node as _Node
 from . import _error
@@ -263,11 +263,11 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return _serializable.Version(major=major.as_native_integer(), minor=minor.as_native_integer())
 
     def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
-        _kw, _sp, cons = cast(Tuple[_Node, _Node, _PrimitiveTypeConstructor], children)
+        _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
         return cons(_serializable.PrimitiveType.CastMode.TRUNCATED)
 
     def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
-        _, cons = cast(Tuple[_Node, _PrimitiveTypeConstructor], children)
+        _, cons = children  # type: _Node, _PrimitiveTypeConstructor
         return cons(_serializable.PrimitiveType.CastMode.SATURATED)
 
     def visit_type_primitive_name_boolean(self, _n: _Node, _c: _Children) -> _PrimitiveTypeConstructor:

@@ -2,12 +2,16 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+from typing import Optional, Callable, Iterable
 import logging
 from pathlib import Path
-from typing import Callable, Iterable, Optional
-
-from . import _data_schema_builder, _error, _expression, _parser, _port_id_ranges, _serializable
-from ._dsdl import DefinitionVisitor, DsdlFileBuildable
+from . import _serializable
+from . import _expression
+from . import _error
+from . import _dsdl_definition
+from . import _parser
+from . import _data_schema_builder
+from . import _port_id_ranges
 
 
 class AssertionCheckFailureError(_error.InvalidDefinitionError):
@@ -38,25 +42,21 @@ _logger = logging.getLogger(__name__)
 
 
 class DataTypeBuilder(_parser.StatementStreamProcessor):
-
-    # pylint: disable=too-many-arguments
     def __init__(
         self,
-        definition: DsdlFileBuildable,
-        lookup_definitions: Iterable[DsdlFileBuildable],
-        definition_visitors: Iterable[DefinitionVisitor],
+        definition: _dsdl_definition.DSDLDefinition,
+        lookup_definitions: Iterable[_dsdl_definition.DSDLDefinition],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
     ):
         self._definition = definition
         self._lookup_definitions = list(lookup_definitions)
-        self._definition_visitors = definition_visitors
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
         self._element_callback = None  # type: Optional[Callable[[str], None]]
 
-        assert isinstance(self._definition, DsdlFileBuildable)
-        assert all(map(lambda x: isinstance(x, DsdlFileBuildable), lookup_definitions))
+        assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
+        assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
         assert callable(self._print_output_handler)
         assert isinstance(self._allow_unregulated_fixed_port_id, bool)
 
@@ -65,7 +65,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
 
     def finalize(self) -> _serializable.CompositeType:
         if len(self._structs) == 1:  # Structure type
-            (builder,) = self._structs
+            (builder,) = self._structs  # type: _data_schema_builder.DataSchemaBuilder,
             out = self._make_composite(
                 builder=builder,
                 name=self._definition.full_name,
@@ -198,7 +198,6 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
         if not found:
-
             # Play Sherlock to help the user with mistakes like https://forum.opencyphal.org/t/904/2
             requested_ns = full_name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)[0]
             lookup_nss = set(x.root_namespace for x in self._lookup_definitions)
@@ -222,20 +221,15 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise _error.InternalError("Conflicting definitions: %r" % found)
 
         target_definition = found[0]
-        for visitor in self._definition_visitors:
-            visitor(self._definition, target_definition)
-
-        assert isinstance(target_definition, DsdlFileBuildable)
+        assert isinstance(target_definition, _dsdl_definition.DSDLDefinition)
         assert target_definition.full_name == full_name
         assert target_definition.version == version
         # Recursion is cool.
-        dt = target_definition.read(
+        return target_definition.read(
             lookup_definitions=self._lookup_definitions,
-            definition_visitors=self._definition_visitors,
             print_output_handler=self._print_output_handler,
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
-        return dt
 
     def _queue_attribute(self, element_callback: Callable[[str], None]) -> None:
         self._flush_attribute("")

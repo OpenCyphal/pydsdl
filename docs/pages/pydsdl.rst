@@ -12,11 +12,10 @@ You can find a practical usage example in the Nunavut code generation library th
    :local:
 
 
-The main functions
-++++++++++++++++++
+The main function
++++++++++++++++++
 
 .. autofunction:: pydsdl.read_namespace
-.. autofunction:: pydsdl.read_files
 
 
 Type model

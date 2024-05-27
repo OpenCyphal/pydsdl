@@ -2,7 +2,6 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
-# cSpell: words iceb
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with,redefined-outer-name
 
 import tempfile
@@ -63,7 +62,6 @@ def parse_definition(
 ) -> _serializable.CompositeType:
     return definition.read(
         lookup_definitions,
-        [],
         print_output_handler=lambda line, text: print("Output from line %d:" % line, text),
         allow_unregulated_fixed_port_id=False,
     )
@@ -316,7 +314,7 @@ def _unittest_comments(wrkspc: Workspace) -> None:
 
         uint8 CHARACTER = '#' # comment on constant
         int8 a # comment on field
-        int8 a_prime
+        int8 aprime
         @assert 1 == 1 # toss one in for confusion
         void2 # comment on padding field
         saturated int64[<33] b
@@ -424,7 +422,7 @@ def _unittest_error(wrkspc: Workspace) -> None:
 
     def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> _serializable.CompositeType:
         return wrkspc.parse_new(rel_path, definition + "\n").read(
-            [], [], lambda *_: None, allow_unregulated
+            [], lambda *_: None, allow_unregulated
         )  # pragma: no branch
 
     with raises(_error.InvalidDefinitionError, match="(?i).*port ID.*"):
@@ -756,20 +754,20 @@ def _unittest_print(wrkspc: Workspace) -> None:
     wrkspc.parse_new(
         "ns/A.1.0.dsdl",
         "# line number 1\n" "# line number 2\n" "@print 2 + 2 == 4   # line number 3\n" "# line number 4\n" "@sealed\n",
-    ).read([], [], print_handler, False)
+    ).read([], print_handler, False)
 
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == "true"
 
-    wrkspc.parse_new("ns/B.1.0.dsdl", "@print false\n@sealed").read([], [], print_handler, False)
+    wrkspc.parse_new("ns/B.1.0.dsdl", "@print false\n@sealed").read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 1
     assert printed_items[1] == "false"
 
     wrkspc.parse_new(
         "ns/Offset.1.0.dsdl", "@print _offset_    # Not recorded\n" "uint8 a\n" "@print _offset_\n" "@extent 800\n"
-    ).read([], [], print_handler, False)
+    ).read([], print_handler, False)
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == "{8}"

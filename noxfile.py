@@ -10,7 +10,7 @@ from functools import partial
 import nox
 
 
-PYTHONS = ["3.8", "3.9", "3.10", "3.11", "3.12"]
+PYTHONS = ["3.8", "3.9", "3.10", "3.11"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -33,6 +33,7 @@ def clean(session):
         "*.log",
         "*.tmp",
         ".nox",
+        ".dsdl-test",
     ]
     for w in wildcards:
         for f in Path.cwd().glob(w):
@@ -48,9 +49,9 @@ def test(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install("-e", ".")
     session.install(
-        "pytest          ~= 8.1",
-        "pytest-randomly ~= 3.15",
-        "coverage        ~= 7.5",
+        "pytest          ~= 7.3",
+        "pytest-randomly ~= 3.12",
+        "coverage        ~= 7.2",
     )
     session.run("coverage", "run", "-m", "pytest")
     session.run("coverage", "report", "--fail-under=95")
@@ -60,7 +61,7 @@ def test(session):
         session.log(f"OPEN IN WEB BROWSER: file://{report_file}")
 
 
-@nox.session(python=["3.8"])
+@nox.session(python=["3.7"])
 def test_eol(session):
     """This is a minimal test session for those old Pythons that have EOLed."""
     session.install("-e", ".")
@@ -82,33 +83,30 @@ def pristine(session):
 
 @nox.session(python=PYTHONS, reuse_venv=True)
 def lint(session):
-    if is_oldest_python(session):
-        # we run mypy and pylint only on the oldest Python version to ensure maximum compatibility
-        session.install(
-            "mypy   ~= 1.10",
-            "types-parsimonious",
-            "pylint ~= 3.2",
-        )
-        session.run(
-            "mypy",
-            "--strict",
-            f"--config-file={ROOT_DIR / 'setup.cfg'}",
-            "pydsdl",
-            env={
-                "MYPYPATH": str(THIRD_PARTY_DIR),
-            },
-        )
-        session.run(
-            "pylint",
-            str(ROOT_DIR / "pydsdl"),
-            env={
-                "PYTHONPATH": str(THIRD_PARTY_DIR),
-            },
-        )
+    session.log("Using the newest supported Python: %s", is_latest_python(session))
+    session.install(
+        "mypy   ~= 1.2.0",
+        "pylint ~= 2.17.2",
+    )
+    session.run(
+        "mypy",
+        "--strict",
+        f"--config-file={ROOT_DIR / 'setup.cfg'}",
+        "pydsdl",
+        env={
+            "MYPYPATH": str(THIRD_PARTY_DIR),
+        },
+    )
+    session.run(
+        "pylint",
+        str(ROOT_DIR / "pydsdl"),
+        env={
+            "PYTHONPATH": str(THIRD_PARTY_DIR),
+        },
+    )
     if is_latest_python(session):
-        # we run black only on the newest Python version to ensure that the code is formatted with the latest version
-        session.install("black ~= 24.4")
-        session.run("black", "--check", f"{ROOT_DIR / 'pydsdl'}")
+        session.install("black ~= 23.3")
+        session.run("black", "--check", ".")
 
 
 @nox.session(reuse_venv=True)
@@ -123,6 +121,3 @@ def docs(session):
 
 def is_latest_python(session) -> bool:
     return PYTHONS[-1] in session.run("python", "-V", silent=True)
-
-def is_oldest_python(session) -> bool:
-    return PYTHONS[0] in session.run("python", "-V", silent=True)
