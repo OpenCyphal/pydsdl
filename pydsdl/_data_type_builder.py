@@ -198,7 +198,6 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         del name
         found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
         if not found:
-
             # Play Sherlock to help the user with mistakes like https://forum.opencyphal.org/t/904/2
             requested_ns = full_name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)[0]
             lookup_nss = set(x.root_namespace for x in self._lookup_definitions)
