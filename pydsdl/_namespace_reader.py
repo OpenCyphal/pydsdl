@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional, Set, cast
 
-from ._dsdl import DsdlFile, DsdlFileBuildable, PrintOutputHandler, SortedFileList
+from ._dsdl import DefinitionVisitor, DsdlFile, DsdlFileBuildable, PrintOutputHandler, SortedFileList
 from ._dsdl import file_sort as dsdl_file_sort
 from ._error import FrontendError, InternalError
 from ._serializable._composite import CompositeType
@@ -32,9 +32,10 @@ def _read_definitions(
 
     _pending_definitions: Set[DsdlFileBuildable] = set()
 
-    def callback(_: DsdlFile, dependent_type: DsdlFileBuildable) -> None:
-        if dependent_type.file_path not in file_pool:
-            _pending_definitions.add(dependent_type)
+    class _Callback(DefinitionVisitor):
+        def on_definition(self, _: DsdlFile, dependency_dsdl_file: DsdlFileBuildable) -> None:
+            if dependency_dsdl_file.file_path not in file_pool:
+                _pending_definitions.add(dependency_dsdl_file)
 
     def print_handler(file: Path, line: int, message: str) -> None:
         if print_output_handler is not None:
@@ -61,7 +62,7 @@ def _read_definitions(
         try:
             new_composite_type = target_definition.read(
                 lookup_definitions,
-                [callback],
+                [_Callback()],
                 functools.partial(print_handler, target_definition.file_path),
                 allow_unregulated_fixed_port_id,
             )

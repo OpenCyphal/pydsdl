@@ -61,11 +61,3 @@ def temp_dsdl_factory(request: pytest.FixtureRequest) -> Any:  # pylint: disable
     request.addfinalizer(f._test_path_finalizer)  # pylint: disable=protected-access
     return f
 
-
-
-@pytest.fixture
-def public_types() -> Path:
-    """
-    Path to the public regulated data types directory used for tests.
-    """
-    return Path(".dsdl-test") / "uavcan"

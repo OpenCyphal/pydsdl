@@ -13,7 +13,7 @@ from typing import Callable, DefaultDict, Dict, Iterable, List, Optional, Set, T
 from . import _dsdl_definition, _error, _serializable
 from ._dsdl import DsdlFileBuildable, PrintOutputHandler, SortedFileList
 from ._dsdl import file_sort as dsdl_file_sort
-from ._dsdl import normalize_paths_argument_to_list, normalize_paths_argument_to_set
+from ._dsdl import normalize_paths_argument_to_list
 from ._namespace_reader import DsdlDefinitions, read_definitions
 
 _logger = logging.getLogger(__name__)
@@ -72,12 +72,6 @@ class ExtentConsistencyError(_error.InvalidDefinitionError):
 class SealingConsistencyError(_error.InvalidDefinitionError):
     """
     Different sealing status under the same major version.
-    """
-
-
-class DsdlPathInferenceError(_error.InvalidDefinitionError):
-    """
-    Raised when the namespace, type, fixed port ID, or version cannot be inferred from a file path.
     """
 
 
@@ -220,7 +214,7 @@ def read_files(
     # Normalize paths and remove duplicates. Resolve symlinks to avoid ambiguities.
     target_dsdl_definitions = _construct_dsdl_definitions_from_files(
         normalize_paths_argument_to_list(dsdl_files),
-        normalize_paths_argument_to_set(root_namespace_directories_or_names),
+        normalize_paths_argument_to_list(root_namespace_directories_or_names),
     )
     if len(target_dsdl_definitions) == 0:
         _logger.info("No DSDL files found in the specified directories")
@@ -307,10 +301,10 @@ def _construct_lookup_directories_path_list(
     """
     Intermediate transformation and validation of inputs into a list of lookup directories as paths.
 
-    :param root_namespace_directory: The path of the root namespace directory that will be read.
+    :param root_namespace_directories: The path of the root namespace directory that will be read.
         For example, ``dsdl/uavcan`` to read the ``uavcan`` namespace.
 
-    :param lookup_directories: List of other namespace directories containing data type definitions that are
+    :param lookup_directories_path_list: List of other namespace directories containing data type definitions that are
         referred to from the target root namespace. For example, if you are reading a vendor-specific namespace,
         the list of lookup directories should always include a path to the standard root namespace ``uavcan``,
         otherwise the types defined in the vendor-specific namespace won't be able to use data types from the
@@ -349,20 +343,20 @@ def _construct_lookup_directories_path_list(
 
 def _construct_dsdl_definitions_from_files(
     dsdl_files: List[Path],
-    valid_roots: Set[Path],
+    valid_roots: List[Path],
 ) -> SortedFileList[DsdlFileBuildable]:
     """ """
     output = set()  # type:  Set[DsdlFileBuildable]
     for fp in dsdl_files:
-        root_namespace_path = _infer_path_to_root(fp, valid_roots)
-        if fp.suffix == DSDL_FILE_SUFFIX_LEGACY:
+        resolved_fp = fp.resolve(strict=False)
+        if resolved_fp.suffix == DSDL_FILE_SUFFIX_LEGACY:
             _logger.warning(
                 "File uses deprecated extension %r, please rename to use %r: %s",
                 DSDL_FILE_SUFFIX_LEGACY,
                 DSDL_FILE_SUFFIX,
-                fp,
+                resolved_fp,
             )
-        output.add(_dsdl_definition.DSDLDefinition(fp, root_namespace_path))
+        output.add(_dsdl_definition.DSDLDefinition.from_first_in(resolved_fp, list(valid_roots)))
 
     return dsdl_file_sort(output)
 
@@ -597,46 +591,6 @@ def _ensure_no_namespace_name_collisions_or_nested_root_namespaces(
             )
 
 
-def _infer_path_to_root(dsdl_path: Path, valid_dsdl_roots_or_path_to_root: Set[Path]) -> Path:
-    """
-    Infer the path to the namespace root of a DSDL file path.
-    :param dsdl_path: The path to the alleged DSDL file.
-    :param valid_dsdl_roots_or_path_to_root: The set of valid root names or paths under which the type must reside.
-    :return The path to the root namespace directory.
-    :raises DsdlPathInferenceError: If the namespace root cannot be inferred from the provided information.
-    """
-    if valid_dsdl_roots_or_path_to_root is None:
-        raise _error.InternalError("valid_dsdl_roots_or_path_to_root was None")
-
-    if dsdl_path.is_absolute() and len(valid_dsdl_roots_or_path_to_root) == 0:
-        raise DsdlPathInferenceError(
-            f"dsdl_path ({dsdl_path}) is absolute and the provided valid root names are empty. The DSDL root of "
-            "an absolute path cannot be inferred without this information.",
-        )
-
-    if len(valid_dsdl_roots_or_path_to_root) == 0:
-        # if we have no valid roots we can only infer the root of the path. We require the path to be relative
-        # to avoid accidental inferences given that dsdl file trees starting from a filesystem root are rare.
-        return Path(dsdl_path.parts[0])
-
-    # The strongest inference is when the path is relative to a known root.
-    for path_to_root in valid_dsdl_roots_or_path_to_root:
-        try:
-            _ = dsdl_path.relative_to(path_to_root)
-        except ValueError:
-            continue
-        return path_to_root
-
-    # A weaker, but valid inference is when the path is a child of a known root folder name.
-    root_parts = {x.parts[-1] for x in valid_dsdl_roots_or_path_to_root if len(x.parts) == 1}
-    parts = list(dsdl_path.parent.parts)
-    for i, part in list(enumerate(parts)):
-        if part in root_parts:
-            return Path().joinpath(*parts[: i + 1])
-            # +1 to include the root folder
-    raise DsdlPathInferenceError(f"No valid root found in path {str(dsdl_path)}")
-
-
 # +--[ UNIT TESTS ]---------------------------------------------------------------------------------------------------+
 
 
@@ -846,87 +800,6 @@ def _unittest_issue_71() -> None:  # https://github.com/OpenCyphal/pydsdl/issues
         (real / "Msg.0.1.dsdl").write_text("@sealed")
         assert len(read_namespace(real, [real, link])) == 1
         assert len(read_namespace(link, [real, link])) == 1
-
-
-def _unittest_type_from_path_inference() -> None:
-    from pytest import raises as expect_raises
-
-    # To determine the namespace do
-
-    dsdl_file = Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl")
-    path_to_root = _infer_path_to_root(dsdl_file, {Path("/repo/uavcan")})
-    namespace_parts = dsdl_file.parent.relative_to(path_to_root.parent).parts
-
-    assert path_to_root == Path("/repo/uavcan")
-    assert namespace_parts == ("uavcan", "foo", "bar")
-
-    # The simplest inference made is when relative dsdl paths are provided with no additional information. In this
-    # case the method assumes that the relative path is the correct and complete namespace of the type:
-
-    # relative path
-    root = _infer_path_to_root(Path("uavcan/foo/bar/435.baz.1.0.dsdl"), set())
-    assert root == Path("uavcan")
-
-    # The root namespace is not inferred in an absolute path without additional data:
-
-    with expect_raises(DsdlPathInferenceError):
-        _ = _infer_path_to_root(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), set())
-
-    with expect_raises(_error.InternalError):
-        _ = _infer_path_to_root(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), None)  # type: ignore
-
-    # If an absolute path is provided along with a path-to-root "hint" then the former must be relative to the
-    # latter:
-
-    # dsdl file path is not contained within the root path
-    with expect_raises(DsdlPathInferenceError):
-        _ = _infer_path_to_root(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), {Path("/not-a-repo")})
-
-    root = _infer_path_to_root(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), {Path("/repo/uavcan")})
-    assert root == Path("/repo/uavcan")
-
-    # The priority is given to paths that are relative to the root when both simple root names and paths are provided:
-    root = _infer_path_to_root(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), {Path("foo"), Path("/repo/uavcan")})
-    assert root == Path("/repo/uavcan")
-
-    root = _infer_path_to_root(Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), {Path("foo"), Path("repo/uavcan")})
-    assert root == Path("repo/uavcan")
-
-    # Finally, the method will infer the root namespace from simple folder names if no additional information is
-    # provided:
-
-    valid_roots = {Path("uavcan"), Path("cyphal")}
-
-    # absolute dsdl path using valid roots
-    root = _infer_path_to_root(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), valid_roots)
-    assert root == Path("/repo/uavcan")
-
-    # relative dsdl path using valid roots
-    root = _infer_path_to_root(Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), valid_roots)
-    assert root == Path("repo/uavcan")
-
-    # absolute dsdl path using valid roots but an invalid file path
-    with expect_raises(DsdlPathInferenceError):
-        _ = _infer_path_to_root(Path("/repo/crap/foo/bar/435.baz.1.0.dsdl"), valid_roots)
-
-    # relative dsdl path using valid roots but an invalid file path
-    with expect_raises(DsdlPathInferenceError):
-        _ = _infer_path_to_root(Path("repo/crap/foo/bar/435.baz.1.0.dsdl"), valid_roots)
-
-    # relative dsdl path with invalid root fragments
-    invalid_root_fragments = {Path("cyphal", "acme")}
-    with expect_raises(DsdlPathInferenceError):
-        _ = _infer_path_to_root(Path("repo/crap/foo/bar/435.baz.1.0.dsdl"), invalid_root_fragments)
-
-    # In this example, foo/bar might look like a valid root path but it is not relative to repo/uavcan/foo/bar and is
-    # not considered after relative path inference has failed because it is not a simple root name.
-    root = _infer_path_to_root(Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), {Path("foo/bar"), Path("foo")})
-    assert root == Path("repo/uavcan/foo")
-
-    # when foo/bar is placed within the proper, relative path it is considered as a valid root and is preferred over
-    # the simple root name "foo":
-    root = _infer_path_to_root(Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), {Path("repo/uavcan/foo/bar"), Path("foo")})
-    assert root == Path("repo/uavcan/foo/bar")
 
 
 def _unittest_type_read_files_example(temp_dsdl_factory) -> None:  # type: ignore

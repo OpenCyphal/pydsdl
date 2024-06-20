@@ -4,7 +4,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Optional, Set, Tuple, TypeVar, Union
+from typing import Any, Callable, Iterable, List, Optional, Tuple, TypeVar, Union
 
 from ._serializable import CompositeType, Version
 
@@ -129,18 +129,27 @@ class DsdlFileBuildable(DsdlFile):
         raise NotImplementedError()
 
 
-DefinitionVisitor = Callable[[DsdlFile, DsdlFileBuildable], None]
-"""
-Called by the parser after if finds a dependent type but before it parses a file in a lookup namespace.
-:param DsdlFile argument 0: The target DSDL file that has dependencies the parser is searching for.
-:param DsdlFile argument 1: The dependency of target_dsdl_file file the parser is about to parse.
-"""
+class DefinitionVisitor(ABC):
+    """
+    A visitor that is notified about discovered dependencies.
+    """
+
+    @abstractmethod
+    def on_definition(self, target_dsdl_file: DsdlFile, dependency_dsdl_file: DsdlFileBuildable) -> None:
+        """
+        Called by the parser after if finds a dependent type but before it parses a file in a lookup namespace.
+        :param target_dsdl_file: The target DSDL file that has dependencies the parser is searching for.
+        :param dependency_dsdl_file: The dependency of target_dsdl_file file the parser is about to parse.
+        """
+        raise NotImplementedError()
+
 
 SortedFileT = TypeVar("SortedFileT", DsdlFile, DsdlFileBuildable, CompositeType)
 SortedFileList = List[SortedFileT]
 """A list of DSDL files sorted by name, newest version first."""
 
-def get_definition_ordering_rank(d: DSDLFile | CompositeType) -> tuple[str, int, int]:
+
+def get_definition_ordering_rank(d: Union[DsdlFile, CompositeType]) -> Tuple[str, int, int]:
     return d.full_name, -d.version.major, -d.version.minor
 
 
@@ -148,7 +157,7 @@ def file_sort(file_list: Iterable[SortedFileT]) -> SortedFileList[SortedFileT]:
     """
     Sorts a list of DSDL files lexicographically by name, newest version first.
     """
-    return list(sorted(file_list, key=FileSortKey))
+    return list(sorted(file_list, key=get_definition_ordering_rank))
 
 
 def normalize_paths_argument_to_list(
@@ -167,16 +176,16 @@ def normalize_paths_argument_to_list(
             raise TypeError(f"Invalid type: {type(arg)}")
         return Path(arg) if isinstance(arg, str) else arg
 
-    return [_convert(arg) for arg in namespaces_or_namespace]
+    value_set = set()
 
+    def _filter_duplicate_paths(arg: Any) -> bool:
+        if arg in value_set:
+            return False
+        value_set.add(arg)
+        return True
 
-def normalize_paths_argument_to_set(
-    namespaces_or_namespace: Union[None, Path, str, Iterable[Union[Path, str]]],
-) -> Set[Path]:
-    """
-    Normalizes the input argument to a set of paths.
-    """
-    return set(normalize_paths_argument_to_list(namespaces_or_namespace))
+    converted = [_convert(arg) for arg in namespaces_or_namespace]
+    return list(filter(_filter_duplicate_paths, converted))
 
 
 # +-[UNIT TESTS]------------------------------------------------------------------------------------------------------+
@@ -210,6 +219,10 @@ def _unittest_dsdl_normalize_paths_argument_to_list() -> None:
     result = normalize_paths_argument_to_list(["path/to/namespace1", Path("path/to/namespace2")])
     assert result == [Path("path/to/namespace1"), Path("path/to/namespace2")]
 
+    # Test de-duplication
+    result = normalize_paths_argument_to_list(["path/to/namespace1", "path/to/namespace1"])
+    assert result == [Path("path/to/namespace1")]
+
     # Test with invalid argument type
     with assert_raises(TypeError):
         normalize_paths_argument_to_list(42)  # type: ignore
@@ -217,40 +230,3 @@ def _unittest_dsdl_normalize_paths_argument_to_list() -> None:
     # Test with invalid argument type
     with assert_raises(TypeError):
         normalize_paths_argument_to_list([42])  # type: ignore
-
-
-def _unittest_dsdl_normalize_paths_argument_to_set() -> None:
-
-    from pytest import raises as assert_raises
-
-    # Test with None argument
-    result = normalize_paths_argument_to_set(None)
-    assert result == set()
-
-    # Test with single string argument
-    result = normalize_paths_argument_to_set("path/to/namespace")
-    assert result == {Path("path/to/namespace")}
-
-    # Test with single Path argument
-    result = normalize_paths_argument_to_set(Path("path/to/namespace"))
-    assert result == {Path("path/to/namespace")}
-
-    # Test with list of strings argument
-    result = normalize_paths_argument_to_set(["path/to/namespace1", "path/to/namespace2"])
-    assert result == {Path("path/to/namespace1"), Path("path/to/namespace2")}
-
-    # Test with list of Path arguments
-    result = normalize_paths_argument_to_set([Path("path/to/namespace1"), Path("path/to/namespace2")])
-    assert result == {Path("path/to/namespace1"), Path("path/to/namespace2")}
-
-    # Test with mixed list of strings and Path arguments
-    result = normalize_paths_argument_to_set(["path/to/namespace1", Path("path/to/namespace2")])
-    assert result == {Path("path/to/namespace1"), Path("path/to/namespace2")}
-
-    # Test with invalid argument type
-    with assert_raises(TypeError):
-        normalize_paths_argument_to_set(42)  # type: ignore
-
-    # Test with invalid argument type
-    with assert_raises(TypeError):
-        normalize_paths_argument_to_set([42])  # type: ignore

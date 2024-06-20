@@ -222,7 +222,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
 
         target_definition = found[0]
         for visitor in self._definition_visitors:
-            visitor(self._definition, target_definition)
+            visitor.on_definition(self._definition, target_definition)
 
         assert isinstance(target_definition, DsdlFileBuildable)
         assert target_definition.full_name == full_name
