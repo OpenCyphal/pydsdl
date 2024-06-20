@@ -82,29 +82,28 @@ def pristine(session):
 
 @nox.session(python=PYTHONS, reuse_venv=True)
 def lint(session):
-    if is_oldest_python(session):
-        # we run mypy and pylint only on the oldest Python version to ensure maximum compatibility
-        session.install(
-            "mypy   ~= 1.10",
-            "types-parsimonious",
-            "pylint ~= 3.2",
-        )
-        session.run(
-            "mypy",
-            "--strict",
-            f"--config-file={ROOT_DIR / 'setup.cfg'}",
-            "pydsdl",
-            env={
-                "MYPYPATH": str(THIRD_PARTY_DIR),
-            },
-        )
-        session.run(
-            "pylint",
-            str(ROOT_DIR / "pydsdl"),
-            env={
-                "PYTHONPATH": str(THIRD_PARTY_DIR),
-            },
-        )
+    # we run mypy and pylint only on the oldest Python version to ensure maximum compatibility
+    session.install(
+        "mypy   ~= 1.10",
+        "types-parsimonious",
+        "pylint ~= 3.2",
+    )
+    session.run(
+        "mypy",
+        "--strict",
+        f"--config-file={ROOT_DIR / 'setup.cfg'}",
+        "pydsdl",
+        env={
+            "MYPYPATH": str(THIRD_PARTY_DIR),
+        },
+    )
+    session.run(
+        "pylint",
+        str(ROOT_DIR / "pydsdl"),
+        env={
+            "PYTHONPATH": str(THIRD_PARTY_DIR),
+        },
+    )
     if is_latest_python(session):
         # we run black only on the newest Python version to ensure that the code is formatted with the latest version
         session.install("black ~= 24.4")
