@@ -140,11 +140,8 @@ SortedFileT = TypeVar("SortedFileT", DsdlFile, DsdlFileBuildable, CompositeType)
 SortedFileList = List[SortedFileT]
 """A list of DSDL files sorted by name, newest version first."""
 
-FileSortKey: Callable[[SortedFileT], Tuple[str, int, int]] = lambda d: (
-    d.full_name,
-    -d.version.major,
-    -d.version.minor,
-)
+def get_definition_ordering_rank(d: DSDLFile | CompositeType) -> tuple[str, int, int]:
+    return d.full_name, -d.version.major, -d.version.minor
 
 
 def file_sort(file_list: Iterable[SortedFileT]) -> SortedFileList[SortedFileT]:
