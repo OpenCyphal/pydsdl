@@ -342,11 +342,11 @@ def _unittest_type_from_path_inference() -> None:
 
     # pylint: disable=protected-access
 
-    dsdl_file = Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl")
-    path_to_root = DSDLDefinition._infer_path_to_root_from_first_found(dsdl_file, [Path("/repo/uavcan")])
+    dsdl_file = Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve()
+    path_to_root = DSDLDefinition._infer_path_to_root_from_first_found(dsdl_file, [Path("/repo/uavcan").resolve()])
     namespace_parts = dsdl_file.parent.relative_to(path_to_root.parent).parts
 
-    assert path_to_root == Path("/repo/uavcan")
+    assert path_to_root == Path("/repo/uavcan").resolve()
     assert namespace_parts == ("uavcan", "foo", "bar")
 
     # The simplest inference made is when relative dsdl paths are provided with no additional information. In this
@@ -359,11 +359,13 @@ def _unittest_type_from_path_inference() -> None:
     # The root namespace is not inferred in an absolute path without additional data:
 
     with expect_raises(DsdlPathInferenceError):
-        _ = DSDLDefinition._infer_path_to_root_from_first_found(Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [])
+        _ = DSDLDefinition._infer_path_to_root_from_first_found(
+            Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), []
+        )
 
     with expect_raises(ValueError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
-            Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), None  # type: ignore
+            Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), None  # type: ignore
         )
 
     # If an absolute path is provided along with a path-to-root "hint" then the former must be relative to the
@@ -372,19 +374,19 @@ def _unittest_type_from_path_inference() -> None:
     # dsdl file path is not contained within the root path
     with expect_raises(DsdlPathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
-            Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("/not-a-repo")]
+            Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), [Path("/not-a-repo").resolve()]
         )
 
     root = DSDLDefinition._infer_path_to_root_from_first_found(
-        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("/repo/uavcan")]
+        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), [Path("/repo/uavcan").resolve()]
     )
-    assert root == Path("/repo/uavcan")
+    assert root == Path("/repo/uavcan").resolve()
 
     # The priority is given to paths that are relative to the root when both simple root names and paths are provided:
     root = DSDLDefinition._infer_path_to_root_from_first_found(
-        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("foo"), Path("/repo/uavcan")]
+        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), [Path("foo"), Path("/repo/uavcan").resolve()]
     )
-    assert root == Path("/repo/uavcan")
+    assert root == Path("/repo/uavcan").resolve()
 
     root = DSDLDefinition._infer_path_to_root_from_first_found(
         Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("foo"), Path("repo/uavcan")]
@@ -398,9 +400,9 @@ def _unittest_type_from_path_inference() -> None:
 
     # absolute dsdl path using valid roots
     root = DSDLDefinition._infer_path_to_root_from_first_found(
-        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), valid_roots
+        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), valid_roots
     )
-    assert root == Path("/repo/uavcan")
+    assert root == Path("/repo/uavcan").resolve()
 
     # relative dsdl path using valid roots
     root = DSDLDefinition._infer_path_to_root_from_first_found(
@@ -411,7 +413,7 @@ def _unittest_type_from_path_inference() -> None:
     # absolute dsdl path using valid roots but an invalid file path
     with expect_raises(DsdlPathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
-            Path("/repo/crap/foo/bar/435.baz.1.0.dsdl"), valid_roots
+            Path("/repo/crap/foo/bar/435.baz.1.0.dsdl").resolve(), valid_roots
         )
 
     # relative dsdl path using valid roots but an invalid file path
@@ -442,9 +444,10 @@ def _unittest_type_from_path_inference() -> None:
     # Sometimes the root paths have crap in them and need to be resolved:
 
     root = DSDLDefinition._infer_path_to_root_from_first_found(
-        Path("/path/to/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("/path/to/repo/uavcan/../uavcan")]
+        Path("/path/to/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(),
+        [Path("/path/to/repo/uavcan/../uavcan").resolve()],
     )
-    assert root == Path("/path/to/repo/uavcan")
+    assert root == Path("/path/to/repo/uavcan").resolve()
 
     # Let's ensure ordering here
 
@@ -456,6 +459,6 @@ def _unittest_type_from_path_inference() -> None:
 
 def _unittest_from_first_in() -> None:
     dsdl_def = DSDLDefinition.from_first_in(
-        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("/repo/uavcan/foo/..")]
+        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), [Path("/repo/uavcan/foo/..").resolve()]
     )
     assert dsdl_def.full_name == "uavcan.foo.bar.baz"
