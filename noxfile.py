@@ -122,6 +122,3 @@ def docs(session):
 
 def is_latest_python(session) -> bool:
     return PYTHONS[-1] in session.run("python", "-V", silent=True)
-
-def is_oldest_python(session) -> bool:
-    return PYTHONS[0] in session.run("python", "-V", silent=True)
