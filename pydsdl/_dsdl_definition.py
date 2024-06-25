@@ -10,7 +10,7 @@ from typing import Callable, Iterable, List, Optional, Type
 from . import _parser
 from ._data_type_builder import DataTypeBuilder
 from ._dsdl import DefinitionVisitor, DsdlFileBuildable
-from ._error import FrontendError, InternalError, InvalidDefinitionError
+from ._error import FrontendError, InternalError, InvalidDefinitionError, UndefinedDataTypeError
 from ._serializable import CompositeType, Version
 
 _logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class FileNameFormatError(InvalidDefinitionError):
         super().__init__(text=text, path=Path(path))
 
 
-class DsdlPathInferenceError(InvalidDefinitionError):
+class DsdlPathInferenceError(UndefinedDataTypeError):
     """
     Raised when the namespace, type, fixed port ID, or version cannot be inferred from a file path.
     """

@@ -275,7 +275,7 @@ def _complete_read_function(
         ", ".join(set(sorted(map(lambda t: t.root_namespace, lookup_dsdl_definitions)))),
     )
 
-    # This is the biggie. All the rest of the wranging is just to get to this point. This will take the
+    # This is the biggie. All the rest of the wrangling is just to get to this point. This will take the
     # most time and memory.
     definitions = read_definitions(
         target_dsdl_definitions, lookup_dsdl_definitions, print_output_handler, allow_unregulated_fixed_port_id
