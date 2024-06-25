@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Type
 
 from . import _parser
-from ._data_type_builder import DataTypeBuilder
+from ._data_type_builder import DataTypeBuilder, UndefinedDataTypeError
 from ._dsdl import DefinitionVisitor, DsdlFileBuildable
-from ._error import FrontendError, InternalError, InvalidDefinitionError, UndefinedDataTypeError
+from ._error import FrontendError, InternalError, InvalidDefinitionError
 from ._serializable import CompositeType, Version
 
 _logger = logging.getLogger(__name__)
