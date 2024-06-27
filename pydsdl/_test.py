@@ -10,6 +10,7 @@ from typing import Union, Tuple, Optional, Sequence, Type, Iterable
 from pathlib import Path
 from textwrap import dedent
 import pytest  # This is only safe to import in test files!
+from . import _data_type_builder
 from . import _expression
 from . import _error
 from . import _parser
@@ -24,6 +25,8 @@ __all__ = []  # type: ignore
 class Workspace:
     def __init__(self) -> None:
         self._tmp_dir = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
+        name = self._tmp_dir.name.upper()
+        self._is_case_sensitive = not Path(name).exists()
 
     @property
     def directory(self) -> Path:
@@ -56,6 +59,10 @@ class Workspace:
         """
         for g in self.directory.glob(rel_path_glob):
             g.unlink()
+
+    @property
+    def is_fs_case_sensitive(self) -> bool:
+        return self._is_case_sensitive
 
 
 def parse_definition(
@@ -1095,7 +1102,7 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
         """
         ),
     )
-    with raises(_namespace.DataTypeNameCollisionError):
+    with raises(_namespace.FixedPortIDCollisionError):
         _namespace.read_namespace(
             wrkspc.directory / "zubax",
             [
@@ -1104,30 +1111,27 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
         )
 
     # Do again to test single lookup-directory override
-    with raises(_namespace.DataTypeNameCollisionError):
+    with raises(_namespace.FixedPortIDCollisionError):
         _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
 
-    try:
-        (wrkspc.directory / "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
-        wrkspc.new(
-            "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
-            dedent(
-                """
-            @extent 1024
-            ---
-            @extent 1024
+    (wrkspc.directory / "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
+    wrkspc.new(
+        "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
+        dedent(
             """
-            ),
-        )
-        with raises(_namespace.DataTypeNameCollisionError, match=".*letter case.*"):
-            _namespace.read_namespace(
+        @extent 1024
+        ---
+        @extent 1024
+        """
+        ),
+    )
+    with raises(_namespace.FixedPortIDCollisionError):
+        _namespace.read_namespace(
+            wrkspc.directory / "zubax",
+            [
                 wrkspc.directory / "zubax",
-                [
-                    wrkspc.directory / "zubax",
-                ],
-            )
-    except _namespace.FixedPortIDCollisionError:  # pragma: no cover
-        pass  # We're running on a platform where paths are not case-sensitive.
+            ],
+        )
 
     # Test namespace can intersect with type name
     (wrkspc.directory / "zubax/COLLIDING/300.Iceberg.30.0.dsdl").unlink()
@@ -1158,6 +1162,52 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     parsed = _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
     assert "zubax.noncolliding.iceberg.Ice" in [x.full_name for x in parsed]
     assert "zubax.noncolliding.Iceb" in [x.full_name for x in parsed]
+
+
+def _unittest_collision_on_case_sensitive_filesystem(wrkspc: Workspace) -> None:
+    from pytest import raises
+
+    if not wrkspc.is_fs_case_sensitive:  # pragma: no cover
+        pytest.skip("This test is only relevant on case-sensitive filesystems.")
+
+    # Empty namespace.
+    assert [] == _namespace.read_namespace(wrkspc.directory)
+
+    wrkspc.new(
+        "atlantic/ships/Titanic.1.0.dsdl",
+        dedent(
+            """
+        greenland.colliding.IceBerg.1.0[<=2] bergs
+        @sealed
+        """
+        ),
+    )
+
+    wrkspc.new(
+        "greenland/colliding/IceBerg.1.0.dsdl",
+        dedent(
+            """
+        @sealed
+        """
+        ),
+    )
+
+    wrkspc.new(
+        "greenland/COLLIDING/IceBerg.1.0.dsdl",
+        dedent(
+            """
+        @sealed
+        """
+        ),
+    )
+
+    with raises(_data_type_builder.DataTypeNameCollisionError, match=".*letter case.*"):
+        _namespace.read_namespace(
+            wrkspc.directory / "atlantic",
+            [
+                wrkspc.directory / "greenland",
+            ],
+        )
 
 
 def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
@@ -1264,8 +1314,7 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
         ),
     )
 
-    with raises(_namespace.DataTypeCollisionError):
-        _namespace.read_namespace((wrkspc.directory / "ns"), [])
+    _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
     wrkspc.drop("ns/Spartans.30.2.dsdl")
 
@@ -1613,7 +1662,7 @@ def _unittest_issue94(wrkspc: Workspace) -> None:
     wrkspc.new("outer_b/ns/Foo.1.0.dsdl", "@sealed")  # Conflict!
     wrkspc.new("outer_a/ns/Bar.1.0.dsdl", "Foo.1.0 fo\n@sealed")  # Which Foo.1.0?
 
-    with raises(_namespace.DataTypeCollisionError):
+    with raises(_data_type_builder.DataTypeCollisionError):
         _namespace.read_namespace(
             wrkspc.directory / "outer_a" / "ns",
             [wrkspc.directory / "outer_b" / "ns"],

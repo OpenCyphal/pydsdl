@@ -26,18 +26,6 @@ class RootNamespaceNameCollisionError(_error.InvalidDefinitionError):
     """
 
 
-class DataTypeCollisionError(_error.InvalidDefinitionError):
-    """
-    Raised when there are conflicting data type definitions.
-    """
-
-
-class DataTypeNameCollisionError(DataTypeCollisionError):
-    """
-    Raised when there are conflicting data type names.
-    """
-
-
 class NestedRootNamespaceError(_error.InvalidDefinitionError):
     """
     Nested root namespaces are not allowed. This exception is thrown when this rule is violated.
@@ -259,9 +247,6 @@ def _complete_read_function(
 
     lookup_dsdl_definitions = _construct_dsdl_definitions_from_namespaces(lookup_directories_path_list)
 
-    # Check for collisions against the lookup definitions also.
-    _ensure_no_collisions(target_dsdl_definitions, lookup_dsdl_definitions)
-
     _logger.debug("Lookup DSDL definitions are listed below:")
     for x in lookup_dsdl_definitions:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
@@ -383,44 +368,6 @@ def _construct_dsdl_definitions_from_namespaces(
             )
 
     return dsdl_file_sort([_dsdl_definition.DSDLDefinition(*p) for p in source_file_paths])
-
-
-def _ensure_no_collisions(
-    target_definitions: List[DsdlFileBuildable],
-    lookup_definitions: List[DsdlFileBuildable],
-) -> None:
-    for tg in target_definitions:
-        tg_full_namespace_period = tg.full_namespace.lower() + "."
-        tg_full_name_period = tg.full_name.lower() + "."
-        for lu in lookup_definitions:
-            lu_full_namespace_period = lu.full_namespace.lower() + "."
-            lu_full_name_period = lu.full_name.lower() + "."
-            # This is to allow the following messages to coexist happily:
-            #   zubax/non_colliding/iceberg/Ice.0.1.dsdl
-            #   zubax/non_colliding/IceB.0.1.dsdl
-            # The following is still not allowed:
-            #   zubax/colliding/iceberg/Ice.0.1.dsdl
-            #   zubax/colliding/Iceberg.0.1.dsdl
-            if tg.full_name != lu.full_name and tg.full_name.lower() == lu.full_name.lower():
-                raise DataTypeNameCollisionError(
-                    "Full name of this definition differs from %s only by letter case, "
-                    "which is not permitted" % lu.file_path,
-                    path=tg.file_path,
-                )
-            if (tg_full_namespace_period).startswith(lu_full_name_period):
-                raise DataTypeNameCollisionError(
-                    "The namespace of this type conflicts with %s" % lu.file_path, path=tg.file_path
-                )
-            if (lu_full_namespace_period).startswith(tg_full_name_period):
-                raise DataTypeNameCollisionError(
-                    "This type conflicts with the namespace of %s" % lu.file_path, path=tg.file_path
-                )
-            if (
-                tg_full_name_period == lu_full_name_period
-                and tg.version == lu.version
-                and not tg.file_path.samefile(lu.file_path)
-            ):  # https://github.com/OpenCyphal/pydsdl/issues/94
-                raise DataTypeCollisionError("This type is redefined in %s" % lu.file_path, path=tg.file_path)
 
 
 def _ensure_no_fixed_port_id_collisions(types: List[_serializable.CompositeType]) -> None:
@@ -864,20 +811,22 @@ def _unittest_read_files_empty_args() -> None:
     assert len(transitive) == 0
 
 
-def _unittest_ensure_no_collisions(temp_dsdl_factory) -> None:  # type: ignore
-    from pytest import raises as expect_raises
-
-    # gratuitous coverage of the collision check where other tests don't cover some edge cases
+def _unittest_ensure_no_namespace_name_collisions_or_nested_root_namespaces() -> None:
+    """gratuitous coverage of the collision check where other tests don't cover some edge cases."""
     _ensure_no_namespace_name_collisions_or_nested_root_namespaces([], False)
 
-    with expect_raises(DataTypeNameCollisionError):
-        _ensure_no_collisions(
-            [_dsdl_definition.DSDLDefinition(Path("a/b.1.0.dsdl"), Path("a"))],
-            [_dsdl_definition.DSDLDefinition(Path("a/B.1.0.dsdl"), Path("a"))],
-        )
 
-    with expect_raises(DataTypeNameCollisionError):
-        _ensure_no_collisions(
-            [_dsdl_definition.DSDLDefinition(Path("a/b/c.1.0.dsdl"), Path("a"))],
-            [_dsdl_definition.DSDLDefinition(Path("a/b.1.0.dsdl"), Path("a"))],
-        )
+def _unittest_issue_104(temp_dsdl_factory) -> None:  # type: ignore
+    """demonstrate that removing _ensure_no_collisions is okay"""
+
+    thing_1_0 = Path("a/b/thing.1.0.dsdl")
+    thing_type_1_0 = Path("a/b/thing/thingtype.1.0.dsdl")
+
+    file_at_root = temp_dsdl_factory.new_file(Path("a/Nothing.1.0.dsdl"), "@sealed\n")
+    thing_file = temp_dsdl_factory.new_file(thing_1_0, "@sealed\na.b.thing.thingtype.1.0 thing\n")
+    _ = temp_dsdl_factory.new_file(thing_type_1_0, "@sealed\n")
+
+    direct, transitive = read_files(thing_file, file_at_root.parent, file_at_root.parent)
+
+    assert len(direct) == 1
+    assert len(transitive) == 1
