@@ -53,12 +53,12 @@ jobs:
       - name: Run build and test
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
-            nox --non-interactive --error-on-missing-interpreters --session test test_eol pristine lint --python ${{ matrix.python }}
+            nox --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
             nox --non-interactive --session docs
           elif [ "$RUNNER_OS" == "Windows" ]; then
-            nox --forcecolor --non-interactive --error-on-missing-interpreters --session test test_eol pristine lint
+            nox --forcecolor --non-interactive --error-on-missing-interpreters --session test pristine lint
           elif [ "$RUNNER_OS" == "macOS" ]; then
-            nox --non-interactive --error-on-missing-interpreters --session test test_eol pristine lint --python ${{ matrix.python }}
+            nox --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
           else
             echo "${{ runner.os }} not supported"
             exit 1
