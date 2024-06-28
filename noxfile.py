@@ -99,7 +99,7 @@ def lint(session):
     if is_latest_python(session):
         # we run black only on the newest Python version to ensure that the code is formatted with the latest version
         session.install("black ~= 24.4")
-        session.run("black", "--check", f"{ROOT_DIR / 'pydsdl'}")
+        session.run("black", "--check", ".")
 
 
 @nox.session(reuse_venv=True)
