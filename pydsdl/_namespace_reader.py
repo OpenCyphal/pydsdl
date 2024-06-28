@@ -2,13 +2,14 @@
 # Copyright Amazon.com Inc. or its affiliates.
 # SPDX-License-Identifier: MIT
 
-
+from __future__ import annotations
 import functools
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Set, cast
+from typing import cast
 
-from ._dsdl import DefinitionVisitor, DsdlFile, DsdlFileBuildable, PrintOutputHandler, SortedFileList
+from ._dsdl import DefinitionVisitor, DSDLFile, ReadableDSDLFile, PrintOutputHandler, SortedFileList
 from ._dsdl import file_sort as dsdl_file_sort
 from ._error import FrontendError, InternalError
 from ._serializable._composite import CompositeType
@@ -16,13 +17,13 @@ from ._serializable._composite import CompositeType
 
 # pylint: disable=too-many-arguments
 def _read_definitions(
-    target_definitions: SortedFileList[DsdlFileBuildable],
-    lookup_definitions: SortedFileList[DsdlFileBuildable],
-    print_output_handler: Optional[PrintOutputHandler],
+    target_definitions: SortedFileList[ReadableDSDLFile],
+    lookup_definitions: SortedFileList[ReadableDSDLFile],
+    print_output_handler: PrintOutputHandler | None,
     allow_unregulated_fixed_port_id: bool,
-    direct: Set[CompositeType],
-    transitive: Set[CompositeType],
-    file_pool: Dict[Path, DsdlFileBuildable],
+    direct: set[CompositeType],
+    transitive: set[CompositeType],
+    file_pool: dict[Path, ReadableDSDLFile],
     level: int,
 ) -> None:
     """
@@ -30,10 +31,10 @@ def _read_definitions(
     (recursive method with a lot of arguments. See read_definitions for documentation)
     """
 
-    _pending_definitions: Set[DsdlFileBuildable] = set()
+    _pending_definitions: set[ReadableDSDLFile] = set()
 
     class _Callback(DefinitionVisitor):
-        def on_definition(self, _: DsdlFile, dependency_dsdl_file: DsdlFileBuildable) -> None:
+        def on_definition(self, _: DSDLFile, dependency_dsdl_file: ReadableDSDLFile) -> None:
             if dependency_dsdl_file.file_path not in file_pool:
                 _pending_definitions.add(dependency_dsdl_file)
 
@@ -43,8 +44,8 @@ def _read_definitions(
 
     for target_definition in target_definitions:
 
-        if not isinstance(target_definition, DsdlFileBuildable):
-            raise TypeError("Expected DsdlFileBuildable, got: " + type(target_definition).__name__)
+        if not isinstance(target_definition, ReadableDSDLFile):
+            raise TypeError("Expected ReadableDSDLFile, got: " + type(target_definition).__name__)
 
         target_definition = file_pool.setdefault(target_definition.file_path, target_definition)
         # make sure we are working with the same object for a given file path
@@ -98,21 +99,24 @@ def _read_definitions(
 
 # +---[FILE: PUBLIC]--------------------------------------------------------------------------------------------------+
 
-DsdlDefinitions = NamedTuple(
-    "DsdlDefinitions", [("direct", SortedFileList[CompositeType]), ("transitive", SortedFileList[CompositeType])]
-)
-"""
-Common DSDL definition set including the direct dependencies requested and the transitive dependencies found. The former
-and latter sets will be disjoint.
-"""
+
+@dataclass(frozen=True)
+class DSDLDefinitions:
+    """
+    Common DSDL definition set including the direct dependencies requested and the transitive dependencies found.
+    The former and latter sets will be disjoint.
+    """
+
+    direct: SortedFileList[CompositeType]
+    transitive: SortedFileList[CompositeType]
 
 
 def read_definitions(
-    target_definitions: SortedFileList[DsdlFileBuildable],
-    lookup_definitions: SortedFileList[DsdlFileBuildable],
-    print_output_handler: Optional[PrintOutputHandler],
+    target_definitions: SortedFileList[ReadableDSDLFile],
+    lookup_definitions: SortedFileList[ReadableDSDLFile],
+    print_output_handler: PrintOutputHandler | None,
     allow_unregulated_fixed_port_id: bool,
-) -> DsdlDefinitions:
+) -> DSDLDefinitions:
     """
     Given a set of DSDL files, this method reads the text and invokes the parser for each and for any files found in the
     lookup set where these are used by the target set.
@@ -125,9 +129,9 @@ def read_definitions(
     :raises InvalidDefinitionError: If a dependency is missing.
     :raises InternalError: If an unexpected error occurs.
     """
-    _direct: Set[CompositeType] = set()
-    _transitive: Set[CompositeType] = set()
-    _file_pool: Dict[Path, DsdlFileBuildable] = {}
+    _direct: set[CompositeType] = set()
+    _transitive: set[CompositeType] = set()
+    _file_pool: dict[Path, ReadableDSDLFile] = {}
     _read_definitions(
         target_definitions,
         lookup_definitions,
@@ -138,7 +142,7 @@ def read_definitions(
         _file_pool,
         0,
     )
-    return DsdlDefinitions(
+    return DSDLDefinitions(
         dsdl_file_sort(_direct),
         dsdl_file_sort(_transitive),
     )
@@ -151,8 +155,8 @@ def _unittest_namespace_reader_read_definitions(temp_dsdl_factory) -> None:  # t
     from . import _dsdl_definition
 
     target = temp_dsdl_factory.new_file(Path("root", "ns", "Target.1.1.dsdl"), "@sealed")
-    target_definitions = [cast(DsdlFileBuildable, _dsdl_definition.DSDLDefinition(target, target.parent))]
-    lookup_definitions: List[DsdlFileBuildable] = []
+    target_definitions = [cast(ReadableDSDLFile, _dsdl_definition.DSDLDefinition(target, target.parent))]
+    lookup_definitions: list[ReadableDSDLFile] = []
 
     read_definitions(target_definitions, lookup_definitions, None, True)
 
@@ -203,8 +207,8 @@ def _unittest_namespace_reader_read_definitions_multiple_no_load(temp_dsdl_facto
         # never be read thus it will not be an error that it does not exist.
     ]
 
-    target_definitions = [cast(DsdlFileBuildable, _dsdl_definition.DSDLDefinition(t, t.parent)) for t in targets]
-    lookup_definitions = [cast(DsdlFileBuildable, _dsdl_definition.DSDLDefinition(a, a.parent)) for a in dependencies]
+    target_definitions = [cast(ReadableDSDLFile, _dsdl_definition.DSDLDefinition(t, t.parent)) for t in targets]
+    lookup_definitions = [cast(ReadableDSDLFile, _dsdl_definition.DSDLDefinition(a, a.parent)) for a in dependencies]
     _ = read_definitions(
         target_definitions,
         lookup_definitions,
@@ -377,10 +381,7 @@ def _unittest_namespace_reader_read_defs_target_dont_allow_unregulated(temp_dsdl
 
 
 def _unittest_namespace_reader_type_error() -> None:
-
     from pytest import raises as assert_raises
-
-    from . import _dsdl_definition
 
     with assert_raises(TypeError):
         read_definitions(

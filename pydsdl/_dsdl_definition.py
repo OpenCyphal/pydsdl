@@ -2,14 +2,15 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Type
+from typing import Callable, Iterable, Type
 
 from . import _parser
 from ._data_type_builder import DataTypeBuilder, UndefinedDataTypeError
-from ._dsdl import DefinitionVisitor, DsdlFileBuildable
+from ._dsdl import DefinitionVisitor, ReadableDSDLFile
 from ._error import FrontendError, InternalError, InvalidDefinitionError
 from ._serializable import CompositeType, Version
 
@@ -25,17 +26,17 @@ class FileNameFormatError(InvalidDefinitionError):
         super().__init__(text=text, path=Path(path))
 
 
-class DsdlPathInferenceError(UndefinedDataTypeError):
+class PathInferenceError(UndefinedDataTypeError):
     """
     Raised when the namespace, type, fixed port ID, or version cannot be inferred from a file path.
     """
 
-    def __init__(self, text: str, dsdl_path: Path, valid_dsdl_roots: List[Path]):
+    def __init__(self, text: str, dsdl_path: Path, valid_dsdl_roots: list[Path]):
         super().__init__(text=text, path=Path(dsdl_path))
         self.valid_dsdl_roots = valid_dsdl_roots[:] if valid_dsdl_roots is not None else None
 
 
-class DSDLDefinition(DsdlFileBuildable):
+class DSDLDefinition(ReadableDSDLFile):
     """
     A DSDL type definition source abstracts the filesystem level details away, presenting a higher-level
     interface that operates solely on the level of type names, namespaces, fixed identifiers, and so on.
@@ -47,7 +48,7 @@ class DSDLDefinition(DsdlFileBuildable):
     """
 
     @classmethod
-    def _infer_path_to_root_from_first_found(cls, dsdl_path: Path, valid_dsdl_roots: List[Path]) -> Path:
+    def _infer_path_to_root_from_first_found(cls, dsdl_path: Path, valid_dsdl_roots: list[Path]) -> Path:
         """
         See `from_first_in` for documentation on this logic.
         :return The path to the root namespace directory.
@@ -56,7 +57,7 @@ class DSDLDefinition(DsdlFileBuildable):
             raise ValueError("valid_dsdl_roots was None")
 
         if dsdl_path.is_absolute() and len(valid_dsdl_roots) == 0:
-            raise DsdlPathInferenceError(
+            raise PathInferenceError(
                 f"dsdl_path ({dsdl_path}) is absolute and the provided valid root names are empty. The DSDL root of "
                 "an absolute path cannot be inferred without this information.",
                 dsdl_path,
@@ -95,10 +96,10 @@ class DSDLDefinition(DsdlFileBuildable):
             if part in root_parts:
                 return Path().joinpath(*parts[: i + 1])
                 # +1 to include the root folder
-        raise DsdlPathInferenceError(f"No valid root found in path {str(dsdl_path)}", dsdl_path, valid_dsdl_roots)
+        raise PathInferenceError(f"No valid root found in path {str(dsdl_path)}", dsdl_path, valid_dsdl_roots)
 
     @classmethod
-    def from_first_in(cls: Type["DSDLDefinition"], dsdl_path: Path, valid_dsdl_roots: List[Path]) -> "DSDLDefinition":
+    def from_first_in(cls: Type["DSDLDefinition"], dsdl_path: Path, valid_dsdl_roots: list[Path]) -> "DSDLDefinition":
         """
         Creates a DSDLDefinition object by inferring the path to the namespace root of a DSDL file given a set
         of valid roots. The logic used prefers an instance of dsdl_path found to exist under a valid root but
@@ -110,7 +111,7 @@ class DSDLDefinition(DsdlFileBuildable):
                                     This argument is accepted as a list for ordering but no de-duplication is performed
                                     as the caller is expected to provide a correct set of paths.
         :return A new DSDLDefinition object
-        :raises DsdlPathInferenceError: If the namespace root cannot be inferred from the provided information.
+        :raises PathInferenceError: If the namespace root cannot be inferred from the provided information.
         """
         return cls(dsdl_path, cls._infer_path_to_root_from_first_found(dsdl_path, valid_dsdl_roots))
 
@@ -121,7 +122,7 @@ class DSDLDefinition(DsdlFileBuildable):
         del file_path
         self._root_namespace_path = Path(root_namespace_path)
         del root_namespace_path
-        self._text: Optional[str] = None
+        self._text: str | None = None
 
         # Checking the sanity of the root directory path - can't contain separators
         if CompositeType.NAME_COMPONENT_SEPARATOR in self._root_namespace_path.name:
@@ -131,7 +132,7 @@ class DSDLDefinition(DsdlFileBuildable):
 
         # Parsing the basename, e.g., 434.GetTransportStatistics.0.1.dsdl
         basename_components = relative_path.name.split(".")[:-1]
-        str_fixed_port_id: Optional[str] = None
+        str_fixed_port_id: str | None = None
         if len(basename_components) == 4:
             str_fixed_port_id, short_name, str_major_version, str_minor_version = basename_components
         elif len(basename_components) == 3:
@@ -142,7 +143,7 @@ class DSDLDefinition(DsdlFileBuildable):
         # Parsing the fixed port ID, if specified; None if not
         if str_fixed_port_id is not None:
             try:
-                self._fixed_port_id: Optional[int] = int(str_fixed_port_id)
+                self._fixed_port_id: int | None = int(str_fixed_port_id)
             except ValueError:
                 raise FileNameFormatError(
                     "Not a valid fixed port-ID: %s. "
@@ -167,14 +168,14 @@ class DSDLDefinition(DsdlFileBuildable):
                 raise FileNameFormatError(f"Invalid name for namespace component: {nc!r}", path=self._file_path)
         self._name: str = CompositeType.NAME_COMPONENT_SEPARATOR.join(namespace_components + [str(short_name)])
 
-        self._cached_type: Optional[CompositeType] = None
+        self._cached_type: CompositeType | None = None
 
     # +-----------------------------------------------------------------------+
-    # | DsdlFileBuildable :: INTERFACE                                        |
+    # | ReadableDSDLFile :: INTERFACE                                        |
     # +-----------------------------------------------------------------------+
     def read(
         self,
-        lookup_definitions: Iterable[DsdlFileBuildable],
+        lookup_definitions: Iterable[ReadableDSDLFile],
         definition_visitors: Iterable[DefinitionVisitor],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
@@ -228,10 +229,10 @@ class DSDLDefinition(DsdlFileBuildable):
             raise InternalError(culprit=ex, path=self.file_path) from ex
 
     # +-----------------------------------------------------------------------+
-    # | DsdlFile :: INTERFACE                                                 |
+    # | DSDLFile :: INTERFACE                                                 |
     # +-----------------------------------------------------------------------+
     @property
-    def composite_type(self) -> Optional[CompositeType]:
+    def composite_type(self) -> CompositeType | None:
         return self._cached_type
 
     @property
@@ -239,7 +240,7 @@ class DSDLDefinition(DsdlFileBuildable):
         return self._name
 
     @property
-    def name_components(self) -> List[str]:
+    def name_components(self) -> list[str]:
         return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
 
     @property
@@ -266,7 +267,7 @@ class DSDLDefinition(DsdlFileBuildable):
         return self._version
 
     @property
-    def fixed_port_id(self) -> Optional[int]:
+    def fixed_port_id(self) -> int | None:
         return self._fixed_port_id
 
     @property
@@ -317,7 +318,7 @@ def _unittest_dsdl_definition_read_non_existent() -> None:
     target_definition = DSDLDefinition(target, target.parent)
 
     def print_output(line_number: int, text: str) -> None:  # pragma: no cover
-        pass
+        _ = line_number, text
 
     with expect_raises(InvalidDefinitionError):
         target_definition.read([], [], print_output, True)
@@ -330,7 +331,7 @@ def _unittest_dsdl_definition_read_text(temp_dsdl_factory) -> None:  # type: ign
     target_file_path = Path(target_root / "Target.1.1.dsdl")
     dsdl_file = temp_dsdl_factory.new_file(target_root / target_file_path, "@sealed")
     with expect_raises(ValueError):
-        target_definition = DSDLDefinition(dsdl_file, target_root)
+        _target_definition = DSDLDefinition(dsdl_file, target_root)
         # we test first that we can't create the object until we have a target_root that contains the dsdl_file
 
     target_definition = DSDLDefinition(dsdl_file, dsdl_file.parent.parent)
@@ -358,7 +359,7 @@ def _unittest_type_from_path_inference() -> None:
 
     # The root namespace is not inferred in an absolute path without additional data:
 
-    with expect_raises(DsdlPathInferenceError):
+    with expect_raises(PathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
             Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), []
         )
@@ -372,7 +373,7 @@ def _unittest_type_from_path_inference() -> None:
     # latter:
 
     # dsdl file path is not contained within the root path
-    with expect_raises(DsdlPathInferenceError):
+    with expect_raises(PathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
             Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), [Path("/not-a-repo").resolve()]
         )
@@ -411,18 +412,18 @@ def _unittest_type_from_path_inference() -> None:
     assert root == Path("repo/uavcan")
 
     # absolute dsdl path using valid roots but an invalid file path
-    with expect_raises(DsdlPathInferenceError):
+    with expect_raises(PathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
             Path("/repo/crap/foo/bar/435.baz.1.0.dsdl").resolve(), valid_roots
         )
 
     # relative dsdl path using valid roots but an invalid file path
-    with expect_raises(DsdlPathInferenceError):
+    with expect_raises(PathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(Path("repo/crap/foo/bar/435.baz.1.0.dsdl"), valid_roots)
 
     # relative dsdl path with invalid root fragments
     invalid_root_fragments = [Path("cyphal", "acme")]
-    with expect_raises(DsdlPathInferenceError):
+    with expect_raises(PathInferenceError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
             Path("repo/crap/foo/bar/435.baz.1.0.dsdl"), invalid_root_fragments
         )

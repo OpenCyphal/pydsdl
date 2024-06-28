@@ -2,13 +2,14 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+from __future__ import annotations
 import typing
 import logging
 import itertools
 import functools
 import fractions
 from pathlib import Path
-from typing import cast, List, Tuple
+from typing import cast, Tuple
 import parsimonious
 from parsimonious.nodes import Node as _Node
 from . import _error
@@ -160,6 +161,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return tuple(visited_children) or node
 
     def visit_line(self, node: _Node, children: _Children) -> None:
+        _ = children
         if len(node.text) == 0:
             # Line is empty, flush comment
             self._flush_comment()
@@ -174,6 +176,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
     def visit_comment(self, node: _Node, children: _Children) -> None:
+        _ = children
         assert isinstance(node.text, str)
         self._comment += "\n" if self._comment != "" else ""
         self._comment += node.text[2:] if node.text.startswith("# ") else node.text[1:]
@@ -302,7 +305,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
     def visit_expression_list(self, _n: _Node, children: _Children) -> Tuple[_expression.Any, ...]:
-        out = []  # type: List[_expression.Any]
+        out = []  # type: list[_expression.Any]
         if children:
             children = children[0]
             assert len(children) == 2

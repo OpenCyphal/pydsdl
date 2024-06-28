@@ -5,8 +5,9 @@
 # cSpell: words iceb
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with,redefined-outer-name
 
+from __future__ import annotations
 import tempfile
-from typing import Union, Tuple, Optional, Sequence, Type, Iterable
+from typing import Sequence, Type, Iterable
 from pathlib import Path
 from textwrap import dedent
 import pytest  # This is only safe to import in test files!
@@ -29,7 +30,7 @@ class Workspace:
     def directory(self) -> Path:
         return Path(self._tmp_dir.name)
 
-    def new(self, rel_path: Union[str, Path], text: str) -> None:
+    def new(self, rel_path: str | Path, text: str) -> None:
         """
         Simply creates a new DSDL source file with the given contents at the specified path inside the workspace.
         """
@@ -38,7 +39,7 @@ class Workspace:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf8")
 
-    def parse_new(self, rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefinition:
+    def parse_new(self, rel_path: str | Path, text: str) -> _dsdl_definition.DSDLDefinition:
         """
         Creates a new DSDL source file with the given contents at the specified path inside the workspace,
         then parses it and returns the resulting definition object.
@@ -747,7 +748,7 @@ def _unittest_error(wrkspc: Workspace) -> None:
 
 
 def _unittest_print(wrkspc: Workspace) -> None:
-    printed_items = None  # type: Optional[Tuple[int, str]]
+    printed_items = None  # type: tuple[int, str] | None
 
     def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
@@ -991,7 +992,7 @@ def _unittest_assert(wrkspc: Workspace) -> None:
 def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     from pytest import raises
 
-    print_output = None  # type: Optional[Tuple[str, int, str]]
+    print_output = None  # type: tuple[str, int, str] | None
 
     def print_handler(d: Path, line: int, text: str) -> None:
         nonlocal print_output

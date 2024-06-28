@@ -2,9 +2,10 @@
 # Copyright Amazon.com Inc. or its affiliates.
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Iterable, TypeVar, List, Tuple
 
 from ._serializable import CompositeType, Version
 
@@ -12,7 +13,7 @@ PrintOutputHandler = Callable[[Path, int, str], None]
 """Invoked when the frontend encounters a print directive or needs to output a generic diagnostic."""
 
 
-class DsdlFile(ABC):
+class DSDLFile(ABC):
     """
     Interface for DSDL files. This interface is used by the parser to abstract DSDL type details inferred from the
     filesystem. Where properties are duplicated between the composite type and this file the composite type is to be
@@ -22,7 +23,7 @@ class DsdlFile(ABC):
 
     @property
     @abstractmethod
-    def composite_type(self) -> Optional[CompositeType]:
+    def composite_type(self) -> CompositeType | None:
         """The composite type that was read from the DSDL file or None if the type has not been parsed yet."""
         raise NotImplementedError()
 
@@ -71,7 +72,7 @@ class DsdlFile(ABC):
 
     @property
     @abstractmethod
-    def fixed_port_id(self) -> Optional[int]:
+    def fixed_port_id(self) -> int | None:
         """Either the fixed port ID as integer, or None if not defined for this type."""
         raise NotImplementedError()
 
@@ -98,7 +99,7 @@ class DsdlFile(ABC):
         raise NotImplementedError()
 
 
-class DsdlFileBuildable(DsdlFile):
+class ReadableDSDLFile(DSDLFile):
     """
     A DSDL file that can construct a composite type from its contents.
     """
@@ -106,7 +107,7 @@ class DsdlFileBuildable(DsdlFile):
     @abstractmethod
     def read(
         self,
-        lookup_definitions: Iterable["DsdlFileBuildable"],
+        lookup_definitions: Iterable["ReadableDSDLFile"],
         definition_visitors: Iterable["DefinitionVisitor"],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
@@ -135,7 +136,7 @@ class DefinitionVisitor(ABC):
     """
 
     @abstractmethod
-    def on_definition(self, target_dsdl_file: DsdlFile, dependency_dsdl_file: DsdlFileBuildable) -> None:
+    def on_definition(self, target_dsdl_file: DSDLFile, dependency_dsdl_file: ReadableDSDLFile) -> None:
         """
         Called by the parser after if finds a dependent type but before it parses a file in a lookup namespace.
         :param target_dsdl_file: The target DSDL file that has dependencies the parser is searching for.
@@ -144,12 +145,12 @@ class DefinitionVisitor(ABC):
         raise NotImplementedError()
 
 
-SortedFileT = TypeVar("SortedFileT", DsdlFile, DsdlFileBuildable, CompositeType)
+SortedFileT = TypeVar("SortedFileT", DSDLFile, ReadableDSDLFile, CompositeType)
 SortedFileList = List[SortedFileT]
 """A list of DSDL files sorted by name, newest version first."""
 
 
-def get_definition_ordering_rank(d: Union[DsdlFile, CompositeType]) -> Tuple[str, int, int]:
+def get_definition_ordering_rank(d: DSDLFile | CompositeType) -> Tuple[str, int, int]:
     return d.full_name, -d.version.major, -d.version.minor
 
 
@@ -160,9 +161,7 @@ def file_sort(file_list: Iterable[SortedFileT]) -> SortedFileList[SortedFileT]:
     return list(sorted(file_list, key=get_definition_ordering_rank))
 
 
-def normalize_paths_argument_to_list(
-    namespaces_or_namespace: Union[None, Path, str, Iterable[Union[Path, str]]],
-) -> List[Path]:
+def normalize_paths_argument_to_list(namespaces_or_namespace: None | Path | str | Iterable[Path | str]) -> List[Path]:
     """
     Normalizes the input argument to a list of paths.
     """

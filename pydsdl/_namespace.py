@@ -4,17 +4,18 @@
 
 # pylint: disable=logging-not-lazy
 
+from __future__ import annotations
 import collections
 import logging
 from itertools import product, repeat
 from pathlib import Path
-from typing import Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Callable, DefaultDict, Iterable
 
 from . import _dsdl_definition, _error, _serializable
-from ._dsdl import DsdlFileBuildable, PrintOutputHandler, SortedFileList
+from ._dsdl import ReadableDSDLFile, PrintOutputHandler, SortedFileList
 from ._dsdl import file_sort as dsdl_file_sort
 from ._dsdl import normalize_paths_argument_to_list
-from ._namespace_reader import DsdlDefinitions, read_definitions
+from ._namespace_reader import DSDLDefinitions, read_definitions
 
 _logger = logging.getLogger(__name__)
 
@@ -79,12 +80,12 @@ class SealingConsistencyError(_error.InvalidDefinitionError):
 
 
 def read_namespace(
-    root_namespace_directory: Union[Path, str],
-    lookup_directories: Union[None, Path, str, Iterable[Union[Path, str]]] = None,
-    print_output_handler: Optional[PrintOutputHandler] = None,
+    root_namespace_directory: Path | str,
+    lookup_directories: None | Path | str | Iterable[Path | str] = None,
+    print_output_handler: PrintOutputHandler | None = None,
     allow_unregulated_fixed_port_id: bool = False,
     allow_root_namespace_name_collision: bool = True,
-) -> List[_serializable.CompositeType]:
+) -> list[_serializable.CompositeType]:
     """
     This function is a main entry point for the library.
     It reads all DSDL definitions from the specified root namespace directory and produces the annotated AST.
@@ -147,12 +148,12 @@ def read_namespace(
 
 # pylint: disable=too-many-arguments
 def read_files(
-    dsdl_files: Union[None, Path, str, Iterable[Union[Path, str]]],
-    root_namespace_directories_or_names: Union[None, Path, str, Iterable[Union[Path, str]]],
-    lookup_directories: Union[None, Path, str, Iterable[Union[Path, str]]] = None,
-    print_output_handler: Optional[PrintOutputHandler] = None,
+    dsdl_files: None | Path | str | Iterable[Path | str],
+    root_namespace_directories_or_names: None | Path | str | Iterable[Path | str],
+    lookup_directories: None | Path | str | Iterable[Path | str] = None,
+    print_output_handler: PrintOutputHandler | None = None,
     allow_unregulated_fixed_port_id: bool = False,
-) -> Tuple[List[_serializable.CompositeType], List[_serializable.CompositeType]]:
+) -> tuple[list[_serializable.CompositeType], list[_serializable.CompositeType]]:
     """
     This function is a main entry point for the library.
     It reads all DSDL definitions from the specified ``dsdl_files`` and produces the annotated AST for these types and
@@ -251,11 +252,11 @@ _LOG_LIST_ITEM_PREFIX = " " * 4
 
 
 def _complete_read_function(
-    target_dsdl_definitions: SortedFileList[DsdlFileBuildable],
-    lookup_directories_path_list: List[Path],
-    print_output_handler: Optional[PrintOutputHandler],
+    target_dsdl_definitions: SortedFileList[ReadableDSDLFile],
+    lookup_directories_path_list: list[Path],
+    print_output_handler: PrintOutputHandler | None,
     allow_unregulated_fixed_port_id: bool,
-) -> DsdlDefinitions:
+) -> DSDLDefinitions:
 
     lookup_dsdl_definitions = _construct_dsdl_definitions_from_namespaces(lookup_directories_path_list)
 
@@ -295,9 +296,9 @@ def _complete_read_function(
 
 def _construct_lookup_directories_path_list(
     root_namespace_directories: Iterable[Path],
-    lookup_directories_path_list: List[Path],
+    lookup_directories_path_list: list[Path],
     allow_root_namespace_name_collision: bool,
-) -> List[Path]:
+) -> list[Path]:
     """
     Intermediate transformation and validation of inputs into a list of lookup directories as paths.
 
@@ -342,11 +343,11 @@ def _construct_lookup_directories_path_list(
 
 
 def _construct_dsdl_definitions_from_files(
-    dsdl_files: List[Path],
-    valid_roots: List[Path],
-) -> SortedFileList[DsdlFileBuildable]:
+    dsdl_files: list[Path],
+    valid_roots: list[Path],
+) -> SortedFileList[ReadableDSDLFile]:
     """ """
-    output = set()  # type:  Set[DsdlFileBuildable]
+    output = set()  # type:  set[ReadableDSDLFile]
     for fp in dsdl_files:
         resolved_fp = fp.resolve(strict=False)
         if resolved_fp.suffix == DSDL_FILE_SUFFIX_LEGACY:
@@ -362,14 +363,14 @@ def _construct_dsdl_definitions_from_files(
 
 
 def _construct_dsdl_definitions_from_namespaces(
-    root_namespace_paths: List[Path],
-) -> SortedFileList[DsdlFileBuildable]:
+    root_namespace_paths: list[Path],
+) -> SortedFileList[ReadableDSDLFile]:
     """
     Accepts a directory path, returns a sorted list of abstract DSDL file representations. Those can be read later.
     The definitions are sorted by name lexicographically, then by major version (greatest version first),
     then by minor version (same ordering as the major version).
     """
-    source_file_paths: Set[Tuple[Path, Path]] = set()  # index of all file paths already found
+    source_file_paths: set[tuple[Path, Path]] = set()  # index of all file paths already found
     for root_namespace_path in root_namespace_paths:
         for p in root_namespace_path.rglob(DSDL_FILE_GLOB):
             source_file_paths.add((p, root_namespace_path))
@@ -386,8 +387,8 @@ def _construct_dsdl_definitions_from_namespaces(
 
 
 def _ensure_no_collisions(
-    target_definitions: List[DsdlFileBuildable],
-    lookup_definitions: List[DsdlFileBuildable],
+    target_definitions: list[ReadableDSDLFile],
+    lookup_definitions: list[ReadableDSDLFile],
 ) -> None:
     for tg in target_definitions:
         tg_full_namespace_period = tg.full_namespace.lower() + "."
@@ -423,7 +424,7 @@ def _ensure_no_collisions(
                 raise DataTypeCollisionError("This type is redefined in %s" % lu.file_path, path=tg.file_path)
 
 
-def _ensure_no_fixed_port_id_collisions(types: List[_serializable.CompositeType]) -> None:
+def _ensure_no_fixed_port_id_collisions(types: list[_serializable.CompositeType]) -> None:
     for a in types:
         for b in types:
             different_names = a.full_name != b.full_name
@@ -444,13 +445,13 @@ def _ensure_no_fixed_port_id_collisions(types: List[_serializable.CompositeType]
                         )
 
 
-def _ensure_minor_version_compatibility(types: List[_serializable.CompositeType]) -> None:
-    by_name = collections.defaultdict(list)  # type: DefaultDict[str, List[_serializable.CompositeType]]
+def _ensure_minor_version_compatibility(types: list[_serializable.CompositeType]) -> None:
+    by_name = collections.defaultdict(list)  # type: DefaultDict[str, list[_serializable.CompositeType]]
     for t in types:
         by_name[t.full_name].append(t)
 
     for definitions in by_name.values():
-        by_major = collections.defaultdict(list)  # type: DefaultDict[int, List[_serializable.CompositeType]]
+        by_major = collections.defaultdict(list)  # type: DefaultDict[int, list[_serializable.CompositeType]]
         for t in definitions:
             by_major[t.version.major].append(t)
 
@@ -557,7 +558,7 @@ def _ensure_no_namespace_name_collisions_or_nested_root_namespaces(
 ) -> None:
     directories = {x.resolve() for x in directories}  # normalize the case in case-insensitive filesystems
 
-    def check_each(path_tuple_with_result: Tuple[Tuple[Path, Path], List[int]]) -> bool:
+    def check_each(path_tuple_with_result: tuple[tuple[Path, Path], list[int]]) -> bool:
         path_tuple = path_tuple_with_result[0]
         if not path_tuple[0].samefile(path_tuple[1]):
             if not allow_name_collisions and path_tuple[0].name.lower() == path_tuple[1].name.lower():
@@ -610,7 +611,7 @@ def _unittest_dsdl_definition_constructor() -> None:
 
         dsdl_defs = _construct_dsdl_definitions_from_namespaces([root])
         print(dsdl_defs)
-        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, DsdlFileBuildable]
+        lut = {x.full_name: x for x in dsdl_defs}  # type: dict[str, ReadableDSDLFile]
         assert len(lut) == 3
 
         assert str(lut["foo.Qwerty"]) == repr(lut["foo.Qwerty"])
@@ -720,7 +721,7 @@ def _unittest_dsdl_definition_constructor_legacy() -> None:
         (root / "123.Qwerty.123.234.uavcan").write_text("# TEST A")
         dsdl_defs = _construct_dsdl_definitions_from_namespaces([root])
         print(dsdl_defs)
-        lut = {x.full_name: x for x in dsdl_defs}  # type: Dict[str, DsdlFileBuildable]
+        lut = {x.full_name: x for x in dsdl_defs}  # type: dict[str, ReadableDSDLFile]
         assert len(lut) == 1
         t = lut["foo.Qwerty"]
         assert t.file_path == root / "123.Qwerty.123.234.uavcan"
@@ -743,7 +744,7 @@ def _unittest_common_usage_errors() -> None:
         root_ns_dir = di / "foo"
         root_ns_dir.mkdir()
 
-        reports = []  # type: List[str]
+        reports = []  # type: list[str]
 
         _ensure_no_common_usage_errors([root_ns_dir], [], reports.append)
         assert not reports
@@ -803,7 +804,6 @@ def _unittest_issue_71() -> None:  # https://github.com/OpenCyphal/pydsdl/issues
 
 
 def _unittest_type_read_files_example(temp_dsdl_factory) -> None:  # type: ignore
-
     # let's test the comments for the read function
     dsdl_files = [
         Path("workspace/project/types/animals/felines/Tabby.1.0.uavcan"),  # keep .uavcan to cover the warning
@@ -866,6 +866,8 @@ def _unittest_read_files_empty_args() -> None:
 
 def _unittest_ensure_no_collisions(temp_dsdl_factory) -> None:  # type: ignore
     from pytest import raises as expect_raises
+
+    _ = temp_dsdl_factory
 
     # gratuitous coverage of the collision check where other tests don't cover some edge cases
     _ensure_no_namespace_name_collisions_or_nested_root_namespaces([], False)
