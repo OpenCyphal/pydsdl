@@ -60,14 +60,6 @@ def test(session):
         session.log(f"OPEN IN WEB BROWSER: file://{report_file}")
 
 
-@nox.session(python=["3.8"])
-def test_eol(session):
-    """This is a minimal test session for those old Pythons that have EOLed."""
-    session.install("-e", ".")
-    session.install("pytest")
-    session.run("pytest")
-
-
 @nox.session(python=PYTHONS)
 def pristine(session):
     """
@@ -82,7 +74,7 @@ def pristine(session):
 
 @nox.session(python=PYTHONS, reuse_venv=True)
 def lint(session):
-    # we run mypy and pylint only on the oldest Python version to ensure maximum compatibility
+    session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install(
         "mypy   ~= 1.10",
         "types-parsimonious",
