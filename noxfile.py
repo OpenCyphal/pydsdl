@@ -10,7 +10,7 @@ from functools import partial
 import nox
 
 
-PYTHONS = ["3.8", "3.9", "3.10", "3.11"]
+PYTHONS = ["3.8", "3.9", "3.10", "3.11", "3.12"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -33,7 +33,6 @@ def clean(session):
         "*.log",
         "*.tmp",
         ".nox",
-        ".dsdl-test",
     ]
     for w in wildcards:
         for f in Path.cwd().glob(w):
@@ -49,9 +48,9 @@ def test(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install("-e", ".")
     session.install(
-        "pytest          ~= 7.3",
-        "pytest-randomly ~= 3.12",
-        "coverage        ~= 7.2",
+        "pytest          ~= 8.1",
+        "pytest-randomly ~= 3.15",
+        "coverage        ~= 7.5",
     )
     session.run("coverage", "run", "-m", "pytest")
     session.run("coverage", "report", "--fail-under=95")
@@ -59,14 +58,6 @@ def test(session):
         session.run("coverage", "html")
         report_file = Path.cwd().resolve() / "htmlcov" / "index.html"
         session.log(f"OPEN IN WEB BROWSER: file://{report_file}")
-
-
-@nox.session(python=["3.7"])
-def test_eol(session):
-    """This is a minimal test session for those old Pythons that have EOLed."""
-    session.install("-e", ".")
-    session.install("pytest")
-    session.run("pytest")
 
 
 @nox.session(python=PYTHONS)
@@ -85,8 +76,9 @@ def pristine(session):
 def lint(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))
     session.install(
-        "mypy   ~= 1.2.0",
-        "pylint ~= 2.17.2",
+        "mypy   ~= 1.10",
+        "types-parsimonious",
+        "pylint ~= 3.2",
     )
     session.run(
         "mypy",
@@ -105,7 +97,8 @@ def lint(session):
         },
     )
     if is_latest_python(session):
-        session.install("black ~= 23.3")
+        # we run black only on the newest Python version to ensure that the code is formatted with the latest version
+        session.install("black ~= 24.4")
         session.run("black", "--check", ".")
 
 

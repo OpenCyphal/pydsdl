@@ -2,16 +2,13 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
-from typing import Optional, Callable, Iterable
+from __future__ import annotations
 import logging
 from pathlib import Path
-from . import _serializable
-from . import _expression
-from . import _error
-from . import _dsdl_definition
-from . import _parser
-from . import _data_schema_builder
-from . import _port_id_ranges
+from typing import Callable, Iterable
+
+from . import _data_schema_builder, _error, _expression, _parser, _port_id_ranges, _serializable
+from ._dsdl import DefinitionVisitor, ReadableDSDLFile
 
 
 class AssertionCheckFailureError(_error.InvalidDefinitionError):
@@ -42,21 +39,25 @@ _logger = logging.getLogger(__name__)
 
 
 class DataTypeBuilder(_parser.StatementStreamProcessor):
+
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
-        definition: _dsdl_definition.DSDLDefinition,
-        lookup_definitions: Iterable[_dsdl_definition.DSDLDefinition],
+        definition: ReadableDSDLFile,
+        lookup_definitions: Iterable[ReadableDSDLFile],
+        definition_visitors: Iterable[DefinitionVisitor],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
     ):
         self._definition = definition
         self._lookup_definitions = list(lookup_definitions)
+        self._definition_visitors = definition_visitors
         self._print_output_handler = print_output_handler
         self._allow_unregulated_fixed_port_id = allow_unregulated_fixed_port_id
-        self._element_callback = None  # type: Optional[Callable[[str], None]]
+        self._element_callback = None  # type: Callable[[str], None] | None
 
-        assert isinstance(self._definition, _dsdl_definition.DSDLDefinition)
-        assert all(map(lambda x: isinstance(x, _dsdl_definition.DSDLDefinition), lookup_definitions))
+        assert isinstance(self._definition, ReadableDSDLFile)
+        assert all(map(lambda x: isinstance(x, ReadableDSDLFile), lookup_definitions))
         assert callable(self._print_output_handler)
         assert isinstance(self._allow_unregulated_fixed_port_id, bool)
 
@@ -65,7 +66,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
 
     def finalize(self) -> _serializable.CompositeType:
         if len(self._structs) == 1:  # Structure type
-            (builder,) = self._structs  # type: _data_schema_builder.DataSchemaBuilder,
+            (builder,) = self._structs
             out = self._make_composite(
                 builder=builder,
                 name=self._definition.full_name,
@@ -148,7 +149,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         )
 
     def on_directive(
-        self, line_number: int, directive_name: str, associated_expression_value: Optional[_expression.Any]
+        self, line_number: int, directive_name: str, associated_expression_value: _expression.Any | None
     ) -> None:
         try:
             handler = {
@@ -221,15 +222,20 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise _error.InternalError("Conflicting definitions: %r" % found)
 
         target_definition = found[0]
-        assert isinstance(target_definition, _dsdl_definition.DSDLDefinition)
+        for visitor in self._definition_visitors:
+            visitor.on_definition(self._definition, target_definition)
+
+        assert isinstance(target_definition, ReadableDSDLFile)
         assert target_definition.full_name == full_name
         assert target_definition.version == version
         # Recursion is cool.
-        return target_definition.read(
+        dt = target_definition.read(
             lookup_definitions=self._lookup_definitions,
+            definition_visitors=self._definition_visitors,
             print_output_handler=self._print_output_handler,
             allow_unregulated_fixed_port_id=self._allow_unregulated_fixed_port_id,
         )
+        return dt
 
     def _queue_attribute(self, element_callback: Callable[[str], None]) -> None:
         self._flush_attribute("")
@@ -247,7 +253,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 "This is to prevent errors if the extent is dependent on the bit length set of the data schema."
             )
 
-    def _on_print_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
+    def _on_print_directive(self, line_number: int, value: _expression.Any | None) -> None:
         _logger.info(
             "Print directive at %s:%d%s",
             self._definition.file_path,
@@ -256,7 +262,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         )
         self._print_output_handler(line_number, str(value if value is not None else ""))
 
-    def _on_assert_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
+    def _on_assert_directive(self, line_number: int, value: _expression.Any | None) -> None:
         if isinstance(value, _expression.Boolean):
             if not value.native_value:
                 raise AssertionCheckFailureError(
@@ -268,7 +274,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         else:
             raise InvalidDirectiveError("The assertion check expression must yield a boolean, not %s" % value.TYPE_NAME)
 
-    def _on_extent_directive(self, line_number: int, value: Optional[_expression.Any]) -> None:
+    def _on_extent_directive(self, line_number: int, value: _expression.Any | None) -> None:
         if self._structs[-1].serialization_mode is not None:
             raise InvalidDirectiveError(
                 "Misplaced extent directive. The serialization mode is already set to %s"
@@ -284,7 +290,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         else:
             raise InvalidDirectiveError("The extent directive expects a rational, not %s" % value.TYPE_NAME)
 
-    def _on_sealed_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:
+    def _on_sealed_directive(self, _ln: int, value: _expression.Any | None) -> None:
         if self._structs[-1].serialization_mode is not None:
             raise InvalidDirectiveError(
                 "Misplaced sealing directive. The serialization mode is already set to %s"
@@ -294,7 +300,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError("The sealed directive does not expect an expression")
         self._structs[-1].set_serialization_mode(_data_schema_builder.SealedSerializationMode())
 
-    def _on_union_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:
+    def _on_union_directive(self, _ln: int, value: _expression.Any | None) -> None:
         if value is not None:
             raise InvalidDirectiveError("The union directive does not expect an expression")
         if self._structs[-1].union:
@@ -303,7 +309,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             raise InvalidDirectiveError("The union directive must be placed before the first " "attribute definition")
         self._structs[-1].make_union()
 
-    def _on_deprecated_directive(self, _ln: int, value: Optional[_expression.Any]) -> None:
+    def _on_deprecated_directive(self, _ln: int, value: _expression.Any | None) -> None:
         if value is not None:
             raise InvalidDirectiveError("The deprecated directive does not expect an expression")
         if self._is_deprecated:
@@ -322,7 +328,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
         name: str,
         version: _serializable.Version,
         deprecated: bool,
-        fixed_port_id: Optional[int],
+        fixed_port_id: int | None,
         source_file_path: Path,
         has_parent_service: bool,
     ) -> _serializable.CompositeType:
