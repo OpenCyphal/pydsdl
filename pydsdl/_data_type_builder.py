@@ -245,14 +245,23 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                     path=found[1].file_path,
                 )
             raise DataTypeCollisionError("Conflicting definitions: %r" % found)
+        elif found[0].full_name != full_name and found[0].full_name.lower() == full_name.lower():
+            # pragma: no cover
+            # This only happens if the file system is case-sensitive.
+            raise DataTypeNameCollisionError(
+                "Full name of required definition %s differs from %s only by letter case, "
+                "which is not permitted" % (full_name, found[0].full_name),
+                path=found[0].file_path,
+            )
 
         target_definition = found[0]
+
+        assert isinstance(target_definition, ReadableDSDLFile)
+        assert target_definition.version == version
+
         for visitor in self._definition_visitors:
             visitor.on_definition(self._definition, target_definition)
 
-        assert isinstance(target_definition, ReadableDSDLFile)
-        assert target_definition.full_name == full_name
-        assert target_definition.version == version
         # Recursion is cool.
         dt = target_definition.read(
             lookup_definitions=self._lookup_definitions,

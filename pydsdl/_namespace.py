@@ -819,6 +819,8 @@ def _unittest_ensure_no_namespace_name_collisions_or_nested_root_namespaces() ->
 def _unittest_issue_104(temp_dsdl_factory) -> None:  # type: ignore
     """demonstrate that removing _ensure_no_collisions is okay"""
 
+    from pytest import raises
+
     thing_1_0 = Path("a/b/thing.1.0.dsdl")
     thing_type_1_0 = Path("a/b/thing/thingtype.1.0.dsdl")
 
@@ -830,3 +832,12 @@ def _unittest_issue_104(temp_dsdl_factory) -> None:  # type: ignore
 
     assert len(direct) == 1
     assert len(transitive) == 1
+
+    thing_1_1 = Path("a/b/thing.1.1.dsdl")
+
+    thing_file2 = temp_dsdl_factory.new_file(thing_1_1, "@sealed\na.b.thing.Thingtype.1.0 thing\n")
+
+    from ._data_type_builder import DataTypeNameCollisionError
+
+    with raises(DataTypeNameCollisionError):
+        read_files(thing_file2, file_at_root.parent, file_at_root.parent)
