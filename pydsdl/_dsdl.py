@@ -5,7 +5,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Iterable, TypeVar, List, Tuple
+from typing import Any, Callable, Iterable, List, Tuple, TypeVar
 
 from ._serializable import CompositeType, Version
 
@@ -103,6 +103,14 @@ class ReadableDSDLFile(DSDLFile):
     """
     A DSDL file that can construct a composite type from its contents.
     """
+
+    @property
+    @abstractmethod
+    def file_path(self) -> Path:
+        """
+        Path to an existing DSDL file on the filesystem.
+        """
+        raise NotImplementedError()
 
     @abstractmethod
     def read(

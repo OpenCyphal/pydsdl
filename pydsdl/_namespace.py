@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import collections
+import itertools
 import logging
 from itertools import product, repeat
 from pathlib import Path
@@ -147,10 +148,10 @@ def read_files(
     It reads all DSDL definitions from the specified ``dsdl_files`` and produces the annotated AST for these types and
     the transitive closure of the types they depend on.
 
-    :param dsdl_files: A list of paths to dsdl files to parse.
+    :param Any dsdl_files: A list of paths to dsdl files to parse.
 
-    :param root_namespace_directories_or_names: This can be a set of names of root namespaces or relative paths to
-        root namespaces. All ``dsdl_files`` provided must be under one of these roots. For example, given:
+    :param root_namespace_directories_or_names: This can be a set of names of root namespaces or paths to root
+        namespaces. All ``dsdl_files`` provided must be under one of these roots. For example, given:
 
         .. code-block:: python
 
@@ -166,18 +167,59 @@ def read_files(
         .. code-block:: python
 
             root_namespace_directories_or_names = ["animals", "plants"]
+            # or
+            root_namespace_directories_or_names = [
+                                                    Path("workspace/project/types/animals"),
+                                                    Path("workspace/project/types/plants")
+                                                  ]
+            # or
+            root_namespace_directories_or_names = [
+                                                    Path("animals"),
+                                                    Path("workspace/project/types/plants")
+                                                  ]
+            # etc
+
+
+        Any target path not found on the filesystem must be located under a root namespace directory. For example,
+        given a set of relative target files like this:
+
+        .. code-block:: python
+
+            dsdl_files = [
+                            Path("animals/felines/Tabby.1.0.dsdl"),
+                            Path("animals/canines/Boxer.1.0.dsdl"),
+                            Path("plants/trees/DouglasFir.1.0.dsdl")
+                         ]
+
+        then this argument must include paths under which the target files can be found. For example:
+
+        .. code-block:: python
 
             root_namespace_directories_or_names = [
                                                     Path("workspace/project/types/animals"),
                                                     Path("workspace/project/types/plants")
                                                   ]
 
+        Note that relative paths shown here would only resolve correctly if the current working directory is set to
+        the root of the workspace (this function does not search system paths for the target files). If the target files
+        are located in a different folder the paths must be absolute. For example:
 
-    :param lookup_directories: List of other namespace directories containing data type definitions that are
-        referred to from the target dsdl files. For example, if you are reading vendor-specific types,
-        the list of lookup directories should always include a path to the standard root namespace ``uavcan``,
-        otherwise the types defined in the vendor-specific namespace won't be able to use data types from the
-        standard namespace.
+        .. code-block:: python
+
+            root_namespace_directories_or_names = [
+                                                    Path("/path/to/workspace/project/types/animals"),
+                                                    Path("/path/to/workspace/project/types/plants")
+                                                  ]
+
+        When reading vendor-specific types, the list of lookup directories should always include a path to the standard
+        root namespace ``uavcan``, otherwise the types defined in the vendor-specific namespace won't be able to use
+        data types from the standard namespace.
+
+    :param lookup_directories: List of namespace directories containing data type definitions that are referred to from
+        the target dsdl files. Callers should prefer combining the lookup directories with the root namespace
+        directories unless certain paths should be excluded when looking for target types. That is, only
+        ``root_namespace_directories_or_names`` is used to find the target types but both this list and
+        ``root_namespace_directories_or_names`` are used to find the dependent types.
 
     :param print_output_handler: If provided, this callable will be invoked when a ``@print`` directive
         is encountered or when the frontend needs to emit a diagnostic;
@@ -201,9 +243,10 @@ def read_files(
         :class:`ValueError`/:class:`TypeError` if the arguments are invalid.
     """
     # Normalize paths and remove duplicates. Resolve symlinks to avoid ambiguities.
+    normal_root_namespace_directories_or_names = normalize_paths_argument_to_list(root_namespace_directories_or_names)
     target_dsdl_definitions = _construct_dsdl_definitions_from_files(
         normalize_paths_argument_to_list(dsdl_files),
-        normalize_paths_argument_to_list(root_namespace_directories_or_names),
+        normal_root_namespace_directories_or_names,
     )
     if len(target_dsdl_definitions) == 0:
         _logger.info("No DSDL files found in the specified directories")
@@ -217,7 +260,7 @@ def read_files(
 
     root_namespaces = {f.root_namespace_path.resolve() for f in target_dsdl_definitions}
     lookup_directories_path_list = _construct_lookup_directories_path_list(
-        root_namespaces,
+        itertools.chain(root_namespaces, filter(lambda x: x.exists(), normal_root_namespace_directories_or_names)),
         normalize_paths_argument_to_list(lookup_directories),
         True,
     )
@@ -334,15 +377,14 @@ def _construct_dsdl_definitions_from_files(
     """ """
     output = set()  # type:  set[ReadableDSDLFile]
     for fp in dsdl_files:
-        resolved_fp = fp.resolve(strict=False)
-        if resolved_fp.suffix == DSDL_FILE_SUFFIX_LEGACY:
+        if fp.suffix == DSDL_FILE_SUFFIX_LEGACY:
             _logger.warning(
                 "File uses deprecated extension %r, please rename to use %r: %s",
                 DSDL_FILE_SUFFIX_LEGACY,
                 DSDL_FILE_SUFFIX,
-                resolved_fp,
+                fp,
             )
-        output.add(_dsdl_definition.DSDLDefinition.from_first_in(resolved_fp, list(valid_roots)))
+        output.add(_dsdl_definition.DSDLDefinition.from_first_in(fp, list(valid_roots)))
 
     return dsdl_file_sort(output)
 
@@ -841,3 +883,60 @@ def _unittest_issue_104(temp_dsdl_factory) -> None:  # type: ignore
 
     with raises(DataTypeNameCollisionError):
         read_files(thing_file2, file_at_root.parent, file_at_root.parent)
+
+
+def _unittest_issue_109(temp_dsdl_factory) -> None:  # type: ignore
+    """Allow target paths to be relative"""
+
+    # pylint: disable=too-many-locals
+
+    from pytest import raises
+    from ._dsdl_definition import PathInferenceError
+
+    odin_1_0 = Path("gods/norse/Odin.1.0.dsdl")
+    huginn_1_0 = Path("familiars/norse/Huginn.1.0.dsdl")
+    muninn_1_0 = Path("familiars/norse/Muninn.1.0.dsdl")
+
+    odin_file = temp_dsdl_factory.new_file(
+        odin_1_0, "@sealed\nfamiliars.norse.Huginn.1.0 huginn\nfamiliars.norse.Muninn.1.0 muninn\n"
+    )
+    huginn_file = temp_dsdl_factory.new_file(huginn_1_0, "@sealed\n")
+    _ = temp_dsdl_factory.new_file(muninn_1_0, "@sealed\n")
+
+    # relative path for target / absolute path for root namespace
+    direct1, transitive1 = read_files([odin_1_0], [odin_file.parent.parent, huginn_file.parent.parent])
+
+    assert len(direct1) == 1
+    assert len(transitive1) == 2
+
+    assert direct1[0].source_file_path == odin_file
+
+    # here we use an absolute path to the target and provide a root namespace name for it.
+    direct2, transitive2 = read_files([odin_file], ["gods"], [huginn_file.parent.parent])
+
+    assert len(direct2) == 1
+    assert len(transitive2) == 2
+
+    assert direct2[0].source_file_path == odin_file
+
+    # Once more to show that it works if the name and lookup is in the second argument
+    direct3, transitive3 = read_files([odin_file], ["gods", huginn_file.parent.parent])
+
+    assert len(direct3) == 1
+    assert len(transitive3) == 2
+
+    assert direct3[0].source_file_path == odin_file
+
+    # Next show that the lookup paths cannot be used to find targets
+    with raises(PathInferenceError):
+        _ = read_files([odin_1_0], [], [odin_file.parent.parent, huginn_file.parent.parent])
+
+    # Finally, we'll make sure that we don't confuse roots when two targets are rooted in the same place
+    # Once more to show that it works if the name and lookup is in the second argument
+    direct4, transitive4 = read_files([odin_1_0], [huginn_file.parent.parent, odin_file.parent.parent])
+
+    assert len(direct4) == 1
+    assert len(transitive4) == 2
+
+    assert direct4[0].source_file_path == odin_file
+    assert direct4[0].root_namespace == "gods"
