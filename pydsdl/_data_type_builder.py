@@ -35,6 +35,18 @@ class MissingSerializationModeError(_error.InvalidDefinitionError):
     pass
 
 
+class DataTypeCollisionError(_error.InvalidDefinitionError):
+    """
+    Raised when there are conflicting data type definitions.
+    """
+
+
+class DataTypeNameCollisionError(DataTypeCollisionError):
+    """
+    Raised when type collisions are caused by naming conflicts.
+    """
+
+
 _logger = logging.getLogger(__name__)
 
 
@@ -197,7 +209,11 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             _logger.debug("The full name of a relatively referred type %r reconstructed as %r", name, full_name)
 
         del name
-        found = list(filter(lambda d: d.full_name == full_name and d.version == version, self._lookup_definitions))
+        found = list(
+            filter(
+                lambda d: d.full_name.lower() == full_name.lower() and d.version == version, self._lookup_definitions
+            )
+        )
         if not found:
             # Play Sherlock to help the user with mistakes like https://forum.opencyphal.org/t/904/2
             requested_ns = full_name.split(_serializable.CompositeType.NAME_COMPONENT_SEPARATOR)[0]
@@ -218,16 +234,34 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
                 error_description += " Please make sure that you specified the directories correctly."
             raise UndefinedDataTypeError(error_description)
 
-        if len(found) > 1:  # pragma: no cover
-            raise _error.InternalError("Conflicting definitions: %r" % found)
+        if len(found) > 1:
+            if (
+                found[0].full_name != found[1].full_name and found[0].full_name.lower() == found[1].full_name.lower()
+            ):  # pragma: no cover
+                # This only happens if the file system is case-insensitive.
+                raise DataTypeNameCollisionError(
+                    "Full name of this definition differs from %s only by letter case, "
+                    "which is not permitted" % found[0].file_path,
+                    path=found[1].file_path,
+                )
+            raise DataTypeCollisionError("Conflicting definitions: %r" % found)
+        elif found[0].full_name != full_name and found[0].full_name.lower() == full_name.lower():
+            # pragma: no cover
+            # This only happens if the file system is case-sensitive.
+            raise DataTypeNameCollisionError(
+                "Full name of required definition %s differs from %s only by letter case, "
+                "which is not permitted" % (full_name, found[0].full_name),
+                path=found[0].file_path,
+            )
 
         target_definition = found[0]
+
+        assert isinstance(target_definition, ReadableDSDLFile)
+        assert target_definition.version == version
+
         for visitor in self._definition_visitors:
             visitor.on_definition(self._definition, target_definition)
 
-        assert isinstance(target_definition, ReadableDSDLFile)
-        assert target_definition.full_name == full_name
-        assert target_definition.version == version
         # Recursion is cool.
         dt = target_definition.read(
             lookup_definitions=self._lookup_definitions,
