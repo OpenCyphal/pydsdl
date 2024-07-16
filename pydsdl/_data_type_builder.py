@@ -238,7 +238,7 @@ class DataTypeBuilder(_parser.StatementStreamProcessor):
             if (
                 found[0].full_name != found[1].full_name and found[0].full_name.lower() == found[1].full_name.lower()
             ):  # pragma: no cover
-                # This only happens if the file system is case-sensitive.
+                # This only happens if the file system is case-insensitive.
                 raise DataTypeNameCollisionError(
                     "Full name of this definition differs from %s only by letter case, "
                     "which is not permitted" % found[0].file_path,
