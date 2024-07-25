@@ -45,6 +45,7 @@ class DSDLDefinition(ReadableDSDLFile):
     :param file_path: The path to the DSDL file.
     :param root_namespace_path: The path to the root namespace directory. `file_path` must be a descendant of this path.
                                 See `from_first_in` for a more flexible way to create a DSDLDefinition object.
+    :raises InvalidDefinitionError: If file_path does not exist.
     """
 
     @classmethod
@@ -56,20 +57,37 @@ class DSDLDefinition(ReadableDSDLFile):
         if valid_dsdl_roots is None:
             raise ValueError("valid_dsdl_roots was None")
 
-        if dsdl_path.is_absolute() and len(valid_dsdl_roots) == 0:
-            raise PathInferenceError(
-                f"dsdl_path ({dsdl_path}) is absolute and the provided valid root names are empty. The DSDL root of "
-                "an absolute path cannot be inferred without this information.",
-                dsdl_path,
-                valid_dsdl_roots,
-            )
-
+        # INFERENCE 1: The easiest inference is when the target path is relative to the current working directory and
+        # the root is a direct child folder. In this case we allow targets to be specified as simple, relative paths
+        # where we infer the root from the first part of each path.
         if len(valid_dsdl_roots) == 0:
-            # if we have no valid roots we can only infer the root of the path. We require the path to be relative
-            # to avoid accidental inferences given that dsdl file trees starting from a filesystem root are rare.
-            return Path(dsdl_path.parts[0])
+            # if we have no valid roots we can only infer the root of the path.
+            if dsdl_path.is_absolute():
+                # but if the path is absolute we refuse to infer the root as this would cause us to search the entire
+                # filesystem for DSDL files and it's almost certainly wrong.
+                raise PathInferenceError(
+                    f"No valid roots provided for absolute path {str(dsdl_path)}. Unable to infer root without "
+                    "more information.",
+                    dsdl_path,
+                    valid_dsdl_roots,
+                )
+            else:
+                # if the path is relative we'll assume the root is the top-most folder in the path.
+                directly_inferred = Path(dsdl_path.parts[0])
+                try:
+                    directly_inferred.resolve(strict=True)
+                except FileNotFoundError:
+                    raise PathInferenceError(
+                        f"No valid root found in path {str(dsdl_path)} and the inferred root {str(directly_inferred)} "
+                        "does not exist. You either need to change your working directory to the folder that contains "
+                        "this root folder or provide a valid root path.",
+                        dsdl_path,
+                        valid_dsdl_roots,
+                    )
+                return directly_inferred
 
-        # INFERENCE 1: The strongest inference is when the path is relative to a known root.
+        # INFERENCE 2: The next easiest inference is when the target path is relative to a known dsdl root. These
+        # operations should work with pure paths and not require filesystem access.
         resolved_dsdl_path = dsdl_path.resolve(strict=False) if dsdl_path.is_absolute() else None
         for path_to_root in valid_dsdl_roots:
             # First we try the paths as-is...
@@ -89,7 +107,27 @@ class DSDLDefinition(ReadableDSDLFile):
                 else:
                     return path_to_root_resolved
 
-        # INFERENCE 2: A weaker, but valid inference is when the path is a child of a known root folder name.
+        # INFERENCE 3: If the target is relative then we can try to find a valid root by looking for the file in the
+        # root directories. This is a stronger inference than the previous one because it requires the file to exist
+        # but we do it second because it reads the filesystem.
+        if not dsdl_path.is_absolute():
+            for path_to_root in valid_dsdl_roots:
+                path_to_root_parent = path_to_root
+                while path_to_root_parent != path_to_root_parent.parent:
+                    # Weld together and check only if the root's last part is the same name as the target's first part.
+                    # yes:
+                    #     path/to/root + root/then/Type.1.0.dsdl <- /root == root/
+                    # no:
+                    #     path/to/not_root + root/then/Type.1.0.dsdl <- /not_root != root/
+                    if (
+                        path_to_root_parent.parts[-1] == dsdl_path.parts[0]
+                        and (path_to_root_parent.parent / dsdl_path).exists()
+                    ):
+                        return path_to_root_parent
+                    path_to_root_parent = path_to_root_parent.parent
+
+        # INFERENCE 4: A weaker, but valid inference is when the target path is a child of a known root folder name.
+        # This is only allowed if dsdl roots are top-level namespace names and not paths.
         root_parts = [x.parts[-1] for x in valid_dsdl_roots if len(x.parts) == 1]
         parts = list(dsdl_path.parent.parts)
         for i, part in list(enumerate(parts)):
@@ -102,9 +140,11 @@ class DSDLDefinition(ReadableDSDLFile):
     def from_first_in(cls: Type["DSDLDefinition"], dsdl_path: Path, valid_dsdl_roots: list[Path]) -> "DSDLDefinition":
         """
         Creates a DSDLDefinition object by inferring the path to the namespace root of a DSDL file given a set
-        of valid roots. The logic used prefers an instance of dsdl_path found to exist under a valid root but
-        will degrade to pure-path string matching if no file is found. Because this logic uses the first root path
-        that passes one of these two inferences the order of the valid_dsdl_roots list matters.
+        of valid roots and, if the dsdl path is relative, resolving the dsdl path relative to said roots. The logic used
+        prefers an instance of `dsdl_path` found to exist under a valid root but will degrade to pure-path string
+        matching if no file is found (If this does not yield a valid path to an existing dsdl file an exception is
+        raised). Because this logic uses the first root path that passes one of these two inferences the order of the
+        valid_dsdl_roots list matters.
 
         :param dsdl_path:           The path to the alleged DSDL file.
         :param valid_dsdl_roots:    The ordered set of valid root names or paths under which the type must reside.
@@ -112,14 +152,26 @@ class DSDLDefinition(ReadableDSDLFile):
                                     as the caller is expected to provide a correct set of paths.
         :return A new DSDLDefinition object
         :raises PathInferenceError: If the namespace root cannot be inferred from the provided information.
+        :raises InvalidDefinitionError: If the file does not exist.
         """
-        return cls(dsdl_path, cls._infer_path_to_root_from_first_found(dsdl_path, valid_dsdl_roots))
+        root_path = cls._infer_path_to_root_from_first_found(dsdl_path, valid_dsdl_roots)
+        if not dsdl_path.is_absolute():
+            dsdl_path_resolved = (root_path.parent / dsdl_path).resolve(strict=False)
+        else:
+            dsdl_path_resolved = dsdl_path.resolve(strict=False)
+        return cls(dsdl_path_resolved, root_path)
 
     def __init__(self, file_path: Path, root_namespace_path: Path):
         """ """
         # Normalizing the path and reading the definition text
         self._file_path = Path(file_path)
         del file_path
+
+        if not self._file_path.exists():
+            raise InvalidDefinitionError(
+                "Attempt to construct ReadableDSDLFile object for file that doesn't exist.", self._file_path
+            )
+
         self._root_namespace_path = Path(root_namespace_path)
         del root_namespace_path
         self._text: str | None = None
@@ -171,8 +223,12 @@ class DSDLDefinition(ReadableDSDLFile):
         self._cached_type: CompositeType | None = None
 
     # +-----------------------------------------------------------------------+
-    # | ReadableDSDLFile :: INTERFACE                                        |
+    # | ReadableDSDLFile :: INTERFACE                                         |
     # +-----------------------------------------------------------------------+
+    @property
+    def file_path(self) -> Path:
+        return self._file_path
+
     def read(
         self,
         lookup_definitions: Iterable[ReadableDSDLFile],
@@ -184,9 +240,6 @@ class DSDLDefinition(ReadableDSDLFile):
         if self._cached_type is not None:
             _logger.debug("%s: Cache hit", log_prefix)
             return self._cached_type
-
-        if not self._file_path.exists():
-            raise InvalidDefinitionError("Attempt to read DSDL file that doesn't exist.", self._file_path)
 
         started_at = time.monotonic()
 
@@ -275,10 +328,6 @@ class DSDLDefinition(ReadableDSDLFile):
         return self.fixed_port_id is not None
 
     @property
-    def file_path(self) -> Path:
-        return self._file_path
-
-    @property
     def root_namespace_path(self) -> Path:
         return self._root_namespace_path
 
@@ -298,12 +347,15 @@ class DSDLDefinition(ReadableDSDLFile):
         return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
-        return "DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%s)" % (
-            self.full_name,
-            self.version,
-            self.fixed_port_id,
-            self.file_path,
-        )
+        try:
+            return "DSDLDefinition(full_name=%r, version=%r, fixed_port_id=%r, file_path=%s)" % (
+                self.full_name,
+                self.version,
+                self.fixed_port_id,
+                self.file_path,
+            )
+        except AttributeError:  # pragma: no cover
+            return "DSDLDefinition(UNINITIALIZED)"
 
     __repr__ = __str__
 
@@ -315,13 +367,8 @@ def _unittest_dsdl_definition_read_non_existent() -> None:
     from pytest import raises as expect_raises
 
     target = Path("root", "ns", "Target.1.1.dsdl")
-    target_definition = DSDLDefinition(target, target.parent)
-
-    def print_output(line_number: int, text: str) -> None:  # pragma: no cover
-        _ = line_number, text
-
     with expect_raises(InvalidDefinitionError):
-        target_definition.read([], [], print_output, True)
+        _ = DSDLDefinition(target, target.parent)
 
 
 def _unittest_dsdl_definition_read_text(temp_dsdl_factory) -> None:  # type: ignore
@@ -354,15 +401,10 @@ def _unittest_type_from_path_inference() -> None:
     # case the method assumes that the relative path is the correct and complete namespace of the type:
 
     # relative path
-    root = DSDLDefinition._infer_path_to_root_from_first_found(Path("uavcan/foo/bar/435.baz.1.0.dsdl"), [])
+    root = DSDLDefinition._infer_path_to_root_from_first_found(
+        Path("uavcan/foo/bar/435.baz.1.0.dsdl"), [Path("uavcan")]
+    )
     assert root == Path("uavcan")
-
-    # The root namespace is not inferred in an absolute path without additional data:
-
-    with expect_raises(PathInferenceError):
-        _ = DSDLDefinition._infer_path_to_root_from_first_found(
-            Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), []
-        )
 
     with expect_raises(ValueError):
         _ = DSDLDefinition._infer_path_to_root_from_first_found(
@@ -458,8 +500,31 @@ def _unittest_type_from_path_inference() -> None:
     assert root == Path("repo/uavcan")
 
 
-def _unittest_from_first_in() -> None:
-    dsdl_def = DSDLDefinition.from_first_in(
-        Path("/repo/uavcan/foo/bar/435.baz.1.0.dsdl").resolve(), [Path("/repo/uavcan/foo/..").resolve()]
-    )
+def _unittest_type_from_path_inference_edge_case(temp_dsdl_factory) -> None:  # type: ignore
+    """
+    Edge case where we target a file where the namespace is under the root path.
+    """
+    # pylint: disable=protected-access
+
+    from pytest import raises as expect_raises
+    import os
+
+    target_path = Path("dsdl_root/Type.1.0.dsdl")
+    target_file = temp_dsdl_factory.new_file(target_path, "@sealed").resolve()
+    expected_root_parent = target_file.parent.parent
+    with expect_raises(PathInferenceError):
+        _ = DSDLDefinition._infer_path_to_root_from_first_found(target_file, [])
+
+    old_cwd = os.getcwd()
+    os.chdir(expected_root_parent)
+    try:
+        root = DSDLDefinition._infer_path_to_root_from_first_found(target_path, [])
+        assert root.parent.resolve() == expected_root_parent
+    finally:
+        os.chdir(old_cwd)
+
+
+def _unittest_from_first_in(temp_dsdl_factory) -> None:  # type: ignore
+    dsdl_file = temp_dsdl_factory.new_file(Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), "@sealed")
+    dsdl_def = DSDLDefinition.from_first_in(dsdl_file.resolve(), [(dsdl_file.parent.parent / "..")])
     assert dsdl_def.full_name == "uavcan.foo.bar.baz"

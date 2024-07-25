@@ -7,7 +7,7 @@
 import sys as _sys
 from pathlib import Path as _Path
 
-__version__ = "1.21.1"
+__version__ = "1.22.0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"

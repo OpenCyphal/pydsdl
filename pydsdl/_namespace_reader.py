@@ -201,9 +201,7 @@ def _unittest_namespace_reader_read_definitions_multiple_no_load(temp_dsdl_facto
         temp_dsdl_factory.new_file(Path("root", "ns", "Tacoma.1.0.dsdl"), "@sealed"),
         temp_dsdl_factory.new_file(Path("root", "ns", "Rainer.1.0.dsdl"), "@sealed"),
         temp_dsdl_factory.new_file(Path("root", "ns", "Baker.1.0.dsdl"), "@sealed"),
-        Path(
-            "root", "ns", "Shasta.1.0.dsdl"
-        ),  # since this isn't in the transitive closure of target dependencies it will
+        temp_dsdl_factory.new_file(Path("root", "ns", "Shasta.1.0.dsdl"), "@sealed"),
         # never be read thus it will not be an error that it does not exist.
     ]
 
