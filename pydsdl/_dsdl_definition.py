@@ -164,7 +164,7 @@ class DSDLDefinition(ReadableDSDLFile):
     def __init__(self, file_path: Path, root_namespace_path: Path):
         """ """
         # Normalizing the path and reading the definition text
-        self._file_path = Path(file_path)
+        self._file_path = Path(file_path).resolve()
         del file_path
 
         if not self._file_path.exists():
@@ -172,7 +172,7 @@ class DSDLDefinition(ReadableDSDLFile):
                 "Attempt to construct ReadableDSDLFile object for file that doesn't exist.", self._file_path
             )
 
-        self._root_namespace_path = Path(root_namespace_path)
+        self._root_namespace_path = Path(root_namespace_path).resolve()
         del root_namespace_path
         self._text: str | None = None
 
@@ -382,6 +382,16 @@ def _unittest_dsdl_definition_read_text(temp_dsdl_factory) -> None:  # type: ign
         # we test first that we can't create the object until we have a target_root that contains the dsdl_file
 
     target_definition = DSDLDefinition(dsdl_file, dsdl_file.parent.parent)
+    assert "@sealed" == target_definition.text
+
+
+def _unittest_dsdl_definition_issue_111(temp_dsdl_factory) -> None:  # type: ignore
+    target_root = Path("root", "ns")
+    target_file_path = Path(target_root / "Target.1.1.dsdl")
+    dsdl_file = temp_dsdl_factory.new_file(target_root / target_file_path, "@sealed")
+    actual_root = Path(str(dsdl_file.parent) + "/..")
+
+    target_definition = DSDLDefinition(actual_root / dsdl_file.parent / dsdl_file.name, actual_root)
     assert "@sealed" == target_definition.text
 
 
