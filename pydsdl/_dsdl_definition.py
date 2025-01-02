@@ -164,7 +164,8 @@ class DSDLDefinition(ReadableDSDLFile):
     def __init__(self, file_path: Path, root_namespace_path: Path):
         """ """
         # Normalizing the path and reading the definition text
-        self._file_path = Path(file_path).resolve()
+        # NOTE: to make it work with Bazel we cannot do that, as Bazel creates symlink in a separate workspace
+        self._file_path = Path(file_path) # .resolve()
         del file_path
 
         if not self._file_path.exists():
