@@ -31,8 +31,8 @@ class PathInferenceError(UndefinedDataTypeError):
     Raised when the namespace, type, fixed port ID, or version cannot be inferred from a file path.
     """
 
-    def __init__(self, text: str, dsdl_path: Path, valid_dsdl_roots: list[Path]):
-        super().__init__(text=text, path=Path(dsdl_path))
+    def __init__(self, text: str = "", dsdl_path: Path | None = None, valid_dsdl_roots: list[Path] | None = None):
+        super().__init__(text=text, path=dsdl_path)
         self.valid_dsdl_roots = valid_dsdl_roots[:] if valid_dsdl_roots is not None else None
 
 
@@ -83,7 +83,7 @@ class DSDLDefinition(ReadableDSDLFile):
                         "this root folder or provide a valid root path.",
                         dsdl_path,
                         valid_dsdl_roots,
-                    )
+                    ) from None
                 return directly_inferred
 
         # INFERENCE 2: The next easiest inference is when the target path is relative to a known dsdl root. These
