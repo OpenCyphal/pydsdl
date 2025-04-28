@@ -6,7 +6,7 @@ MAX_SUBJECT_ID = 8191
 MAX_SERVICE_ID = 511
 
 
-_STANDARD_ROOT_NAMESPACE = "uavcan"
+_STANDARD_ROOT_NAMESPACES = {"uavcan", "cyphal"}
 
 _STANDARD_MESSAGES = 7168, 8191
 _STANDARD_SERVICES = 384, 511
@@ -18,13 +18,13 @@ _VENDOR_SERVICES = 256, 383
 
 
 def is_valid_regulated_subject_id(regulated_id: int, root_namespace: str) -> bool:
-    is_standard = root_namespace.strip() == _STANDARD_ROOT_NAMESPACE
+    is_standard = root_namespace.strip() in _STANDARD_ROOT_NAMESPACES
     lo, hi = _STANDARD_MESSAGES if is_standard else _VENDOR_MESSAGES
     return lo <= int(regulated_id) <= hi
 
 
 def is_valid_regulated_service_id(regulated_id: int, root_namespace: str) -> bool:
-    is_standard = root_namespace.strip() == _STANDARD_ROOT_NAMESPACE
+    is_standard = root_namespace.strip() in _STANDARD_ROOT_NAMESPACES
     lo, hi = _STANDARD_SERVICES if is_standard else _VENDOR_SERVICES
     return lo <= int(regulated_id) <= hi
 
