@@ -1,11 +1,6 @@
 name: 'Test and Release PyDSDL'
 on: [ push, pull_request ]
 
-# Ensures that only one workflow is running at a time
-concurrency:
-  group: ${{ github.workflow_sha }}
-  cancel-in-progress: true
-
 jobs:
   pydsdl-test:
     name: Test PyDSDL
