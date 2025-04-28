@@ -722,6 +722,7 @@ class ServiceType(CompositeType):
 
 # +--[UNIT TESTS]-----------------------------------------------------------------------------------------------------+
 
+
 def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     from typing import Optional
     from pytest import raises
