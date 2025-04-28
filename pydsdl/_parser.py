@@ -2,13 +2,14 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+from __future__ import annotations
 import typing
 import logging
 import itertools
 import functools
 import fractions
 from pathlib import Path
-from typing import List, Tuple
+from typing import cast, Tuple
 import parsimonious
 from parsimonious.nodes import Node as _Node
 from . import _error
@@ -159,7 +160,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         """If the node has children, replace the node with them."""
         return tuple(visited_children) or node
 
-    def visit_line(self, node: _Node, _c: _Children) -> None:
+    def visit_line(self, node: _Node, children: _Children) -> None:
+        _ = children
         if len(node.text) == 0:
             # Line is empty, flush comment
             self._flush_comment()
@@ -173,7 +175,8 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_statement_attribute = _make_typesafe_child_lifter(type(None))  # because processing terminates here; these
     visit_statement_directive = _make_typesafe_child_lifter(type(None))  # nodes are above the top level.
 
-    def visit_comment(self, node: _Node, _c: _Children) -> None:
+    def visit_comment(self, node: _Node, children: _Children) -> None:
+        _ = children
         assert isinstance(node.text, str)
         self._comment += "\n" if self._comment != "" else ""
         self._comment += node.text[2:] if node.text.startswith("# ") else node.text[1:]
@@ -272,11 +275,11 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return _serializable.UTF8Type()
 
     def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
-        _kw, _sp, cons = children  # type: _Node, _Node, _PrimitiveTypeConstructor
+        _kw, _sp, cons = cast(Tuple[_Node, _Node, _PrimitiveTypeConstructor], children)
         return cons(_serializable.PrimitiveType.CastMode.TRUNCATED)
 
     def visit_type_primitive_saturated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
-        _, cons = children  # type: _Node, _PrimitiveTypeConstructor
+        _, cons = cast(Tuple[_Node, _PrimitiveTypeConstructor], children)
         return cons(_serializable.PrimitiveType.CastMode.SATURATED)
 
     def visit_type_primitive_name_unsigned_integer(self, _n: _Node, children: _Children) -> _PrimitiveTypeConstructor:
@@ -308,7 +311,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     visit_op2_exp = parsimonious.NodeVisitor.lift_child
 
     def visit_expression_list(self, _n: _Node, children: _Children) -> Tuple[_expression.Any, ...]:
-        out = []  # type: List[_expression.Any]
+        out = []  # type: list[_expression.Any]
         if children:
             children = children[0]
             assert len(children) == 2

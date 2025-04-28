@@ -2,13 +2,16 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+# cSpell: words iceb
 # pylint: disable=global-statement,protected-access,too-many-statements,consider-using-with,redefined-outer-name
 
+from __future__ import annotations
 import tempfile
-from typing import Union, Tuple, Optional, Sequence, Type, Iterable
+from typing import Sequence, Type, Iterable
 from pathlib import Path
 from textwrap import dedent
 import pytest  # This is only safe to import in test files!
+from . import _data_type_builder
 from . import _expression
 from . import _error
 from . import _parser
@@ -23,12 +26,14 @@ __all__ = []  # type: ignore
 class Workspace:
     def __init__(self) -> None:
         self._tmp_dir = tempfile.TemporaryDirectory(prefix="pydsdl-test-")
+        name = self._tmp_dir.name.upper()
+        self._is_case_sensitive = not Path(name).exists()
 
     @property
     def directory(self) -> Path:
         return Path(self._tmp_dir.name)
 
-    def new(self, rel_path: Union[str, Path], text: str) -> None:
+    def new(self, rel_path: str | Path, text: str) -> None:
         """
         Simply creates a new DSDL source file with the given contents at the specified path inside the workspace.
         """
@@ -37,7 +42,7 @@ class Workspace:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf8")
 
-    def parse_new(self, rel_path: Union[str, Path], text: str) -> _dsdl_definition.DSDLDefinition:
+    def parse_new(self, rel_path: str | Path, text: str) -> _dsdl_definition.DSDLDefinition:
         """
         Creates a new DSDL source file with the given contents at the specified path inside the workspace,
         then parses it and returns the resulting definition object.
@@ -56,12 +61,17 @@ class Workspace:
         for g in self.directory.glob(rel_path_glob):
             g.unlink()
 
+    @property
+    def is_fs_case_sensitive(self) -> bool:
+        return self._is_case_sensitive
+
 
 def parse_definition(
     definition: _dsdl_definition.DSDLDefinition, lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition]
 ) -> _serializable.CompositeType:
     return definition.read(
         lookup_definitions,
+        [],
         print_output_handler=lambda line, text: print("Output from line %d:" % line, text),
         allow_unregulated_fixed_port_id=False,
     )
@@ -314,7 +324,7 @@ def _unittest_comments(wrkspc: Workspace) -> None:
 
         uint8 CHARACTER = '#' # comment on constant
         int8 a # comment on field
-        int8 aprime
+        int8 a_prime
         @assert 1 == 1 # toss one in for confusion
         void2 # comment on padding field
         saturated int64[<33] b
@@ -422,7 +432,7 @@ def _unittest_error(wrkspc: Workspace) -> None:
 
     def standalone(rel_path: str, definition: str, allow_unregulated: bool = False) -> _serializable.CompositeType:
         return wrkspc.parse_new(rel_path, definition + "\n").read(
-            [], lambda *_: None, allow_unregulated
+            [], [], lambda *_: None, allow_unregulated
         )  # pragma: no branch
 
     with raises(_error.InvalidDefinitionError, match="(?i).*port ID.*"):
@@ -766,7 +776,7 @@ def _unittest_error(wrkspc: Workspace) -> None:
 
 
 def _unittest_print(wrkspc: Workspace) -> None:
-    printed_items = None  # type: Optional[Tuple[int, str]]
+    printed_items = None  # type: tuple[int, str] | None
 
     def print_handler(line_number: int, text: str) -> None:
         nonlocal printed_items
@@ -775,20 +785,20 @@ def _unittest_print(wrkspc: Workspace) -> None:
     wrkspc.parse_new(
         "ns/A.1.0.dsdl",
         "# line number 1\n" "# line number 2\n" "@print 2 + 2 == 4   # line number 3\n" "# line number 4\n" "@sealed\n",
-    ).read([], print_handler, False)
+    ).read([], [], print_handler, False)
 
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == "true"
 
-    wrkspc.parse_new("ns/B.1.0.dsdl", "@print false\n@sealed").read([], print_handler, False)
+    wrkspc.parse_new("ns/B.1.0.dsdl", "@print false\n@sealed").read([], [], print_handler, False)
     assert printed_items
     assert printed_items[0] == 1
     assert printed_items[1] == "false"
 
     wrkspc.parse_new(
         "ns/Offset.1.0.dsdl", "@print _offset_    # Not recorded\n" "uint8 a\n" "@print _offset_\n" "@extent 800\n"
-    ).read([], print_handler, False)
+    ).read([], [], print_handler, False)
     assert printed_items
     assert printed_items[0] == 3
     assert printed_items[1] == "{8}"
@@ -1010,7 +1020,7 @@ def _unittest_assert(wrkspc: Workspace) -> None:
 def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     from pytest import raises
 
-    print_output = None  # type: Optional[Tuple[str, int, str]]
+    print_output = None  # type: tuple[str, int, str] | None
 
     def print_handler(d: Path, line: int, text: str) -> None:
         nonlocal print_output
@@ -1114,7 +1124,7 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
         """
         ),
     )
-    with raises(_namespace.DataTypeNameCollisionError):
+    with raises(_namespace.FixedPortIDCollisionError):
         _namespace.read_namespace(
             wrkspc.directory / "zubax",
             [
@@ -1123,30 +1133,27 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
         )
 
     # Do again to test single lookup-directory override
-    with raises(_namespace.DataTypeNameCollisionError):
+    with raises(_namespace.FixedPortIDCollisionError):
         _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
 
-    try:
-        (wrkspc.directory / "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
-        wrkspc.new(
-            "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
-            dedent(
-                """
-            @extent 1024
-            ---
-            @extent 1024
+    (wrkspc.directory / "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
+    wrkspc.new(
+        "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
+        dedent(
             """
-            ),
-        )
-        with raises(_namespace.DataTypeNameCollisionError, match=".*letter case.*"):
-            _namespace.read_namespace(
+        @extent 1024
+        ---
+        @extent 1024
+        """
+        ),
+    )
+    with raises(_namespace.FixedPortIDCollisionError):
+        _namespace.read_namespace(
+            wrkspc.directory / "zubax",
+            [
                 wrkspc.directory / "zubax",
-                [
-                    wrkspc.directory / "zubax",
-                ],
-            )
-    except _namespace.FixedPortIDCollisionError:  # pragma: no cover
-        pass  # We're running on a platform where paths are not case-sensitive.
+            ],
+        )
 
     # Test namespace can intersect with type name
     (wrkspc.directory / "zubax/COLLIDING/300.Iceberg.30.0.dsdl").unlink()
@@ -1177,6 +1184,52 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     parsed = _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
     assert "zubax.noncolliding.iceberg.Ice" in [x.full_name for x in parsed]
     assert "zubax.noncolliding.Iceb" in [x.full_name for x in parsed]
+
+
+def _unittest_collision_on_case_sensitive_filesystem(wrkspc: Workspace) -> None:
+    from pytest import raises
+
+    if not wrkspc.is_fs_case_sensitive:  # pragma: no cover
+        pytest.skip("This test is only relevant on case-sensitive filesystems.")
+
+    # Empty namespace.
+    assert [] == _namespace.read_namespace(wrkspc.directory)
+
+    wrkspc.new(
+        "atlantic/ships/Titanic.1.0.dsdl",
+        dedent(
+            """
+        greenland.colliding.IceBerg.1.0[<=2] bergs
+        @sealed
+        """
+        ),
+    )
+
+    wrkspc.new(
+        "greenland/colliding/IceBerg.1.0.dsdl",
+        dedent(
+            """
+        @sealed
+        """
+        ),
+    )
+
+    wrkspc.new(
+        "greenland/COLLIDING/IceBerg.1.0.dsdl",
+        dedent(
+            """
+        @sealed
+        """
+        ),
+    )
+
+    with raises(_data_type_builder.DataTypeNameCollisionError, match=".*letter case.*"):
+        _namespace.read_namespace(
+            wrkspc.directory / "atlantic",
+            [
+                wrkspc.directory / "greenland",
+            ],
+        )
 
 
 def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
@@ -1283,8 +1336,7 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
         ),
     )
 
-    with raises(_namespace.DataTypeCollisionError):
-        _namespace.read_namespace((wrkspc.directory / "ns"), [])
+    _namespace.read_namespace((wrkspc.directory / "ns"), [])
 
     wrkspc.drop("ns/Spartans.30.2.dsdl")
 
@@ -1632,7 +1684,7 @@ def _unittest_issue94(wrkspc: Workspace) -> None:
     wrkspc.new("outer_b/ns/Foo.1.0.dsdl", "@sealed")  # Conflict!
     wrkspc.new("outer_a/ns/Bar.1.0.dsdl", "Foo.1.0 fo\n@sealed")  # Which Foo.1.0?
 
-    with raises(_namespace.DataTypeCollisionError):
+    with raises(_data_type_builder.DataTypeCollisionError):
         _namespace.read_namespace(
             wrkspc.directory / "outer_a" / "ns",
             [wrkspc.directory / "outer_b" / "ns"],

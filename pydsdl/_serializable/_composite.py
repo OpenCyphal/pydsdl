@@ -5,7 +5,6 @@
 import abc
 import math
 import typing
-import itertools
 from pathlib import Path
 from .. import _expression
 from .. import _port_id_ranges
@@ -15,7 +14,7 @@ from ._serializable import SerializableType, TypeParameterError, AggregationFail
 from ._attribute import Attribute, Field, PaddingField, Constant
 from ._name import check_name, InvalidNameError
 from ._primitive import PrimitiveType, UnsignedIntegerType
-
+from ._void import VoidType
 
 Version = typing.NamedTuple("Version", [("major", int), ("minor", int)])
 
@@ -55,7 +54,7 @@ class CompositeType(SerializableType):
     MAX_VERSION_NUMBER = 255
     NAME_COMPONENT_SEPARATOR = "."
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-locals
         self,
         name: str,
         version: Version,
@@ -94,8 +93,26 @@ class CompositeType(SerializableType):
             raise InvalidNameError(
                 "Name is too long: %r is longer than %d characters" % (self._name, self.MAX_NAME_LENGTH)
             )
-        for component in self._name.split(self.NAME_COMPONENT_SEPARATOR):
+
+        self._name_components = self._name.split(self.NAME_COMPONENT_SEPARATOR)
+        for component in self._name_components:
             check_name(component)
+
+        def search_up_for_root(path: Path, namespace_components: typing.List[str]) -> Path:
+            if namespace_components[-1] != path.stem:
+                raise InvalidNameError(
+                    f"{path.stem} != {namespace_components[-1]}. Source file directory structure "
+                    f"is not consistent with the type's namespace ({self._name_components}, "
+                    f"{self._source_file_path})"
+                )
+            if len(namespace_components) == 1:
+                return path
+            return search_up_for_root(path.parent, namespace_components[:-1])
+
+        self._path_to_root_namespace = search_up_for_root(
+            self._source_file_path.parent,
+            (self.namespace_components if not self._has_parent_service else self.namespace_components[:-1]),
+        )
 
         # Version check
         version_valid = (
@@ -140,7 +157,12 @@ class CompositeType(SerializableType):
     @property
     def name_components(self) -> typing.List[str]:
         """Components of the full name as a list, e.g., ``['uavcan', 'node', 'Heartbeat']``."""
-        return self._name.split(CompositeType.NAME_COMPONENT_SEPARATOR)
+        return self._name_components
+
+    @property
+    def namespace_components(self) -> typing.List[str]:
+        """Components of the namspace as a list, e.g., ``['uavcan', 'node']``."""
+        return self._name_components[:-1]
 
     @property
     def short_name(self) -> str:
@@ -155,7 +177,7 @@ class CompositeType(SerializableType):
     @property
     def full_namespace(self) -> str:
         """The full name without the short name, e.g., ``uavcan.node`` for ``uavcan.node.Heartbeat``."""
-        return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.name_components[:-1]))
+        return str(CompositeType.NAME_COMPONENT_SEPARATOR.join(self.namespace_components))
 
     @property
     def root_namespace(self) -> str:
@@ -234,9 +256,29 @@ class CompositeType(SerializableType):
     @property
     def source_file_path(self) -> Path:
         """
-        For synthesized types such as service request/response sections, this property is defined as an empty string.
+        The path to the dsdl file from which this type was read.
+        For synthesized types such as service request/response sections, this property is the path to the service type
+        since request and response types are defined within the service type's dsdl file.
         """
         return self._source_file_path
+
+    @property
+    def source_file_path_to_root(self) -> Path:
+        """
+        The path to the folder that is the root namespace folder for the `source_file_path` this type was read from.
+        The `source_file_path` will always be relative to the `source_file_path_to_root` but not all types that share
+        the same `root_namespace` will have the same path to their root folder since types may be contributed to a
+        root namespace from several different file trees. For example:
+
+        ```
+        path0 = "workspace_0/project_a/types/animal/feline/Tabby.1.0.dsdl"
+        path1 = "workspace_1/project_b/types/animal/canine/Boxer.1.0.dsdl"
+        ```
+
+        In these examples path0 and path1 will produce composite types with `animal` as the root namespace but both
+        with have different `source_file_path_to_root` paths.
+        """
+        return self._path_to_root_namespace
 
     @property
     def alignment_requirement(self) -> int:
@@ -678,20 +720,23 @@ class ServiceType(CompositeType):
         raise TypeError("Service types do not have serializable fields. Use either request or response.")
 
 
+# +--[UNIT TESTS]-----------------------------------------------------------------------------------------------------+
+
 def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
+    from typing import Optional
     from pytest import raises
-    from ._primitive import SignedIntegerType, FloatType
     from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from ._primitive import FloatType, SignedIntegerType
     from ._void import VoidType
 
-    def try_name(name: str) -> CompositeType:
+    def try_name(name: str, file_path: Optional[Path] = None) -> CompositeType:
         return StructureType(
             name=name,
             version=Version(0, 1),
             attributes=[],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(),
+            source_file_path=file_path or Path(*name.split(".")),
             has_parent_service=False,
         )
 
@@ -719,6 +764,9 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     with raises(InvalidNameError, match="(?i).*cannot contain.*"):
         try_name("namespace.n-s.T")
 
+    with raises(InvalidNameError, match=".*Source file directory structure is not consistent.*"):
+        try_name("a.Foo", Path("foo/bar/b/Foo.0.1.dsdl"))
+
     assert try_name("root.nested.T").full_name == "root.nested.T"
     assert try_name("root.nested.T").full_namespace == "root.nested"
     assert try_name("root.nested.T").root_namespace == "root"
@@ -731,7 +779,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=[],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(),
+            source_file_path=Path("a", "A"),
             has_parent_service=False,
         )
 
@@ -746,7 +794,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             ],
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(),
+            source_file_path=Path("a", "A"),
             has_parent_service=False,
         )
 
@@ -760,7 +808,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
         ],
         deprecated=False,
         fixed_port_id=None,
-        source_file_path=Path(),
+        source_file_path=Path("uavcan", "node", "Heartbeat"),
         has_parent_service=False,
     )
     assert u["a"].name == "a"
@@ -786,7 +834,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
         ],
         deprecated=False,
         fixed_port_id=None,
-        source_file_path=Path(),
+        source_file_path=Path("a", "A"),
         has_parent_service=False,
     )
     assert s["a"].name == "a"
@@ -845,7 +893,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=atr,
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(),
+            source_file_path=Path("a") / "A",
             has_parent_service=False,
         )
 
@@ -889,7 +937,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     # The reference values for the following test are explained in the array tests above
     tu8 = UnsignedIntegerType(8, cast_mode=PrimitiveType.CastMode.TRUNCATED)
     small = VariableLengthArrayType(tu8, 2)
-    outer = FixedLengthArrayType(small, 2)  # unpadded bit length values: {4, 12, 20, 28, 36}
+    outer = FixedLengthArrayType(small, 2)  # un-padded bit length values: {4, 12, 20, 28, 36}
 
     # Above plus one bit to each, plus 16-bit for the unsigned integer field
     assert try_union_fields(
@@ -910,7 +958,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             attributes=atr,
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(),
+            source_file_path=Path("a") / "A",
             has_parent_service=False,
         )
 
@@ -942,10 +990,13 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
 
 
 def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
+    import itertools
+
     from pytest import raises
-    from ._primitive import BooleanType, FloatType
+
     from ._array import FixedLengthArrayType, VariableLengthArrayType
     from ._void import VoidType
+    from ._primitive import BooleanType, FloatType
 
     saturated = PrimitiveType.CastMode.SATURATED
     _seq_no = 0
@@ -959,7 +1010,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
             attributes=attributes,
             deprecated=False,
             fixed_port_id=None,
-            source_file_path=Path(),
+            source_file_path=Path("fake_root") / "ns" / f"Type{str(_seq_no)}",
             has_parent_service=False,
         )
 
@@ -1227,7 +1278,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=False,
                 fixed_port_id=None,
-                source_file_path=Path(),
+                source_file_path=Path("ns", "S_1_0.dsdl"),
                 has_parent_service=True,
             ),
             response=StructureType(
@@ -1236,7 +1287,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=False,
                 fixed_port_id=None,
-                source_file_path=Path(),
+                source_file_path=Path("ns", "S_1_0.dsdl"),
                 has_parent_service=True,
             ),
             fixed_port_id=None,
@@ -1250,7 +1301,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=False,
                 fixed_port_id=None,
-                source_file_path=Path(),
+                source_file_path=Path("ns", "XX_1_0.dsdl"),
                 has_parent_service=True,
             ),
             response=StructureType(
@@ -1259,8 +1310,31 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
                 attributes=[],
                 deprecated=True,
                 fixed_port_id=None,
-                source_file_path=Path(),
-                has_parent_service=False,
+                source_file_path=Path("ns", "XX_1_0.dsdl"),
+                has_parent_service=True,
+            ),
+            fixed_port_id=None,
+        )
+
+    with raises(ValueError):  # Request/response consistency error (internal failure)
+        ServiceType(
+            request=StructureType(
+                name="ns.XX.Request",
+                version=Version(1, 0),
+                attributes=[],
+                deprecated=False,
+                fixed_port_id=None,
+                source_file_path=Path("ns", "XX_1_0.dsdl"),
+                has_parent_service=True,
+            ),
+            response=StructureType(
+                name="ns.XX.Response",
+                version=Version(1, 0),
+                attributes=[],
+                deprecated=False,
+                fixed_port_id=None,
+                source_file_path=Path("ns", "YY_1_0.dsdl"),
+                has_parent_service=True,
             ),
             fixed_port_id=None,
         )
@@ -1272,7 +1346,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
         attributes=[],
         deprecated=False,
         fixed_port_id=None,
-        source_file_path=Path(),
+        source_file_path=Path("e", "E_0_1.dsdl"),
         has_parent_service=False,
     )
     validate_iterator(e, [])
