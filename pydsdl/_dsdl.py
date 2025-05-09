@@ -119,6 +119,8 @@ class ReadableDSDLFile(DSDLFile):
         definition_visitors: Iterable["DefinitionVisitor"],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
+        *,
+        strict: bool = False,
     ) -> CompositeType:
         """
         Reads the data type definition and returns its high-level data type representation.
@@ -133,6 +135,7 @@ class ReadableDSDLFile(DSDLFile):
         :param definition_visitors:             Visitors to notify about discovered dependencies.
         :param print_output_handler:            Used for @print and for diagnostics: (line_number, text) -> None.
         :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
+        :param strict:                          Reject features that are not part of the Specification.
         :return: The data type representation.
         """
         raise NotImplementedError()

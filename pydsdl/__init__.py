@@ -11,7 +11,7 @@ __version__ = "1.23.0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"
-__copyright__ = "Copyright (c) 2018 OpenCyphal"
+__copyright__ = "Copyright (c) OpenCyphal development team"
 __email__ = "maintainers@opencyphal.org"
 
 # Our unorthodox approach to dependency management requires us to apply certain workarounds.

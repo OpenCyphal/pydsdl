@@ -235,6 +235,8 @@ class DSDLDefinition(ReadableDSDLFile):
         definition_visitors: Iterable[DefinitionVisitor],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
+        *,
+        strict: bool = False,
     ) -> CompositeType:
         log_prefix = "%s.%d.%d" % (self.full_name, self.version.major, self.version.minor)
         if self._cached_type is not None:
@@ -262,7 +264,7 @@ class DSDLDefinition(ReadableDSDLFile):
                 allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
             )
 
-            _parser.parse(self.text, builder)
+            _parser.parse(self.text, builder, strict=strict)
 
             self._cached_type = builder.finalize()
             _logger.info(

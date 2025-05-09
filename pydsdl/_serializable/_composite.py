@@ -14,7 +14,6 @@ from ._serializable import SerializableType, TypeParameterError, AggregationFail
 from ._attribute import Attribute, Field, PaddingField, Constant
 from ._name import check_name, InvalidNameError
 from ._primitive import PrimitiveType, UnsignedIntegerType
-from ._void import VoidType
 
 Version = typing.NamedTuple("Version", [("major", int), ("minor", int)])
 

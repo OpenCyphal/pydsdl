@@ -7,11 +7,11 @@
 
 from __future__ import annotations
 import tempfile
-from typing import Sequence, Type, Iterable
+from typing import Sequence, Type, Iterable, Any
 from pathlib import Path
 from textwrap import dedent
 import pytest  # This is only safe to import in test files!
-from . import _data_type_builder
+from . import _data_type_builder, InvalidDefinitionError
 from . import _expression
 from . import _error
 from . import _parser
@@ -67,13 +67,16 @@ class Workspace:
 
 
 def parse_definition(
-    definition: _dsdl_definition.DSDLDefinition, lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition]
+    definition: _dsdl_definition.DSDLDefinition,
+    lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition],
+    **kwargs: Any,
 ) -> _serializable.CompositeType:
     return definition.read(
         lookup_definitions,
         [],
         print_output_handler=lambda line, text: print("Output from line %d:" % line, text),
         allow_unregulated_fixed_port_id=False,
+        **kwargs,
     )
 
 
@@ -1984,6 +1987,22 @@ def _unittest_dsdl_parser_utf8_bytes(wrkspc: Workspace) -> None:
     assert isinstance(t.element_type, _serializable.UnsignedIntegerType)
     assert t.capacity == 10
     assert t.string_like
+
+
+def _unittest_dsdl_parser_strict_mode(wrkspc: Workspace) -> None:
+    from pytest import raises
+
+    name = "ns/A.1.0.dsdl"
+    src = dedent(
+        r"""
+        byte[<=10] a
+        utf8[<=10] b
+        @sealed
+        """
+    )
+    _ = parse_definition(wrkspc.parse_new(name, src), [])  # success by default
+    with raises(InvalidDefinitionError, match="(?i).*strict.*"):
+        parse_definition(wrkspc.parse_new(name, src), [], strict=True)
 
 
 def _unittest_dsdl_parser_expressions(wrkspc: Workspace) -> None:

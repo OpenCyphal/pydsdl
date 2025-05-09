@@ -21,12 +21,12 @@ class DSDLSyntaxError(_error.InvalidDefinitionError):
     pass
 
 
-def parse(text: str, statement_stream_processor: "StatementStreamProcessor") -> None:
+def parse(text: str, statement_stream_processor: "StatementStreamProcessor", *, strict: bool) -> None:
     """
     The entry point of the parser. As the text is being parsed, the parser invokes appropriate
     methods in the statement stream processor.
     """
-    pr = _ParseTreeProcessor(statement_stream_processor)
+    pr = _ParseTreeProcessor(statement_stream_processor, strict=strict)
     try:
         pr.visit(_get_grammar().parse(text))  # type: ignore
     except _error.FrontendError as ex:
@@ -134,12 +134,13 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
     # Beware that those might be propagated from recursive parser instances!
     unwrapped_exceptions = (_error.FrontendError, SystemError, MemoryError, SystemExit)  # type: ignore
 
-    def __init__(self, statement_stream_processor: StatementStreamProcessor):
+    def __init__(self, statement_stream_processor: StatementStreamProcessor, *, strict: bool):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)
         self._statement_stream_processor = statement_stream_processor  # type: StatementStreamProcessor
         self._current_line_number = 1  # Lines are numbered from one
         self._comment = ""
         self._comment_is_header = True
+        self._strict = bool(strict)
         super().__init__()
 
     @property
@@ -269,9 +270,13 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return _serializable.BooleanType()
 
     def visit_type_primitive_byte(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
+        if self._strict:
+            raise _error.InvalidDefinitionError("byte is a non-standard extension unavailable in strict mode")
         return _serializable.ByteType()
 
     def visit_type_primitive_utf8(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
+        if self._strict:
+            raise _error.InvalidDefinitionError("utf8 is a non-standard extension unavailable in strict mode")
         return _serializable.UTF8Type()
 
     def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:

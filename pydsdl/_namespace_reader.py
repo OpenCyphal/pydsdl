@@ -19,12 +19,14 @@ from ._serializable._composite import CompositeType
 def _read_definitions(
     target_definitions: SortedFileList[ReadableDSDLFile],
     lookup_definitions: SortedFileList[ReadableDSDLFile],
+    *,
     print_output_handler: PrintOutputHandler | None,
     allow_unregulated_fixed_port_id: bool,
+    strict: bool,
     direct: set[CompositeType],
     transitive: set[CompositeType],
     file_pool: dict[Path, ReadableDSDLFile],
-    level: int,
+    level: int = 0,
 ) -> None:
     """
     Don't look at me! I'm hideous!
@@ -87,12 +89,13 @@ def _read_definitions(
             _read_definitions(
                 dsdl_file_sort(_pending_definitions),
                 lookup_definitions,
-                print_output_handler,
-                allow_unregulated_fixed_port_id,
-                direct,
-                transitive,
-                file_pool,
-                level + 1,
+                print_output_handler=print_output_handler,
+                allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
+                strict=strict,
+                direct=direct,
+                transitive=transitive,
+                file_pool=file_pool,
+                level=level + 1,
             )
             _pending_definitions.clear()
 
@@ -116,6 +119,8 @@ def read_definitions(
     lookup_definitions: SortedFileList[ReadableDSDLFile],
     print_output_handler: PrintOutputHandler | None,
     allow_unregulated_fixed_port_id: bool,
+    *,
+    strict: bool = False,
 ) -> DSDLDefinitions:
     """
     Given a set of DSDL files, this method reads the text and invokes the parser for each and for any files found in the
@@ -125,6 +130,7 @@ def read_definitions(
     :param lookup_definitions:              List of definitions available for referring to.
     :param print_output_handler:            Used for @print and for diagnostics: (line_number, text) -> None.
     :param allow_unregulated_fixed_port_id: Do not complain about fixed unregulated port IDs.
+    :param strict:                          Reject features that are not part of the Specification.
     :return: The data type representation.
     :raises InvalidDefinitionError: If a dependency is missing.
     :raises InternalError: If an unexpected error occurs.
@@ -135,12 +141,12 @@ def read_definitions(
     _read_definitions(
         target_definitions,
         lookup_definitions,
-        print_output_handler,
-        allow_unregulated_fixed_port_id,
-        _direct,
-        _transitive,
-        _file_pool,
-        0,
+        print_output_handler=print_output_handler,
+        allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
+        strict=strict,
+        direct=_direct,
+        transitive=_transitive,
+        file_pool=_file_pool,
     )
     return DSDLDefinitions(
         dsdl_file_sort(_direct),
@@ -186,6 +192,7 @@ def _unittest_namespace_reader_read_definitions_multiple(temp_dsdl_factory) -> N
     assert len(definitions.transitive) == 2
 
 
+# noinspection PyProtectedMember
 def _unittest_namespace_reader_read_definitions_multiple_no_load(temp_dsdl_factory) -> None:  # type: ignore
     """
     Ensure that the loader does not load files that are not in the transitive closure of the target files.
