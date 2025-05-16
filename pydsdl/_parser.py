@@ -270,13 +270,9 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
         return _serializable.BooleanType()
 
     def visit_type_primitive_byte(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
-        if self._strict:
-            raise _error.InvalidDefinitionError("byte is a non-standard extension unavailable in strict mode")
         return _serializable.ByteType()
 
     def visit_type_primitive_utf8(self, _n: _Node, _c: _Children) -> _serializable.PrimitiveType:
-        if self._strict:
-            raise _error.InvalidDefinitionError("utf8 is a non-standard extension unavailable in strict mode")
         return _serializable.UTF8Type()
 
     def visit_type_primitive_truncated(self, _n: _Node, children: _Children) -> _serializable.PrimitiveType:
