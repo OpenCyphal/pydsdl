@@ -32,7 +32,7 @@ class Set(Container):
     class _Decorator:
         @staticmethod
         def homotypic_binary_operator(
-            inferior: typing.Callable[["Set", "Set"], _O]
+            inferior: typing.Callable[["Set", "Set"], _O],
         ) -> typing.Callable[["Set", "Set"], _O]:
             def wrapper(self: "Set", other: "Set") -> _O:
                 assert isinstance(self, Set) and isinstance(other, Set)

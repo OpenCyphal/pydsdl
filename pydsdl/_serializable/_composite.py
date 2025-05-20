@@ -6,14 +6,14 @@ import abc
 import math
 import typing
 from pathlib import Path
-
-from .. import _expression, _port_id_ranges
+from .. import _expression
+from .. import _port_id_ranges
 from .._bit_length_set import BitLengthSet
-from ._attribute import Attribute, Constant, Field, PaddingField
-from ._name import InvalidNameError, check_name
+from .._error import InvalidDefinitionError
+from ._serializable import SerializableType, TypeParameterError, AggregationFailure
+from ._attribute import Attribute, Field, PaddingField, Constant
+from ._name import check_name, InvalidNameError
 from ._primitive import PrimitiveType, UnsignedIntegerType
-from ._serializable import SerializableType, TypeParameterError
-from ._void import VoidType
 
 Version = typing.NamedTuple("Version", [("major", int), ("minor", int)])
 
@@ -38,7 +38,7 @@ class MalformedUnionError(TypeParameterError):
     pass
 
 
-class DeprecatedDependencyError(TypeParameterError):
+class AggregationError(InvalidDefinitionError):
     pass
 
 
@@ -80,10 +80,8 @@ class CompositeType(SerializableType):
         # Name check
         if not self._name:
             raise InvalidNameError("Composite type name cannot be empty")
-
         if self.NAME_COMPONENT_SEPARATOR not in self._name:
             raise InvalidNameError("Root namespace is not specified")
-
         if len(self._name) > self.MAX_NAME_LENGTH:
             # TODO
             # Notice that per the Specification, service request/response types are unnamed,
@@ -121,7 +119,6 @@ class CompositeType(SerializableType):
             and (0 <= self._version.minor <= self.MAX_VERSION_NUMBER)
             and ((self._version.major + self._version.minor) > 0)
         )
-
         if not version_valid:
             raise InvalidVersionError("Invalid version numbers: %s.%s" % (self._version.major, self._version.minor))
 
@@ -143,17 +140,13 @@ class CompositeType(SerializableType):
                 if not (0 <= port_id <= _port_id_ranges.MAX_SUBJECT_ID):
                     raise InvalidFixedPortIDError("Fixed subject ID %r is not valid" % port_id)
 
-        # Consistent deprecation check.
-        # A non-deprecated type cannot be dependent on deprecated types.
-        # A deprecated type can be dependent on anything.
-        if not self.deprecated:
-            for a in self._attributes:
-                t = a.data_type
-                if isinstance(t, CompositeType):
-                    if t.deprecated:
-                        raise DeprecatedDependencyError(
-                            "A type cannot depend on deprecated types " "unless it is also deprecated."
-                        )
+        # Aggregation check. For example:
+        #   - Types like utf8 and byte cannot be used outside of arrays.
+        #   - A non-deprecated type cannot depend on a deprecated type.
+        for a in self._attributes:
+            af = a.data_type._check_aggregation(self)
+            if af is not None:
+                raise AggregationError("Type of %r is not a valid field type for %s: %s" % (str(a), self, af.message))
 
     @property
     def full_name(self) -> str:
@@ -216,9 +209,12 @@ class CompositeType(SerializableType):
         """
         raise NotImplementedError
 
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        return super()._check_aggregation(aggregate)
+
     @property
     def deprecated(self) -> bool:
-        """Whether the definition is marked ``@deprecated``."""
+        """True if the definition is marked ``@deprecated``."""
         return self._deprecated
 
     @property
@@ -410,10 +406,6 @@ class UnionType(CompositeType):
             raise MalformedUnionError(
                 "A tagged union cannot contain fewer than %d variants" % self.MIN_NUMBER_OF_VARIANTS
             )
-
-        for a in attributes:
-            if isinstance(a, PaddingField) or not a.name or isinstance(a.data_type, VoidType):
-                raise MalformedUnionError("Padding fields not allowed in unions")
 
         self._tag_field_type = UnsignedIntegerType(
             self._compute_tag_bit_length([x.data_type for x in self.fields]), PrimitiveType.CastMode.TRUNCATED
@@ -652,6 +644,12 @@ class DelimitedType(CompositeType):
         base_offset = base_offset + self.delimiter_header_type.bit_length_set
         return self.inner_type.iterate_fields_with_offsets(base_offset)
 
+    def _check_aggregation(self, aggregate: "SerializableType") -> typing.Optional[AggregationFailure]:
+        af = self.inner_type._check_aggregation(aggregate)  # pylint: disable=protected-access
+        if af is not None:
+            return af
+        return super()._check_aggregation(aggregate)
+
     def __repr__(self) -> str:
         return "%s(inner=%r, extent=%r)" % (self.__class__.__name__, self.inner_type, self.extent)
 
@@ -726,11 +724,10 @@ class ServiceType(CompositeType):
 
 def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
     from typing import Optional
-
     from pytest import raises
-
     from ._array import FixedLengthArrayType, VariableLengthArrayType
     from ._primitive import FloatType, SignedIntegerType
+    from ._void import VoidType
 
     def try_name(name: str, file_path: Optional[Path] = None) -> CompositeType:
         return StructureType(
@@ -786,7 +783,7 @@ def _unittest_composite_types() -> None:  # pylint: disable=too-many-statements
             has_parent_service=False,
         )
 
-    with raises(MalformedUnionError, match="(?i).*padding.*"):
+    with raises(AggregationError, match="(?i).*not a valid field type.*"):
         UnionType(
             name="a.A",
             version=Version(0, 1),
@@ -998,6 +995,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
     from pytest import raises
 
     from ._array import FixedLengthArrayType, VariableLengthArrayType
+    from ._void import VoidType
     from ._primitive import BooleanType, FloatType
 
     saturated = PrimitiveType.CastMode.SATURATED
@@ -1031,7 +1029,7 @@ def _unittest_field_iterators() -> None:  # pylint: disable=too-many-locals
         StructureType,
         [
             Field(UnsignedIntegerType(10, saturated), "a"),
-            Field(BooleanType(saturated), "b"),
+            Field(BooleanType(), "b"),
             Field(VariableLengthArrayType(FloatType(32, saturated), 2), "c"),
             Field(FixedLengthArrayType(FloatType(32, saturated), 7), "d"),
             PaddingField(VoidType(3)),
