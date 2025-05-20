@@ -3,6 +3,7 @@
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
 import abc
+from typing import Optional, NamedTuple
 from .. import _expression
 from .. import _error
 from .._bit_length_set import BitLengthSet
@@ -10,6 +11,20 @@ from .._bit_length_set import BitLengthSet
 
 class TypeParameterError(_error.InvalidDefinitionError):
     pass
+
+
+AggregationFailure = NamedTuple(
+    "AggregationFailure",
+    [
+        ("inner", "SerializableType"),
+        ("outer", "SerializableType"),
+        ("message", str),
+    ],
+)
+"""
+This is returned by :meth:`SerializableType._check_aggregation()` to indicate the reason of the failure.
+Eventually this will need to be replaced with a dataclass (sadly no dataclasses in Python 3.6).
+"""
 
 
 class SerializableType(_expression.Any):
@@ -55,6 +70,30 @@ class SerializableType(_expression.Any):
         no alignment.
         """
         raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def deprecated(self) -> bool:
+        """
+        Deprecation is transitive.
+        This property is used to propagate deprecation information from the type to its aggregates.
+        """
+        raise NotImplementedError
+
+    def _check_aggregation(self, aggregate: "SerializableType") -> Optional[AggregationFailure]:
+        """
+        Returns None iff the argument is a suitable aggregate type for this element type;
+        otherwise, returns an instance of :class:`AggregationFailure` describing the reason of the failure.
+        This is needed to detect incorrect aggregations, such as padding fields in unions,
+        or standalone utf8 or byte, or a deprecated type nested into a non-deprecated type, etc.
+        """
+        if self.deprecated and not aggregate.deprecated:
+            return AggregationFailure(
+                self,
+                aggregate,
+                "A non-deprecated type %s cannot depend on a deprecated type %s" % (aggregate, self),
+            )
+        return None
 
     def _attribute(self, name: _expression.String) -> _expression.Any:
         if name.native_value == "_bit_length_":  # Experimental non-standard extension

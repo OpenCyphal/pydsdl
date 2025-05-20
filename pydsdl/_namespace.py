@@ -74,6 +74,8 @@ def read_namespace(
     print_output_handler: PrintOutputHandler | None = None,
     allow_unregulated_fixed_port_id: bool = False,
     allow_root_namespace_name_collision: bool = True,
+    *,
+    strict: bool = False,
 ) -> list[_serializable.CompositeType]:
     """
     This function is a main entry point for the library.
@@ -103,6 +105,8 @@ def read_namespace(
              the same root namespace name multiple times in the lookup dirs. This will enable defining a namespace
              partially and let other entities define new messages or new sub-namespaces in the same root namespace.
 
+    :param strict: Reject features that are not [yet] part of the Cyphal Specification.
+
     :return: A list of :class:`pydsdl.CompositeType` found under the `root_namespace_directory` and sorted
              lexicographically by full data type name, then by major version (newest version first), then by minor
              version (newest version first). The ordering guarantee allows the caller to always find the newest version
@@ -131,7 +135,11 @@ def read_namespace(
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(x))
 
     return _complete_read_function(
-        target_dsdl_definitions, lookup_directories_path_list, print_output_handler, allow_unregulated_fixed_port_id
+        target_dsdl_definitions,
+        lookup_directories_path_list,
+        print_output_handler,
+        allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
+        strict=strict,
     ).direct
 
 
@@ -142,6 +150,8 @@ def read_files(
     lookup_directories: None | Path | str | Iterable[Path | str] = None,
     print_output_handler: PrintOutputHandler | None = None,
     allow_unregulated_fixed_port_id: bool = False,
+    *,
+    strict: bool = False,
 ) -> tuple[list[_serializable.CompositeType], list[_serializable.CompositeType]]:
     """
     This function is a main entry point for the library.
@@ -232,6 +242,8 @@ def read_files(
         This is a dangerous feature that must not be used unless you understand the risks.
         Please read https://opencyphal.org/guide.
 
+    :param strict: Reject features that are not [yet] part of the Cyphal Specification.
+
     :return: A Tuple of lists of :class:`pydsdl.CompositeType`. The first index in the Tuple are the types parsed from
         the ``dsdl_files`` argument. The second index are types that the target ``dsdl_files`` utilizes.
         A note for using these values to describe build dependencies: each :class:`pydsdl.CompositeType` has two
@@ -266,9 +278,12 @@ def read_files(
     )
 
     definitions = _complete_read_function(
-        target_dsdl_definitions, lookup_directories_path_list, print_output_handler, allow_unregulated_fixed_port_id
+        target_dsdl_definitions,
+        lookup_directories_path_list,
+        print_output_handler,
+        allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
+        strict=strict,
     )
-
     return (definitions.direct, definitions.transitive)
 
 
@@ -286,7 +301,9 @@ def _complete_read_function(
     target_dsdl_definitions: SortedFileList[ReadableDSDLFile],
     lookup_directories_path_list: list[Path],
     print_output_handler: PrintOutputHandler | None,
+    *,
     allow_unregulated_fixed_port_id: bool,
+    strict: bool,
 ) -> DSDLDefinitions:
 
     lookup_dsdl_definitions = _construct_dsdl_definitions_from_namespaces(lookup_directories_path_list)
@@ -307,7 +324,11 @@ def _complete_read_function(
     # This is the biggie. All the rest of the wrangling is just to get to this point. This will take the
     # most time and memory.
     definitions = read_definitions(
-        target_dsdl_definitions, lookup_dsdl_definitions, print_output_handler, allow_unregulated_fixed_port_id
+        target_dsdl_definitions,
+        lookup_dsdl_definitions,
+        print_output_handler,
+        allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
+        strict=strict,
     )
 
     # Note that we check for collisions in the read namespace only.

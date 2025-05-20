@@ -155,9 +155,9 @@ def _unittest_attribute() -> None:
     from pytest import raises
     from ._primitive import SignedIntegerType
 
-    assert str(Field(BooleanType(PrimitiveType.CastMode.SATURATED), "flag")) == "saturated bool flag"
+    assert str(Field(BooleanType(), "flag")) == "bool flag"
     assert (
-        repr(Field(BooleanType(PrimitiveType.CastMode.SATURATED), "flag"))
+        repr(Field(BooleanType(), "flag"))
         == "Field(data_type=BooleanType(bit_length=1, cast_mode=<CastMode.SATURATED: 0>), name='flag')"
     )
 

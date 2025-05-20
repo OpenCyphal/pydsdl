@@ -7,11 +7,11 @@
 
 from __future__ import annotations
 import tempfile
-from typing import Sequence, Type, Iterable
+from typing import Sequence, Type, Iterable, Any
 from pathlib import Path
 from textwrap import dedent
 import pytest  # This is only safe to import in test files!
-from . import _data_type_builder
+from . import InvalidDefinitionError
 from . import _expression
 from . import _error
 from . import _parser
@@ -67,13 +67,16 @@ class Workspace:
 
 
 def parse_definition(
-    definition: _dsdl_definition.DSDLDefinition, lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition]
+    definition: _dsdl_definition.DSDLDefinition,
+    lookup_definitions: Sequence[_dsdl_definition.DSDLDefinition],
+    **kwargs: Any,
 ) -> _serializable.CompositeType:
     return definition.read(
         lookup_definitions,
         [],
         print_output_handler=lambda line, text: print("Output from line %d:" % line, text),
         allow_unregulated_fixed_port_id=False,
+        **kwargs,
     )
 
 
@@ -281,7 +284,7 @@ def _unittest_simple(wrkspc: Workspace) -> None:
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
-        saturated bool [ <= 255 ] c
+        bool [ <= 255 ] c
         """
         ),
     )
@@ -309,7 +312,7 @@ def _unittest_simple(wrkspc: Workspace) -> None:
     assert len(p.fields) == 3
     assert str(p.fields[0]) == "saturated uint8 a"
     assert str(p.fields[1]) == "vendor.nested.Empty.255.255[5] b"
-    assert str(p.fields[2]) == "saturated bool[<=255] c"
+    assert str(p.fields[2]) == "bool[<=255] c"
 
 
 def _unittest_comments(wrkspc: Workspace) -> None:
@@ -408,7 +411,7 @@ def _unittest_comments(wrkspc: Workspace) -> None:
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
-        saturated bool [ <= 255 ] c
+        bool [ <= 255 ] c
         """
         ),
     )
@@ -535,8 +538,14 @@ def _unittest_error(wrkspc: Workspace) -> None:
     with raises(_parser.DSDLSyntaxError):
         standalone("vendor/types/A.1.0.dsdl", "truncated uavcan.node.Heartbeat.1.0 field\n@sealed")
 
-    with raises(_serializable._primitive.InvalidCastModeError):
+    with raises(_parser.DSDLSyntaxError):
         standalone("vendor/types/A.1.0.dsdl", "truncated bool foo\n@sealed")
+
+    with raises(_parser.DSDLSyntaxError):
+        standalone("vendor/types/A.1.0.dsdl", "saturated utf8 foo\n@sealed")
+
+    with raises(_parser.DSDLSyntaxError):
+        standalone("vendor/types/A.1.0.dsdl", "saturated byte foo\n@sealed")
 
     with raises(_serializable._primitive.InvalidCastModeError):
         standalone("vendor/types/A.1.0.dsdl", "truncated int8 foo\n@sealed")
@@ -752,6 +761,21 @@ def _unittest_error(wrkspc: Workspace) -> None:
                    """
             ),
         )
+
+    with raises(_error.InvalidDefinitionError, match="(?i).*not a valid field type.*"):
+        standalone("vendor/types/A.1.0.dsdl", "utf8 foo\n@sealed")
+
+    with raises(_error.InvalidDefinitionError, match="(?i).*element type.*"):
+        standalone("vendor/types/A.1.0.dsdl", "utf8[10] foo\n@sealed")  # Cannot be fixed-length.
+
+    with raises(_error.InvalidDefinitionError, match="(?i).*not a valid field type.*"):
+        standalone("vendor/types/A.1.0.dsdl", "byte foo\n@sealed")
+
+    with raises(_error.InvalidDefinitionError, match="(?i).*not a valid field type.*"):
+        standalone("vendor/types/A.1.0.dsdl", "utf8 FOO = 1\n@sealed")
+
+    with raises(_error.InvalidDefinitionError, match="(?i).*not a valid field type.*"):
+        standalone("vendor/types/A.1.0.dsdl", "byte FOO = 1\n@sealed")
 
 
 def _unittest_print(wrkspc: Workspace) -> None:
@@ -1727,7 +1751,7 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
         ],
     )
 
-    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*"):
+    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*") as exc_info:
         parse_definition(
             wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
@@ -1740,6 +1764,22 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
             ),
             [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
+    print(exc_info.value.text)
+
+    with raises(_error.InvalidDefinitionError, match="(?i).*depend.*deprecated.*") as exc_info:
+        parse_definition(
+            wrkspc.parse_new(
+                "ns/C.1.0.dsdl",
+                dedent(
+                    """
+                X.1.0[<9] b  # Ensure the deprecation property is transitive.
+                @sealed
+                """
+                ),
+            ),
+            [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
+        )
+    print(exc_info.value.text)
 
     parse_definition(
         wrkspc.parse_new(
@@ -1911,6 +1951,42 @@ def _unittest_dsdl_parser_basics(wrkspc: Workspace) -> None:
             wrkspc.parse_new("ns/Bar.1.23.dsdl", "int8 the_field\nint8 A = 0xA\nint8 B = 0xB\n@extent 1024"),
         ],
     )
+
+
+def _unittest_dsdl_parser_utf8_bytes(wrkspc: Workspace) -> None:
+    ty = parse_definition(
+        wrkspc.parse_new(
+            "ns/A.1.0.dsdl",
+            dedent(
+                r"""
+                byte[10] bytes_fixed
+                byte[<=10] bytes_variable
+                utf8[<=10] string
+                @extent 256 * 8
+                """
+            ),
+        ),
+        [],
+    )
+    t = ty.fields[0].data_type
+    assert isinstance(t, _serializable.FixedLengthArrayType)
+    assert isinstance(t.element_type, _serializable.ByteType)
+    assert isinstance(t.element_type, _serializable.UnsignedIntegerType)
+    assert t.capacity == 10
+    assert not t.string_like
+
+    t = ty.fields[1].data_type
+    assert isinstance(t, _serializable.VariableLengthArrayType)
+    assert isinstance(t.element_type, _serializable.ByteType)
+    assert isinstance(t.element_type, _serializable.UnsignedIntegerType)
+    assert t.capacity == 10
+
+    t = ty.fields[2].data_type
+    assert isinstance(t, _serializable.VariableLengthArrayType)
+    assert isinstance(t.element_type, _serializable.UTF8Type)
+    assert isinstance(t.element_type, _serializable.UnsignedIntegerType)
+    assert t.capacity == 10
+    assert t.string_like
 
 
 def _unittest_dsdl_parser_expressions(wrkspc: Workspace) -> None:

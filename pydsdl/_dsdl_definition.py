@@ -235,6 +235,8 @@ class DSDLDefinition(ReadableDSDLFile):
         definition_visitors: Iterable[DefinitionVisitor],
         print_output_handler: Callable[[int, str], None],
         allow_unregulated_fixed_port_id: bool,
+        *,
+        strict: bool = False,
     ) -> CompositeType:
         log_prefix = "%s.%d.%d" % (self.full_name, self.version.major, self.version.minor)
         if self._cached_type is not None:
@@ -262,7 +264,7 @@ class DSDLDefinition(ReadableDSDLFile):
                 allow_unregulated_fixed_port_id=allow_unregulated_fixed_port_id,
             )
 
-            _parser.parse(self.text, builder)
+            _parser.parse(self.text, builder, strict=strict)
 
             self._cached_type = builder.finalize()
             _logger.info(
@@ -536,5 +538,5 @@ def _unittest_type_from_path_inference_edge_case(temp_dsdl_factory) -> None:  # 
 
 def _unittest_from_first_in(temp_dsdl_factory) -> None:  # type: ignore
     dsdl_file = temp_dsdl_factory.new_file(Path("repo/uavcan/foo/bar/435.baz.1.0.dsdl"), "@sealed")
-    dsdl_def = DSDLDefinition.from_first_in(dsdl_file.resolve(), [(dsdl_file.parent.parent / "..")])
+    dsdl_def = DSDLDefinition.from_first_in(dsdl_file.resolve(), [dsdl_file.parent.parent / ".."])
     assert dsdl_def.full_name == "uavcan.foo.bar.baz"

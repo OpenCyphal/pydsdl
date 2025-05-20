@@ -347,7 +347,7 @@ class BitLengthSet:
 
     @staticmethod
     def elementwise_sum_cartesian_product(
-        sets: typing.Iterable[typing.Union[typing.Iterable[int], int]]
+        sets: typing.Iterable[typing.Union[typing.Iterable[int], int]],
     ) -> "BitLengthSet":  # pragma: no cover
         """
         :meta private:
