@@ -11,12 +11,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest ]
-        python: [ '3.9', '3.10', '3.11', '3.12' ]
+        python: [ '3.10', '3.11', '3.12', '3.13', '3.14' ]
         include:
-          - os: windows-2019
-            python: '3.10'
-          - os: macos-latest
-            python: '3.9'
+          - os: windows-latest
+            python: '3.12'
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out pydsdl
@@ -29,7 +27,7 @@ jobs:
           path: .dsdl-test
 
       - name: Install Python3
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
@@ -42,7 +40,7 @@ jobs:
             sudo apt-get --ignore-missing update || true
             sudo apt-get install -y linux-*-extra-$(uname -r) graphviz
           fi
-          python -m pip install --upgrade pip setuptools nox typed_ast
+          python -m pip install --upgrade pip setuptools nox
         shell: bash
 
       - name: Run build and test
@@ -51,7 +49,7 @@ jobs:
             nox --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
             nox --non-interactive --session docs
           elif [ "$RUNNER_OS" == "Windows" ]; then
-            nox --forcecolor --non-interactive --error-on-missing-interpreters --session test pristine lint
+            nox --forcecolor --non-interactive --session test pristine lint
           elif [ "$RUNNER_OS" == "macOS" ]; then
             nox --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
           else
