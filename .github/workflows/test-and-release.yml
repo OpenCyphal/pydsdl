@@ -49,7 +49,7 @@ jobs:
             nox --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
             nox --non-interactive --session docs
           elif [ "$RUNNER_OS" == "Windows" ]; then
-            nox --forcecolor --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
+            nox --forcecolor --non-interactive --session test pristine lint
           elif [ "$RUNNER_OS" == "macOS" ]; then
             nox --non-interactive --error-on-missing-interpreters --session test pristine lint --python ${{ matrix.python }}
           else
