@@ -20,7 +20,7 @@ from . import _dsdl_definition
 from . import _serializable
 from . import _namespace
 
-__all__ = []  # type: ignore
+__all__ = []
 
 
 class Workspace:

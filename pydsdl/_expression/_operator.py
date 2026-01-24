@@ -47,7 +47,7 @@ def _auto_swap(
                     raise
 
             assert isinstance(result, _any.Any)
-            return typing.cast(OperatorOutput, result)
+            return result
 
         return wrapper
 
