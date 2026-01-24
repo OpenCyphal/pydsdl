@@ -10,7 +10,7 @@ from functools import partial
 import nox
 
 
-PYTHONS = ["3.9", "3.10", "3.11", "3.12"]
+PYTHONS = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
