@@ -47,7 +47,10 @@ class Boolean(Primitive):
         return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
-        return "true" if self._value else "false"
+        try:
+            return "true" if self._value else "false"
+        except AttributeError:  # pragma: no cover
+            return "Boolean(UNINITIALIZED)"
 
     def __bool__(self) -> bool:  # For use in expressions without accessing "native_value"
         return self._value
@@ -107,7 +110,10 @@ class Rational(Primitive):
         return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
-        return str(self._value)
+        try:
+            return str(self._value)
+        except AttributeError:  # pragma: no cover
+            return "Rational(UNINITIALIZED)"
 
     #
     # Unary operators.
@@ -216,7 +222,10 @@ class String(Primitive):
         return NotImplemented  # pragma: no cover
 
     def __str__(self) -> str:
-        return repr(self._value)
+        try:
+            return repr(self._value)
+        except AttributeError:  # pragma: no cover
+            return "String(UNINITIALIZED)"
 
     def _add(self, right: _any.Any) -> "String":
         if isinstance(right, String):
