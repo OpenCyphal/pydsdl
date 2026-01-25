@@ -353,22 +353,28 @@ class CompositeType(SerializableType):
 
     def __str__(self) -> str:
         """Returns a string like ``uavcan.node.Heartbeat.1.0``."""
-        return "%s.%d.%d" % (self.full_name, self.version.major, self.version.minor)
+        try:
+            return "%s.%d.%d" % (self.full_name, self.version.major, self.version.minor)
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
     def __repr__(self) -> str:
-        return (
-            "%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, "
-            "deprecated=%r, fixed_port_id=%r)"
-        ) % (
-            self.__class__.__name__,
-            self.full_name,
-            self.version,
-            self.fields,
-            self.constants,
-            self.alignment_requirement,
-            self.deprecated,
-            self.fixed_port_id,
-        )
+        try:
+            return (
+                "%s(name=%r, version=%r, fields=%r, constants=%r, alignment_requirement=%r, "
+                "deprecated=%r, fixed_port_id=%r)"
+            ) % (
+                self.__class__.__name__,
+                self.full_name,
+                self.version,
+                self.fields,
+                self.constants,
+                self.alignment_requirement,
+                self.deprecated,
+                self.fixed_port_id,
+            )
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
 
 class UnionType(CompositeType):
@@ -651,7 +657,10 @@ class DelimitedType(CompositeType):
         return super()._check_aggregation(aggregate)
 
     def __repr__(self) -> str:
-        return "%s(inner=%r, extent=%r)" % (self.__class__.__name__, self.inner_type, self.extent)
+        try:
+            return "%s(inner=%r, extent=%r)" % (self.__class__.__name__, self.inner_type, self.extent)
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
 
 class ServiceType(CompositeType):

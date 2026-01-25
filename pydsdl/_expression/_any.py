@@ -54,7 +54,10 @@ class Any(abc.ABC):
         raise NotImplementedError  # pragma: no cover
 
     def __repr__(self) -> str:
-        return self.TYPE_NAME + "(" + str(self) + ")"
+        try:
+            return self.TYPE_NAME + "(" + str(self) + ")"
+        except (AttributeError, NotImplementedError):  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
     # Unary operators.
     def _logical_not(self) -> "Boolean":
