@@ -8,9 +8,24 @@ import struct
 import typing
 
 from ._serializable import (
-    CompositeType, PrimitiveType, BooleanType, SignedIntegerType, UnsignedIntegerType, FloatType, VoidType,
-    ArrayType, FixedLengthArrayType, VariableLengthArrayType, UTF8Type, ByteType,
-    StructureType, UnionType, ServiceType, DelimitedType, Field, PaddingField
+    CompositeType,
+    PrimitiveType,
+    BooleanType,
+    SignedIntegerType,
+    UnsignedIntegerType,
+    FloatType,
+    VoidType,
+    ArrayType,
+    FixedLengthArrayType,
+    VariableLengthArrayType,
+    UTF8Type,
+    ByteType,
+    StructureType,
+    UnionType,
+    ServiceType,
+    DelimitedType,
+    Field,
+    PaddingField,
 )
 
 
@@ -248,9 +263,7 @@ class _BitReader:
     Out-of-bounds reads return zeros (implicit zero extension).
     """
 
-    def __init__(
-        self, data: bytes | bytearray | memoryview, bit_offset: int = 0, bit_limit: int | None = None
-    ) -> None:
+    def __init__(self, data: bytes | bytearray | memoryview, bit_offset: int = 0, bit_limit: int | None = None) -> None:
         self._data: bytes = bytes(data) if isinstance(data, (bytearray, memoryview)) else data
         self._bit_offset: int = bit_offset
         self._bit_limit: int | None = bit_limit
@@ -297,11 +310,11 @@ class _BitReader:
 
     @property
     def remaining_bits(self) -> int:
-         """Bits remaining before limit (or end of data if no limit)."""
-         if self._bit_limit is not None:
-             return max(0, self._bit_limit - (self._bit_offset - (self._bit_offset - self._bit_limit)))
-         else:
-             return max(0, len(self._data) * 8 - self._bit_offset)
+        """Bits remaining before limit (or end of data if no limit)."""
+        if self._bit_limit is not None:
+            return max(0, self._bit_limit - (self._bit_offset - (self._bit_offset - self._bit_limit)))
+        else:
+            return max(0, len(self._data) * 8 - self._bit_offset)
 
     @property
     def bit_offset(self) -> int:
@@ -323,7 +336,7 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
         if not isinstance(value, (bool, int, float)):
             raise ValueError(f"Boolean requires numeric input, got {type(value).__name__}")
         if isinstance(value, float):
-            if not (-float('inf') < value < float('inf')):
+            if not (-float("inf") < value < float("inf")):
                 raise ValueError(f"Non-finite float cannot be converted to bool")
         bit_value = 1 if value else 0
         writer.write_bits(bit_value, 1)
@@ -339,19 +352,19 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
             max_bound = float(range_val.max)
             if float_value != float_value:
                 pass
-            elif float_value == float('inf'):
+            elif float_value == float("inf"):
                 pass
-            elif float_value == float('-inf'):
+            elif float_value == float("-inf"):
                 pass
             else:
                 float_value = max(min_bound, min(max_bound, float_value))
 
         if schema.bit_length == 16:
-            packed = struct.pack('<e', float_value)
+            packed = struct.pack("<e", float_value)
         elif schema.bit_length == 32:
-            packed = struct.pack('<f', float_value)
+            packed = struct.pack("<f", float_value)
         elif schema.bit_length == 64:
-            packed = struct.pack('<d', float_value)
+            packed = struct.pack("<d", float_value)
         else:
             raise ValueError(f"Invalid float bit length: {schema.bit_length}")
 
@@ -362,7 +375,7 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
         if not isinstance(value, (bool, int, float)):
             raise ValueError(f"Integer requires numeric input, got {type(value).__name__}")
         if isinstance(value, float):
-            if not (-float('inf') < value < float('inf')):
+            if not (-float("inf") < value < float("inf")):
                 raise ValueError(f"Non-finite float cannot be converted to int")
             int_value = int(round(value))
         else:
@@ -384,7 +397,7 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
         if not isinstance(value, (bool, int, float)):
             raise ValueError(f"Integer requires numeric input, got {type(value).__name__}")
         if isinstance(value, float):
-            if not (-float('inf') < value < float('inf')):
+            if not (-float("inf") < value < float("inf")):
                 raise ValueError(f"Non-finite float cannot be converted to int")
             int_value = int(round(value))
         else:
@@ -418,11 +431,11 @@ def _deserialize_primitive(reader: _BitReader, schema: PrimitiveType | VoidType)
 
     elif isinstance(schema, FloatType):
         if schema.bit_length == 16:
-            fmt = '<e'
+            fmt = "<e"
         elif schema.bit_length == 32:
-            fmt = '<f'
+            fmt = "<f"
         elif schema.bit_length == 64:
-            fmt = '<d'
+            fmt = "<d"
         else:
             raise ValueError(f"Invalid float bit length: {schema.bit_length}")
 
@@ -431,7 +444,7 @@ def _deserialize_primitive(reader: _BitReader, schema: PrimitiveType | VoidType)
         for _ in range(byte_count):
             bytes_data.append(reader.read_bits(8))
 
-        return struct.unpack(fmt, bytes(bytes_data))[0]
+        return typing.cast(_Value, struct.unpack(fmt, bytes(bytes_data))[0])
 
     elif isinstance(schema, SignedIntegerType):
         raw_value = reader.read_bits(schema.bit_length)
@@ -464,22 +477,24 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
     """
     if isinstance(schema.element_type, UTF8Type):
         if isinstance(value, str):
-            value = value.encode('utf-8')
+            value = value.encode("utf-8")
         elif isinstance(value, (bytes, bytearray)):
-            _ = value.decode('utf-8')
+            _ = value.decode("utf-8")
         else:
             raise TypeError(f"UTF-8 array requires str, bytes, or bytearray input, got {type(value).__name__}")
         value = list(value)
 
     elif isinstance(schema.element_type, ByteType):
         if isinstance(value, str):
-            value = value.encode('utf-8')
+            value = value.encode("utf-8")
         elif isinstance(value, (bytes, bytearray)):
             value = list(value)
         elif isinstance(value, (list, tuple)):
             pass
         else:
-            raise TypeError(f"Byte array requires list, tuple, bytes, bytearray, or str input, got {type(value).__name__}")
+            raise TypeError(
+                f"Byte array requires list, tuple, bytes, bytearray, or str input, got {type(value).__name__}"
+            )
 
     elif isinstance(value, (list, tuple)):
         pass
@@ -526,9 +541,9 @@ def _deserialize_array(reader: _BitReader, schema: ArrayType) -> _Value:
         elements.append(element)
 
     if isinstance(schema.element_type, UTF8Type):
-        return bytes(elements).decode('utf-8')
+        return bytes(typing.cast(list[int], elements)).decode("utf-8")
     elif isinstance(schema.element_type, ByteType):
-        return bytes(elements)
+        return bytes(typing.cast(list[int], elements))
     else:
         return elements
 
@@ -538,7 +553,7 @@ def _serialize_element(writer: _BitWriter, element_type: typing.Any, value: _Val
     Serialize a single array element based on its type.
     """
     if isinstance(element_type, (PrimitiveType, VoidType)):
-        _serialize_primitive(writer, element_type, value)  # type: ignore
+        _serialize_primitive(writer, element_type, value)
     elif isinstance(element_type, ArrayType):
         _serialize_array(writer, element_type, value)
     elif isinstance(element_type, CompositeType):
@@ -552,11 +567,11 @@ def _deserialize_element(reader: _BitReader, element_type: typing.Any) -> _Value
     Deserialize a single array element based on its type.
     """
     if isinstance(element_type, (PrimitiveType, VoidType)):
-        return _deserialize_primitive(reader, element_type)  # type: ignore
+        return _deserialize_primitive(reader, element_type)
     elif isinstance(element_type, ArrayType):
         return _deserialize_array(reader, element_type)
     elif isinstance(element_type, CompositeType):
-        return _deserialize_composite(reader, element_type)  # type: ignore
+        return _deserialize_composite(reader, element_type)
     else:
         raise ValueError(f"Unknown element type: {type(element_type).__name__}")
 
@@ -638,13 +653,13 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
     if isinstance(schema, DelimitedType):
         payload_byte_length = reader.read_bits(schema.delimiter_header_type.bit_length)
         payload_bit_length = payload_byte_length * 8
-        
+
         if payload_bit_length > reader.remaining_bits:
             raise DelimiterHeaderError(
                 f"Delimiter header specifies {payload_byte_length} bytes ({payload_bit_length} bits) "
                 + f"but only {reader.remaining_bits} bits remain"
             )
-        
+
         sub_reader = reader.bounded_subreader(payload_bit_length)
         return _deserialize_composite(sub_reader, schema.inner_type)
 
@@ -683,7 +698,7 @@ def _serialize_field_value(writer: _BitWriter, field_type: typing.Any, value: _V
     Serialize a single field value based on its type.
     """
     if isinstance(field_type, (PrimitiveType, VoidType)):
-        _serialize_primitive(writer, field_type, value)  # type: ignore
+        _serialize_primitive(writer, field_type, value)
     elif isinstance(field_type, ArrayType):
         _serialize_array(writer, field_type, value)
     elif isinstance(field_type, CompositeType):
@@ -697,11 +712,11 @@ def _deserialize_field_value(reader: _BitReader, field_type: typing.Any) -> _Val
     Deserialize a single field value based on its type.
     """
     if isinstance(field_type, (PrimitiveType, VoidType)):
-        return _deserialize_primitive(reader, field_type)  # type: ignore
+        return _deserialize_primitive(reader, field_type)
     elif isinstance(field_type, ArrayType):
         return _deserialize_array(reader, field_type)
     elif isinstance(field_type, CompositeType):
-        return _deserialize_composite(reader, field_type)  # type: ignore
+        return _deserialize_composite(reader, field_type)
     else:
         raise ValueError(f"Unknown field type: {type(field_type).__name__}")
 
@@ -756,62 +771,78 @@ def _unittest_serdes_delimited() -> None:
     CM = PrimitiveType.CastMode
 
     inner = StructureType(
-        name='test.Inner', version=Version(1, 0),
-        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), 'x')],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'Inner'), has_parent_service=False)
+        name="test.Inner",
+        version=Version(1, 0),
+        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "Inner"),
+        has_parent_service=False,
+    )
     delimited_inner = DelimitedType(inner, inner.extent)
 
     outer = StructureType(
-        name='test.Outer', version=Version(1, 0),
+        name="test.Outer",
+        version=Version(1, 0),
         attributes=[
-            Field(delimited_inner, 'nested'),
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'y'),
+            Field(delimited_inner, "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
         ],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'Outer'), has_parent_service=False)
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "Outer"),
+        has_parent_service=False,
+    )
 
     w = _BitWriter()
-    _serialize_composite(w, outer, {'nested': {'x': 42}, 'y': 99})
+    _serialize_composite(w, outer, {"nested": {"x": 42}, "y": 99})
     data = w.finish()
 
     r = _BitReader(data)
     result = _deserialize_composite(r, outer)
-    assert result == {'nested': {'x': 42}, 'y': 99}
+    assert result == {"nested": {"x": 42}, "y": 99}
 
     w = _BitWriter()
     inner_union = UnionType(
-        name='test.InnerU', version=Version(1, 0),
+        name="test.InnerU",
+        version=Version(1, 0),
         attributes=[
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'a'),
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'b'),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
         ],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'InnerU'), has_parent_service=False)
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "InnerU"),
+        has_parent_service=False,
+    )
     delimited_union = DelimitedType(inner_union, inner_union.extent)
 
     outer_with_union = StructureType(
-        name='test.OuterU', version=Version(1, 0),
+        name="test.OuterU",
+        version=Version(1, 0),
         attributes=[
-            Field(delimited_union, 'nested'),
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'y'),
+            Field(delimited_union, "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
         ],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'OuterU'), has_parent_service=False)
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "OuterU"),
+        has_parent_service=False,
+    )
 
     w = _BitWriter()
-    _serialize_composite(w, outer_with_union, {'nested': {'a': 42}, 'y': 99})
+    _serialize_composite(w, outer_with_union, {"nested": {"a": 42}, "y": 99})
     data = w.finish()
 
     r = _BitReader(data)
     result = _deserialize_composite(r, outer_with_union)
-    assert result == {'nested': {'a': 42}, 'y': 99}
+    assert result == {"nested": {"a": 42}, "y": 99}
 
     try:
         w = _BitWriter()
-        _serialize_composite(w, outer, {'nested': {'x': 42}, 'y': 99})
+        _serialize_composite(w, outer, {"nested": {"x": 42}, "y": 99})
         data = w.finish()
-        
+
         r = _BitReader(data[:3])
         _ = _deserialize_composite(r, outer)
         assert False, "Should have raised DelimiterHeaderError"
@@ -832,66 +863,86 @@ def _unittest_serdes_composite_codec() -> None:
 
     w = _BitWriter()
     schema = StructureType(
-        name='test.S', version=Version(1, 0),
-        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), 'x')],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'S'), has_parent_service=False)
-    _serialize_composite(w, schema, {'x': 42})
+        name="test.S",
+        version=Version(1, 0),
+        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "S"),
+        has_parent_service=False,
+    )
+    _serialize_composite(w, schema, {"x": 42})
     assert w.finish() == bytes([0x2A])
 
     r = _BitReader(bytes([0x2A]))
     result = _deserialize_composite(r, schema)
-    assert result == {'x': 42}
+    assert result == {"x": 42}
 
     w = _BitWriter()
     schema = StructureType(
-        name='test.S2', version=Version(1, 0),
+        name="test.S2",
+        version=Version(1, 0),
         attributes=[
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'x'),
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'y'),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
         ],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'S2'), has_parent_service=False)
-    _serialize_composite(w, schema, {'x': 1, 'y': 2})
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "S2"),
+        has_parent_service=False,
+    )
+    _serialize_composite(w, schema, {"x": 1, "y": 2})
     data = w.finish()
     assert data == bytes([0x01, 0x02])
 
     r = _BitReader(data)
     result = _deserialize_composite(r, schema)
-    assert result == {'x': 1, 'y': 2}
+    assert result == {"x": 1, "y": 2}
 
     try:
         w = _BitWriter()
         schema = StructureType(
-            name='test.S3', version=Version(1, 0),
-            attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), 'x')],
-            deprecated=False, fixed_port_id=None,
-            source_file_path=Path('test', 'S3'), has_parent_service=False)
-        _serialize_composite(w, schema, {'x': 1, 'unknown': 2})
+            name="test.S3",
+            version=Version(1, 0),
+            attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+            deprecated=False,
+            fixed_port_id=None,
+            source_file_path=Path("test", "S3"),
+            has_parent_service=False,
+        )
+        _serialize_composite(w, schema, {"x": 1, "unknown": 2})
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "Unknown field" in str(e)
 
     w = _BitWriter()
     schema = StructureType(
-        name='test.S4', version=Version(1, 0),
-        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), 'x')],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'S4'), has_parent_service=False)
+        name="test.S4",
+        version=Version(1, 0),
+        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "S4"),
+        has_parent_service=False,
+    )
     _serialize_composite(w, schema, {})
     data = w.finish()
     assert data == bytes([0x00])
 
     try:
         w = _BitWriter()
-        schema = UnionType(
-            name='test.U', version=Version(1, 0),
+        schema = UnionType(  # type: ignore
+            name="test.U",
+            version=Version(1, 0),
             attributes=[
-                Field(UnsignedIntegerType(8, CM.TRUNCATED), 'a'),
-                Field(UnsignedIntegerType(8, CM.TRUNCATED), 'b'),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
             ],
-            deprecated=False, fixed_port_id=None,
-            source_file_path=Path('test', 'U'), has_parent_service=False)
+            deprecated=False,
+            fixed_port_id=None,
+            source_file_path=Path("test", "U"),
+            has_parent_service=False,
+        )
         _serialize_composite(w, schema, {})
         assert False, "Should have raised ValueError"
     except ValueError as e:
@@ -899,65 +950,81 @@ def _unittest_serdes_composite_codec() -> None:
 
     try:
         w = _BitWriter()
-        schema = UnionType(
-            name='test.U2', version=Version(1, 0),
+        schema = UnionType(  # type: ignore
+            name="test.U2",
+            version=Version(1, 0),
             attributes=[
-                Field(UnsignedIntegerType(8, CM.TRUNCATED), 'a'),
-                Field(UnsignedIntegerType(8, CM.TRUNCATED), 'b'),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
             ],
-            deprecated=False, fixed_port_id=None,
-            source_file_path=Path('test', 'U2'), has_parent_service=False)
-        _serialize_composite(w, schema, {'a': 1, 'b': 2})
+            deprecated=False,
+            fixed_port_id=None,
+            source_file_path=Path("test", "U2"),
+            has_parent_service=False,
+        )
+        _serialize_composite(w, schema, {"a": 1, "b": 2})
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "exactly one field" in str(e)
 
     try:
         w = _BitWriter()
-        schema = UnionType(
-            name='test.U3', version=Version(1, 0),
+        schema = UnionType(  # type: ignore
+            name="test.U3",
+            version=Version(1, 0),
             attributes=[
-                Field(UnsignedIntegerType(8, CM.TRUNCATED), 'a'),
-                Field(UnsignedIntegerType(8, CM.TRUNCATED), 'b'),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
             ],
-            deprecated=False, fixed_port_id=None,
-            source_file_path=Path('test', 'U3'), has_parent_service=False)
-        _serialize_composite(w, schema, {'unknown': 1})
+            deprecated=False,
+            fixed_port_id=None,
+            source_file_path=Path("test", "U3"),
+            has_parent_service=False,
+        )
+        _serialize_composite(w, schema, {"unknown": 1})
         assert False, "Should have raised UnionFieldError"
     except UnionFieldError as e:
         assert "Unknown union variant" in str(e)
 
     w = _BitWriter()
-    schema = UnionType(
-        name='test.U4', version=Version(1, 0),
+    schema = UnionType(  # type: ignore
+        name="test.U4",
+        version=Version(1, 0),
         attributes=[
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'a'),
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'b'),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
         ],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'U4'), has_parent_service=False)
-    _serialize_composite(w, schema, {'a': 42})
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "U4"),
+        has_parent_service=False,
+    )
+    _serialize_composite(w, schema, {"a": 42})
     data = w.finish()
 
     r = _BitReader(data)
     result = _deserialize_composite(r, schema)
-    assert result == {'a': 42}
+    assert result == {"a": 42}
 
     w = _BitWriter()
-    schema = UnionType(
-        name='test.U5', version=Version(1, 0),
+    schema = UnionType(  # type: ignore
+        name="test.U5",
+        version=Version(1, 0),
         attributes=[
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'a'),
-            Field(UnsignedIntegerType(8, CM.TRUNCATED), 'b'),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
         ],
-        deprecated=False, fixed_port_id=None,
-        source_file_path=Path('test', 'U5'), has_parent_service=False)
-    _serialize_composite(w, schema, {'b': 99})
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", "U5"),
+        has_parent_service=False,
+    )
+    _serialize_composite(w, schema, {"b": 99})
     data = w.finish()
 
     r = _BitReader(data)
     result = _deserialize_composite(r, schema)
-    assert result == {'b': 99}
+    assert result == {"b": 99}
 
     default = _default_value(UnsignedIntegerType(8, CM.TRUNCATED))
     assert default == 0
@@ -995,7 +1062,7 @@ def _unittest_serdes_array_codec() -> None:
     assert w.finish() == bytes([0x01, 0x02, 0x03])
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)
+    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
     _serialize_array(w, schema, [1, 2, 3])
     data = w.finish()
     assert data[0] == 3
@@ -1020,14 +1087,14 @@ def _unittest_serdes_array_codec() -> None:
 
     try:
         w = _BitWriter()
-        schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3)
+        schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3)  # type: ignore
         _serialize_array(w, schema, [1, 2, 3, 4])
         assert False, "Should have raised ArrayLengthError"
     except ArrayLengthError:
         pass
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)
+    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
     _serialize_array(w, schema, [])
     data = w.finish()
     assert data[0] == 0
@@ -1037,7 +1104,7 @@ def _unittest_serdes_array_codec() -> None:
     assert result == []
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)
+    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
     _serialize_array(w, schema, list(range(255)))
     data = w.finish()
     assert data[0] == 255
@@ -1047,7 +1114,7 @@ def _unittest_serdes_array_codec() -> None:
     assert isinstance(result, list) and len(result) == 255
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(UTF8Type(), 255)
+    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
     _serialize_array(w, schema, "hello")
     data = w.finish()
 
@@ -1057,7 +1124,7 @@ def _unittest_serdes_array_codec() -> None:
     assert isinstance(result, str)
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(UTF8Type(), 255)
+    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
     _serialize_array(w, schema, b"hello")
     data = w.finish()
 
@@ -1066,7 +1133,7 @@ def _unittest_serdes_array_codec() -> None:
     assert result == "hello"
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(ByteType(), 255)
+    schema = VariableLengthArrayType(ByteType(), 255)  # type: ignore
     _serialize_array(w, schema, b"hello")
     data = w.finish()
 
@@ -1076,7 +1143,7 @@ def _unittest_serdes_array_codec() -> None:
     assert isinstance(result, bytes)
 
     w = _BitWriter()
-    schema = VariableLengthArrayType(ByteType(), 255)
+    schema = VariableLengthArrayType(ByteType(), 255)  # type: ignore
     _serialize_array(w, schema, "hello")
     data = w.finish()
 
@@ -1097,7 +1164,7 @@ def _unittest_serdes_array_codec() -> None:
 
     try:
         w = _BitWriter()
-        schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)
+        schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
         _serialize_array(w, schema, "invalid")
         assert False, "Should have raised TypeError"
     except TypeError:
@@ -1252,20 +1319,21 @@ def _unittest_serdes_primitive_codec() -> None:
 
     try:
         w = _BitWriter()
-        _serialize_primitive(w, BooleanType(), float('inf'))
+        _serialize_primitive(w, BooleanType(), float("inf"))
         assert False, "Should have raised ValueError"
     except ValueError:
         pass
 
     try:
         w = _BitWriter()
-        _serialize_primitive(w, UnsignedIntegerType(8, CM.TRUNCATED), float('nan'))
+        _serialize_primitive(w, UnsignedIntegerType(8, CM.TRUNCATED), float("nan"))
         assert False, "Should have raised ValueError"
     except ValueError:
         pass
 
     w = _BitWriter()
     from pydsdl._serializable import VoidType
+
     _serialize_primitive(w, VoidType(8), None)
     assert w.finish() == bytes([0x00])
 
@@ -1367,12 +1435,12 @@ def _unittest_serdes_bit_reader() -> None:
 
     r = _BitReader(bytes([0xFF]))
     _ = r.read_bits(8)
-    _ = r.align_to(8)
+    r.align_to(8)
     assert r.bit_offset == 8
 
     r = _BitReader(bytes([0xFF]))
     _ = r.read_bits(3)
-    _ = r.align_to(8)
+    r.align_to(8)
     assert r.bit_offset == 8
 
     r = _BitReader(bytes([0x12, 0x34, 0x56]))
@@ -1469,6 +1537,7 @@ def _unittest_serdes_api() -> None:
 
     # Test 4: Verify imports work at package level
     import pydsdl
+
     assert hasattr(pydsdl, "serialize")
     assert hasattr(pydsdl, "deserialize")
     assert hasattr(pydsdl, "SerDesError")
