@@ -75,26 +75,62 @@ _DEFAULT_SENTINEL = object()
 # ============================================================================
 
 
-def serialize(_schema: CompositeType, _obj: _Obj, *, _with_delimiter_header: bool = False) -> bytes:
+def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool = False) -> bytes:
     """
     Serialize a Python object to bytes according to the given schema.
 
     Args:
-        _schema: The composite type schema defining the structure.
-        _obj: The Python object to serialize (typically a dict).
-        _with_delimiter_header: If True, prepend a delimiter header to the output.
+        schema: The composite type schema defining the structure.
+        obj: The Python object to serialize (typically a dict).
+        with_delimiter_header: If True, prepend a delimiter header to the output.
 
     Returns:
         The serialized bytes.
 
     Raises:
         SerDesError: If serialization fails.
+        TypeError: If schema is a ServiceType.
+        ValueError: If with_delimiter_header=True on a non-delimited type.
     """
-    ...
+    # Reject ServiceType
+    if isinstance(schema, ServiceType):
+        raise TypeError("Service types are not directly serializable")
+
+    # Validate with_delimiter_header flag
+    if with_delimiter_header and not isinstance(schema, DelimitedType):
+        raise ValueError("with_delimiter_header=True is only valid for delimited types")
+
+    # Handle DelimitedType
+    if isinstance(schema, DelimitedType):
+        if with_delimiter_header:
+            # Serialize inner type to temp buffer, then prepend header
+            inner_writer = _BitWriter()
+            _serialize_composite(inner_writer, schema.inner_type, obj)
+            inner_bytes = inner_writer.finish()
+            inner_byte_length = len(inner_bytes)
+
+            # Create output writer and write header + payload
+            writer = _BitWriter()
+            header_bit_length = schema.delimiter_header_type.bit_length
+            writer.write_bits(inner_byte_length, header_bit_length)
+            # Write inner bytes bit-by-bit
+            for byte_val in inner_bytes:
+                writer.write_bits(byte_val, 8)
+            return writer.finish()
+        else:
+            # Serialize inner type directly without header
+            writer = _BitWriter()
+            _serialize_composite(writer, schema.inner_type, obj)
+            return writer.finish()
+
+    # Handle StructureType and UnionType
+    writer = _BitWriter()
+    _serialize_composite(writer, schema, obj)
+    return writer.finish()
 
 
 def deserialize(
-    _schema: CompositeType, _data: bytes | bytearray | memoryview, *, _with_delimiter_header: bool = False
+    schema: CompositeType, data: bytes | bytearray | memoryview, *, with_delimiter_header: bool = False
 ) -> _Obj:
     """
     Deserialize bytes to a Python object according to the given schema.
@@ -109,8 +145,42 @@ def deserialize(
 
     Raises:
         SerDesError: If deserialization fails.
+        TypeError: If schema is a ServiceType.
+        ValueError: If with_delimiter_header=True on a non-delimited type.
     """
-    ...
+    # Reject ServiceType
+    if isinstance(schema, ServiceType):
+        raise TypeError("Service types are not directly deserializable")
+
+    # Validate with_delimiter_header flag
+    if with_delimiter_header and not isinstance(schema, DelimitedType):
+        raise ValueError("with_delimiter_header=True is only valid for delimited types")
+
+    # Convert input data to bytes
+    reader = _BitReader(bytes(data))
+
+    # Handle DelimitedType
+    if isinstance(schema, DelimitedType):
+        if with_delimiter_header:
+            # Read delimiter header and create bounded sub-reader
+            header_bit_length = schema.delimiter_header_type.bit_length
+            payload_byte_length = reader.read_bits(header_bit_length)
+            payload_bit_length = payload_byte_length * 8
+
+            if payload_bit_length > reader.remaining_bits:
+                raise DelimiterHeaderError(
+                    f"Delimiter header specifies {payload_byte_length} bytes ({payload_bit_length} bits) "
+                    + f"but only {reader.remaining_bits} bits remain"
+                )
+
+            sub_reader = reader.bounded_subreader(payload_bit_length)
+            return _deserialize_composite(sub_reader, schema.inner_type)
+        else:
+            # Deserialize inner type directly without header
+            return _deserialize_composite(reader, schema.inner_type)
+
+    # Handle StructureType and UnionType
+    return _deserialize_composite(reader, schema)
 
 
 # ============================================================================
@@ -1352,3 +1422,59 @@ def _unittest_serdes_module() -> None:
     assert callable(deserialize)
 
     print("_unittest_serdes_module passed")
+
+
+def _unittest_serdes_api() -> None:
+    """
+    Test the public serialize/deserialize API with various scenarios.
+    """
+    # Test 1: Verify functions are callable and have correct signatures
+    assert callable(serialize)
+    assert callable(deserialize)
+
+    # Test 2: ServiceType rejection - create a mock ServiceType
+    class MockServiceType(ServiceType):
+        pass
+
+    mock_service = MockServiceType.__new__(MockServiceType)
+    try:
+        serialize(mock_service, {})
+        assert False, "Should have raised TypeError"
+    except TypeError as e:
+        assert "Service types are not directly serializable" in str(e)
+
+    try:
+        deserialize(mock_service, bytes([0]))
+        assert False, "Should have raised TypeError"
+    except TypeError as e:
+        assert "Service types are not directly deserializable" in str(e)
+
+    # Test 3: with_delimiter_header=True on non-delimited type raises ValueError
+    # Create a mock StructureType
+    class MockStructureType(StructureType):
+        pass
+
+    mock_struct = MockStructureType.__new__(MockStructureType)
+    try:
+        serialize(mock_struct, {}, with_delimiter_header=True)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "with_delimiter_header=True is only valid for delimited types" in str(e)
+
+    try:
+        deserialize(mock_struct, bytes([0]), with_delimiter_header=True)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "with_delimiter_header=True is only valid for delimited types" in str(e)
+
+    # Test 4: Verify imports work at package level
+    import pydsdl
+    assert hasattr(pydsdl, "serialize")
+    assert hasattr(pydsdl, "deserialize")
+    assert hasattr(pydsdl, "SerDesError")
+    assert hasattr(pydsdl, "ArrayLengthError")
+    assert hasattr(pydsdl, "UnionFieldError")
+    assert hasattr(pydsdl, "UnionTagError")
+    assert hasattr(pydsdl, "DelimiterHeaderError")
+
+    print("_unittest_serdes_api passed")

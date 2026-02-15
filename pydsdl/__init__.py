@@ -75,4 +75,13 @@ from ._serializable import ValueRange as ValueRange
 from ._serializable import Version as Version
 from ._bit_length_set import BitLengthSet as BitLengthSet
 
+# Serialization/deserialization.
+from ._serdes import serialize as serialize
+from ._serdes import deserialize as deserialize
+from ._serdes import SerDesError as SerDesError
+from ._serdes import ArrayLengthError as ArrayLengthError
+from ._serdes import UnionFieldError as UnionFieldError
+from ._serdes import UnionTagError as UnionTagError
+from ._serdes import DelimiterHeaderError as DelimiterHeaderError
+
 _sys.path = _original_sys_path
