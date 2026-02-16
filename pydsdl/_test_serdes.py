@@ -1321,3 +1321,232 @@ def _unittest_bit_io_mixed_aligned_unaligned_sequence() -> None:
     reader.align_to(8)
     for value, bit_length in chunks_after_alignment:
         assert reader.read_bits(bit_length) == value
+
+
+# Bug 1 regression tests: composite alignment with sub-byte fields
+
+
+def _unittest_composite_alignment_subbyte_nested_struct() -> None:
+    """
+    Regression test for Bug 1: nested struct with sub-byte field must be byte-aligned.
+    Inner struct: {uint3 x}. Outer struct: {inner n, uint8 y}.
+    """
+    inner = _mk_structure("test.InnerSubbyte", [Field(UnsignedIntegerType(3, CM.TRUNCATED), "x")])
+    outer = _mk_structure(
+        "test.OuterSubbyte",
+        [Field(inner, "n"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "y")],
+    )
+
+    data = serialize(outer, {"n": {"x": 5}, "y": 42})
+    assert data == bytes([0x05, 0x2A])
+
+    result = deserialize(outer, data)
+    assert result == {"n": {"x": 5}, "y": 42}
+
+
+def _unittest_composite_alignment_subbyte_nested_union() -> None:
+    """
+    Regression test for Bug 1: nested union with sub-byte variants must be byte-aligned.
+    Inner union: 2 variants: {uint3 a, uint11 b}. Tag is 8 bits.
+    """
+    inner_union = _mk_union(
+        "test.InnerUnionSubbyte",
+        [Field(UnsignedIntegerType(3, CM.TRUNCATED), "a"), Field(UnsignedIntegerType(11, CM.TRUNCATED), "b")],
+    )
+    outer = _mk_structure(
+        "test.OuterUnionSubbyte",
+        [Field(inner_union, "u"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "y")],
+    )
+
+    data = serialize(outer, {"u": {"a": 5}, "y": 42})
+    assert len(data) == 3
+
+    result = deserialize(outer, data)
+    assert result == {"u": {"a": 5}, "y": 42}
+
+
+def _unittest_composite_alignment_already_aligned() -> None:
+    """
+    Regression test for Bug 1: struct with byte-aligned fields only should not change.
+    """
+    schema = _mk_structure(
+        "test.AlreadyAligned",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "b"),
+        ],
+    )
+
+    data = serialize(schema, {"a": 10, "b": 300})
+    assert data == bytes([0x0A, 0x2C, 0x01])
+
+    result = deserialize(schema, data)
+    assert result == {"a": 10, "b": 300}
+
+
+def _unittest_composite_alignment_nested_in_array() -> None:
+    """
+    Regression test for Bug 1: array of structs with sub-byte fields must pad each element.
+    """
+    inner = _mk_structure("test.InnerArrayElem", [Field(UnsignedIntegerType(3, CM.TRUNCATED), "x")])
+    schema = _mk_structure(
+        "test.OuterArray",
+        [Field(FixedLengthArrayType(inner, 2), "items")],
+    )
+
+    data = serialize(schema, {"items": [{"x": 3}, {"x": 7}]})
+    assert data == bytes([0x03, 0x07])
+
+    result = deserialize(schema, data)
+    assert result == {"items": [{"x": 3}, {"x": 7}]}
+
+
+def _unittest_composite_alignment_bool_inner() -> None:
+    """
+    Regression test for Bug 1: EXACT EVIDENCE CASE.
+    Inner struct: {bool a}. Outer struct: {inner x, bool y}.
+    serialize(outer, {"x": {"a": True}, "y": True}) must produce bytes([0x01, 0x01]) (16 bits),
+    not bytes([0x03]) (8 bits).
+    """
+    inner = _mk_structure("test.InnerBool", [Field(BooleanType(), "a")])
+    outer = _mk_structure(
+        "test.OuterBool",
+        [Field(inner, "x"), Field(BooleanType(), "y")],
+    )
+
+    data = serialize(outer, {"x": {"a": True}, "y": True})
+    assert data == bytes([0x01, 0x01])
+
+    result = deserialize(outer, bytes([0x01, 0x01]))
+    assert result == {"x": {"a": True}, "y": True}
+
+
+# Bug 2 regression tests: bounded subreader zero-extension
+
+
+def _unittest_bounded_subreader_zero_extension() -> None:
+    """
+    Regression test for Bug 2: bounded subreader must zero-extend when reading beyond limit.
+    """
+    r = _BitReader(bytes([0xAA, 0xBB]))
+    sub = r.bounded_subreader(8)
+    assert sub.read_bits(16) == 0x00AA
+
+    r = _BitReader(bytes([]))
+    sub = r.bounded_subreader(0)
+    assert sub.read_bits(8) == 0x00
+
+    r = _BitReader(bytes([0xFF]))
+    sub = r.bounded_subreader(4)
+    assert sub.read_bits(8) == 0x0F
+
+
+def _unittest_bounded_subreader_preserves_parent_offset() -> None:
+    """
+    Regression test for Bug 2: parent offset must advance by subreader limit, not by actual reads.
+    """
+    r = _BitReader(bytes([0x12, 0x34, 0x56]))
+    sub = r.bounded_subreader(16)
+    _ = sub.read_bits(8)
+    assert r.bit_offset == 16
+
+
+def _unittest_bounded_subreader_remaining_bits_accuracy() -> None:
+    """
+    Regression test for Bug 2: remaining_bits must decrease correctly and reach 0 at limit.
+    """
+    r = _BitReader(bytes([0xFF, 0xFF]))
+    sub = r.bounded_subreader(12)
+    assert sub.remaining_bits == 12
+    _ = sub.read_bits(5)
+    assert sub.remaining_bits == 7
+    _ = sub.read_bits(7)
+    assert sub.remaining_bits == 0
+
+
+def _unittest_delimited_short_payload_zero_extension() -> None:
+    """
+    Regression test for Bug 2: EXACT EVIDENCE CASE.
+    Old empty delimited inner + y=True → new schema with inner {bool a} deserializes to a=False, y=True.
+    """
+    old_inner = _mk_structure("test.OldInner", [])
+    old_delimited = DelimitedType(old_inner, old_inner.extent)
+    old_outer = _mk_structure(
+        "test.OldOuter",
+        [Field(old_delimited, "nested"), Field(BooleanType(), "y")],
+    )
+
+    old_data = serialize(old_outer, {"nested": {}, "y": True})
+
+    new_inner = _mk_structure("test.NewInner", [Field(BooleanType(), "a")])
+    new_delimited = DelimitedType(new_inner, new_inner.extent)
+    new_outer = _mk_structure(
+        "test.NewOuter",
+        [Field(new_delimited, "nested"), Field(BooleanType(), "y")],
+    )
+
+    result = deserialize(new_outer, old_data)
+    assert result == {"nested": {"a": False}, "y": True}
+
+
+# Bug 3 regression tests: float truncated overflow to infinity
+
+
+def _unittest_float_truncated_overflow_to_infinity() -> None:
+    """
+    Regression test for Bug 3: TRUNCATED mode must overflow to infinity for out-of-range values.
+    """
+    schema32 = FloatType(32, CM.TRUNCATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema32, 1e100)
+    result32_pos = _deserialize_primitive(_BitReader(w.finish()), schema32)
+    assert result32_pos == float("inf")
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema32, -1e100)
+    result32_neg = _deserialize_primitive(_BitReader(w.finish()), schema32)
+    assert result32_neg == float("-inf")
+
+    schema16 = FloatType(16, CM.TRUNCATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema16, 100000.0)
+    result16_pos = _deserialize_primitive(_BitReader(w.finish()), schema16)
+    assert result16_pos == float("inf")
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema16, -100000.0)
+    result16_neg = _deserialize_primitive(_BitReader(w.finish()), schema16)
+    assert result16_neg == float("-inf")
+
+
+def _unittest_float_truncated_nan_preserved() -> None:
+    """
+    Regression test for Bug 3: NaN must be preserved in TRUNCATED mode (unaffected by fix).
+    """
+    schema = FloatType(32, CM.TRUNCATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, float("nan"))
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert isinstance(result, float) and math.isnan(result)
+
+
+def _unittest_float_saturated_no_overflow_regression() -> None:
+    """
+    Regression test for Bug 3: SATURATED mode must still clamp, NOT overflow to infinity.
+    """
+    schema32 = FloatType(32, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema32, 1e100)
+    result32 = _deserialize_primitive(_BitReader(w.finish()), schema32)
+    assert isinstance(result32, float)
+    assert result32 != float("inf")
+    assert result32 > 0
+
+    schema16 = FloatType(16, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema16, 100000.0)
+    result16 = _deserialize_primitive(_BitReader(w.finish()), schema16)
+    assert isinstance(result16, float)
+    assert result16 != float("inf")
+    assert result16 > 0
+    assert abs(result16 - 65504.0) < 1.0
