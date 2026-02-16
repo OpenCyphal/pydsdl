@@ -1073,6 +1073,15 @@ def _unittest_composite_union_non_dict_error() -> None:
         _serialize_composite(_BitWriter(), schema, typing.cast(_Obj, typing.cast(object, "bad")))
 
 
+def _unittest_composite_structure_non_dict_error() -> None:
+    schema = _mk_structure("test.StructUndict", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a")])
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        _serialize_composite(_BitWriter(), schema, typing.cast(_Obj, typing.cast(object, "bad")))
+
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        serialize(schema, typing.cast(_Obj, typing.cast(object, 123)))
+
+
 def _unittest_composite_service_type_error() -> None:
     class MockServiceType(ServiceType):
         pass
@@ -1540,3 +1549,32 @@ def _unittest_float_saturated_no_overflow_regression() -> None:
     assert result16 != float("inf")
     assert result16 > 0
     assert abs(result16 - 65504.0) < 1.0
+
+
+def _unittest_float_from_huge_integer_overflow_paths() -> None:
+    huge_positive = 10**10000
+    huge_negative = -huge_positive
+
+    truncated = FloatType(32, CM.TRUNCATED)
+    w = _BitWriter()
+    _serialize_primitive(w, truncated, huge_positive)
+    assert _deserialize_primitive(_BitReader(w.finish()), truncated) == float("inf")
+
+    w = _BitWriter()
+    _serialize_primitive(w, truncated, huge_negative)
+    assert _deserialize_primitive(_BitReader(w.finish()), truncated) == float("-inf")
+
+    saturated = FloatType(32, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, saturated, huge_positive)
+    result_positive = _deserialize_primitive(_BitReader(w.finish()), saturated)
+    assert isinstance(result_positive, float)
+    assert result_positive != float("inf")
+    assert abs(result_positive - 3.4028235e38) < 1e32
+
+    w = _BitWriter()
+    _serialize_primitive(w, saturated, huge_negative)
+    result_negative = _deserialize_primitive(_BitReader(w.finish()), saturated)
+    assert isinstance(result_negative, float)
+    assert result_negative != float("-inf")
+    assert abs(result_negative + 3.4028235e38) < 1e32

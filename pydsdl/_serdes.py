@@ -394,7 +394,18 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
                 f"Float requires numeric input, got {type(value).__name__} "
                 f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
             )
-        float_value = float(value)
+        if isinstance(value, float):
+            float_value = value
+        else:
+            try:
+                float_value = float(value)
+            except OverflowError:
+                int_value = int(value)
+                if schema.cast_mode == PrimitiveType.CastMode.SATURATED:
+                    range_val = schema.inclusive_value_range
+                    float_value = float(range_val.max if int_value >= 0 else range_val.min)
+                else:
+                    float_value = math.copysign(math.inf, -1.0 if int_value < 0 else 1.0)
 
         if schema.cast_mode == PrimitiveType.CastMode.SATURATED:
             range_val = schema.inclusive_value_range
@@ -707,6 +718,9 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
         writer.align_to(schema.alignment_requirement)
 
     elif isinstance(schema, StructureType):
+        if not isinstance(obj, dict):
+            raise ValueError("Structure value must be a dict")
+
         valid_fields = {f.name for f in schema.fields_except_padding}
         for key in obj.keys():
             if key not in valid_fields:
