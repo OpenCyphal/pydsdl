@@ -1323,9 +1323,6 @@ def _unittest_bit_io_mixed_aligned_unaligned_sequence() -> None:
         assert reader.read_bits(bit_length) == value
 
 
-# Bug 1 regression tests: composite alignment with sub-byte fields
-
-
 def _unittest_composite_alignment_subbyte_nested_struct() -> None:
     """
     Regression test for Bug 1: nested struct with sub-byte field must be byte-aligned.
@@ -1359,7 +1356,7 @@ def _unittest_composite_alignment_subbyte_nested_union() -> None:
     )
 
     data = serialize(outer, {"u": {"a": 5}, "y": 42})
-    assert len(data) == 3
+    assert len(data) == outer.bit_length_set.min // 8
 
     result = deserialize(outer, data)
     assert result == {"u": {"a": 5}, "y": 42}
@@ -1419,9 +1416,6 @@ def _unittest_composite_alignment_bool_inner() -> None:
 
     result = deserialize(outer, bytes([0x01, 0x01]))
     assert result == {"x": {"a": True}, "y": True}
-
-
-# Bug 2 regression tests: bounded subreader zero-extension
 
 
 def _unittest_bounded_subreader_zero_extension() -> None:
@@ -1489,9 +1483,6 @@ def _unittest_delimited_short_payload_zero_extension() -> None:
     assert result == {"nested": {"a": False}, "y": True}
 
 
-# Bug 3 regression tests: float truncated overflow to infinity
-
-
 def _unittest_float_truncated_overflow_to_infinity() -> None:
     """
     Regression test for Bug 3: TRUNCATED mode must overflow to infinity for out-of-range values.
@@ -1539,8 +1530,7 @@ def _unittest_float_saturated_no_overflow_regression() -> None:
     _serialize_primitive(w, schema32, 1e100)
     result32 = _deserialize_primitive(_BitReader(w.finish()), schema32)
     assert isinstance(result32, float)
-    assert result32 != float("inf")
-    assert result32 > 0
+    assert abs(result32 - 3.4028235e+38) < 1e+32  # IEEE 754 float32 max
 
     schema16 = FloatType(16, CM.SATURATED)
     w = _BitWriter()
