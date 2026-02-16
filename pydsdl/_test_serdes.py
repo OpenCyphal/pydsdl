@@ -1624,3 +1624,604 @@ def _unittest_float_from_huge_integer_overflow_paths() -> None:
     assert isinstance(result_negative, float)
     assert result_negative != float("-inf")
     assert abs(result_negative + 3.4028235e38) < 1e32
+
+
+def _unittest_delimited_new_data_old_schema() -> None:
+    new_delimited = _mk_delimited(
+        "test.DelimitedCompatNewDataInnerNew",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
+        ],
+    )
+    old_delimited = _mk_delimited(
+        "test.DelimitedCompatNewDataInnerOld",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+
+    new_outer = _mk_structure(
+        "test.DelimitedCompatNewDataOuterNew",
+        [
+            Field(new_delimited, "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+        ],
+    )
+    old_outer = _mk_structure(
+        "test.DelimitedCompatNewDataOuterOld",
+        [
+            Field(old_delimited, "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+        ],
+    )
+
+    data = serialize(new_outer, {"nested": {"x": 42, "y": 99}, "tail": 7})
+    assert deserialize(old_outer, data) == {"nested": {"x": 42}, "tail": 7}
+
+
+def _unittest_delimited_old_data_new_schema() -> None:
+    for old_field_count, added_field_count in [(0, 1), (1, 2), (2, 3)]:
+        old_names = [f"f{i}" for i in range(old_field_count)]
+        added_names = [f"f{old_field_count + i}" for i in range(added_field_count)]
+
+        old_delimited = _mk_delimited(
+            f"test.DelimitedCompatOldDataOld{old_field_count}_{added_field_count}",
+            [Field(UnsignedIntegerType(8, CM.TRUNCATED), name) for name in old_names],
+        )
+        new_delimited = _mk_delimited(
+            f"test.DelimitedCompatOldDataNew{old_field_count}_{added_field_count}",
+            [Field(UnsignedIntegerType(8, CM.TRUNCATED), name) for name in old_names + added_names],
+        )
+
+        old_outer = _mk_structure(
+            f"test.DelimitedCompatOldDataOuterOld{old_field_count}_{added_field_count}",
+            [
+                Field(old_delimited, "nested"),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+            ],
+        )
+        new_outer = _mk_structure(
+            f"test.DelimitedCompatOldDataOuterNew{old_field_count}_{added_field_count}",
+            [
+                Field(new_delimited, "nested"),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+            ],
+        )
+
+        old_nested = {name: index + 10 for index, name in enumerate(old_names)}
+        old_data = serialize(old_outer, {"nested": old_nested, "tail": 200 + old_field_count})
+
+        expected_nested = dict(old_nested)
+        expected_nested.update({name: 0 for name in added_names})
+        assert deserialize(new_outer, old_data) == {
+            "nested": expected_nested,
+            "tail": 200 + old_field_count,
+        }
+
+
+def _unittest_delimited_same_version_roundtrip() -> None:
+    schema = _mk_delimited(
+        "test.DelimitedSameVersionRoundtrip",
+        [
+            Field(BooleanType(), "flag"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "count"),
+            Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 4), "payload"),
+        ],
+    )
+    obj = {"flag": True, "count": 0xABCD, "payload": [1, 2, 3]}
+    _roundtrip_assert(schema, obj)
+
+    outer = _mk_structure(
+        "test.DelimitedSameVersionOuterRoundtrip",
+        [
+            Field(schema, "nested"),
+            Field(BooleanType(), "tail"),
+        ],
+    )
+    _roundtrip_assert(outer, {"nested": obj, "tail": False})
+
+
+def _unittest_delimited_nested_version_mismatch() -> None:
+    old_inner = _mk_delimited(
+        "test.DelimitedNestedMismatchInnerOld",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+    new_inner = _mk_delimited(
+        "test.DelimitedNestedMismatchInnerNew",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "z"),
+        ],
+    )
+
+    old_outer = _mk_structure(
+        "test.DelimitedNestedMismatchOuterOld",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "prefix"),
+            Field(old_inner, "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "suffix"),
+        ],
+    )
+    new_outer = _mk_structure(
+        "test.DelimitedNestedMismatchOuterNew",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "prefix"),
+            Field(new_inner, "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "suffix"),
+        ],
+    )
+
+    old_data = serialize(old_outer, {"prefix": 10, "nested": {"x": 20}, "suffix": 30})
+    assert deserialize(new_outer, old_data) == {
+        "prefix": 10,
+        "nested": {"x": 20, "z": 0},
+        "suffix": 30,
+    }
+
+    new_data = serialize(new_outer, {"prefix": 40, "nested": {"x": 50, "z": 60}, "suffix": 70})
+    assert deserialize(old_outer, new_data) == {
+        "prefix": 40,
+        "nested": {"x": 50},
+        "suffix": 70,
+    }
+
+
+def _unittest_delimited_union_inner_compatibility() -> None:
+    old_union = _mk_union(
+        "test.DelimitedUnionCompatOld",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
+        ],
+    )
+    new_union = _mk_union(
+        "test.DelimitedUnionCompatNew",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "c"),
+        ],
+    )
+
+    old_outer = _mk_structure(
+        "test.DelimitedUnionCompatOuterOld",
+        [
+            Field(DelimitedType(old_union, old_union.extent), "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+        ],
+    )
+    new_outer = _mk_structure(
+        "test.DelimitedUnionCompatOuterNew",
+        [
+            Field(DelimitedType(new_union, new_union.extent), "nested"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+        ],
+    )
+
+    assert deserialize(new_outer, serialize(old_outer, {"nested": {"b": 11}, "tail": 22})) == {
+        "nested": {"b": 11},
+        "tail": 22,
+    }
+    assert deserialize(old_outer, serialize(new_outer, {"nested": {"a": 33}, "tail": 44})) == {
+        "nested": {"a": 33},
+        "tail": 44,
+    }
+
+    with pytest.raises(UnionTagError, match="Invalid union tag"):
+        deserialize(old_outer, serialize(new_outer, {"nested": {"c": 55}, "tail": 66}))
+
+
+def _unittest_delimited_array_of_delimited() -> None:
+    element = _mk_delimited(
+        "test.DelimitedArrayOfDelimitedElement",
+        [Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "payload")],
+    )
+    outer = _mk_structure(
+        "test.DelimitedArrayOfDelimitedOuter",
+        [
+            Field(FixedLengthArrayType(element, 3), "items"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "tail"),
+        ],
+    )
+    obj = {
+        "items": [
+            {"payload": []},
+            {"payload": [11]},
+            {"payload": [22, 33, 44]},
+        ],
+        "tail": 77,
+    }
+
+    data = serialize(outer, obj)
+    assert deserialize(outer, data) == obj
+
+    offset = 0
+    for expected_size, expected_payload in [(1, bytes([0])), (2, bytes([1, 11])), (4, bytes([3, 22, 33, 44]))]:
+        header = int.from_bytes(data[offset : offset + 4], "little")
+        assert header == expected_size
+        offset += 4
+        assert data[offset : offset + expected_size] == expected_payload
+        offset += expected_size
+    assert data[offset:] == bytes([77])
+
+
+def _unittest_delimited_header_value_matches_payload() -> None:
+    schema = _mk_delimited(
+        "test.DelimitedHeaderValuePayload",
+        [
+            Field(BooleanType(), "flag"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "value"),
+            Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 8), "bytes"),
+        ],
+    )
+    outer = _mk_structure(
+        "test.DelimitedHeaderValuePayloadOuter",
+        [
+            Field(schema, "nested"),
+            Field(BooleanType(), "tail"),
+        ],
+    )
+    nested = {"flag": True, "value": 0x1234, "bytes": [1, 2, 3, 4, 5]}
+    data = serialize(outer, {"nested": nested, "tail": True})
+
+    payload = serialize(schema.inner_type, nested)
+    encoded_payload_size = int.from_bytes(data[:4], "little")
+    assert encoded_payload_size == len(payload)
+    assert data[4 : 4 + encoded_payload_size] == payload
+    assert data[4 + encoded_payload_size :] == bytes([1])
+
+
+def _unittest_delimited_with_header_api_roundtrip() -> None:
+    meta = _mk_structure(
+        "test.DelimitedWithHeaderAPIMeta",
+        [
+            Field(BooleanType(), "enabled"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "code"),
+        ],
+    )
+    choice = _mk_union(
+        "test.DelimitedWithHeaderAPIChoice",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "small"),
+            Field(meta, "full"),
+        ],
+    )
+    inner = _mk_structure(
+        "test.DelimitedWithHeaderAPIInner",
+        [
+            Field(meta, "meta"),
+            Field(choice, "choice"),
+            Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 8), "payload"),
+            Field(FixedLengthArrayType(BooleanType(), 3), "flags"),
+        ],
+    )
+    schema = DelimitedType(inner, inner.extent)
+    obj = {
+        "meta": {"enabled": True, "code": 513},
+        "choice": {"full": {"enabled": False, "code": 1024}},
+        "payload": [1, 2, 3, 4],
+        "flags": [True, False, True],
+    }
+
+    payload = serialize(schema, obj)
+    with_header = serialize(schema, obj, with_delimiter_header=True)
+    assert int.from_bytes(with_header[:4], "little") == len(payload)
+    assert with_header[4:] == payload
+    assert deserialize(schema, with_header, with_delimiter_header=True) == obj
+
+
+def _unittest_implicit_truncation_struct_excess_bytes() -> None:
+    schema = _mk_structure(
+        "test.ImplicitTruncStructBytes",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+
+    result = deserialize(schema, bytes([42, 0xFF, 0xEE, 0xDD]))
+    assert result == {"x": 42}
+
+
+def _unittest_implicit_truncation_struct_excess_bits() -> None:
+    schema = _mk_structure(
+        "test.ImplicitTruncStructBits",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+
+    reader = _BitReader(bytes([0x2A, 0x07]), bit_limit=11)
+    result = _deserialize_composite(reader, schema)
+    assert result == {"x": 0x2A}
+    assert reader.remaining_bits == 3
+
+
+def _unittest_implicit_truncation_nested_struct() -> None:
+    inner = _mk_structure(
+        "test.ImplicitTruncInner",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+    outer = _mk_structure(
+        "test.ImplicitTruncOuter",
+        [
+            Field(inner, "inner"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
+        ],
+    )
+
+    result = deserialize(outer, bytes([10, 20, 30, 40]))
+    assert result == {"inner": {"x": 10}, "y": 20}
+
+
+def _unittest_implicit_truncation_union() -> None:
+    schema = _mk_union(
+        "test.ImplicitTruncUnion",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "b"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([0, 0x77, 0xAA, 0xBB, 0xCC]))
+    assert result == {"a": 0x77}
+
+
+def _unittest_implicit_truncation_preserves_values() -> None:
+    schema = _mk_structure(
+        "test.ImplicitTruncPreserve",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "b"),
+            Field(BooleanType(), "c"),
+        ],
+    )
+    expected = {"a": 0x11, "b": 0x2233, "c": True}
+
+    payload = serialize(schema, expected)
+    result = deserialize(schema, payload + bytes([0xDE, 0xAD, 0xBE, 0xEF]))
+    assert result == expected
+
+
+def _unittest_implicit_truncation_bool_struct() -> None:
+    schema = _mk_structure(
+        "test.ImplicitTruncBoolStruct",
+        [
+            Field(BooleanType(), "a"),
+            Field(BooleanType(), "b"),
+            Field(BooleanType(), "c"),
+            Field(BooleanType(), "d"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([0b00001101, 0xAA, 0x55]))
+    assert result == {"a": True, "b": False, "c": True, "d": True}
+
+
+# ============================================================================
+# VOID DESERIALIZATION SEMANTICS TESTS (Wave 2, Task 5)
+# ============================================================================
+
+
+def _unittest_void_deserialize_nonzero_bits() -> None:
+    """
+    Test that void padding with non-zero bits is accepted during deserialization.
+    Per DSDL spec: void bits are IGNORED during deserialization (any bit pattern is valid).
+    
+    Construct a struct with void padding where the padding bytes contain non-zero bits.
+    Verify that deserialization succeeds and the surrounding fields are unaffected.
+    """
+    # Struct: {uint8 a, void8, uint8 b}
+    schema = _mk_structure(
+        "test.VoidNonzero",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            PaddingField(VoidType(8)),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
+        ],
+    )
+    
+    # Serialize with known values
+    obj = {"a": 42, "b": 99}
+    data = serialize(schema, obj)
+    
+    # Verify serialized void is zeros
+    assert data == bytes([42, 0, 99])
+    
+    # Now deserialize from data where void byte is non-zero (0xFF)
+    # This should succeed and ignore the non-zero void bits
+    corrupted_data = bytes([42, 0xFF, 99])
+    result = deserialize(schema, corrupted_data)
+    
+    # Verify surrounding fields are correct despite non-zero void
+    assert result == {"a": 42, "b": 99}
+
+
+def _unittest_void_various_widths() -> None:
+    """
+    Test void types at representative widths {1, 2, 3, 4, 5, 7, 8, 16, 32, 64}.
+    Verify that:
+    - Serialization always produces zeros
+    - Deserialization accepts any bit pattern
+    """
+    void_widths = [1, 2, 3, 4, 5, 7, 8, 16, 32, 64]
+    
+    for width in void_widths:
+        # Test serialization: void always serializes as zeros
+        w = _BitWriter()
+        _serialize_primitive(w, VoidType(width), None)
+        serialized = w.finish()
+        
+        # Verify all bits are zero
+        for byte_val in serialized:
+            assert byte_val == 0, f"void{width} serialized non-zero byte: {byte_val:#x}"
+        
+        # Test deserialization: any bit pattern is accepted
+        # Create data with all bits set to 1
+        byte_count = (width + 7) // 8
+        all_ones_data = bytes([0xFF] * byte_count)
+        
+        r = _BitReader(all_ones_data)
+        result = _deserialize_primitive(r, VoidType(width))
+        
+        # Void deserialization returns None
+        assert result is None
+        
+        # Verify reader consumed exactly the right number of bits
+        assert r._bit_offset == width
+
+
+def _unittest_void_serialize_always_zero() -> None:
+    """
+    Verify that all void widths serialize as zeros regardless of context.
+    Test void fields within structs to ensure serialization is consistent.
+    """
+    void_widths = [1, 2, 3, 4, 5, 7, 8, 16, 32, 64]
+    
+    for width in void_widths:
+        # Create struct: {uint8 before, voidN, uint8 after}
+        schema = _mk_structure(
+            f"test.VoidSerialize{width}",
+            [
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "before"),
+                PaddingField(VoidType(width)),
+                Field(UnsignedIntegerType(8, CM.TRUNCATED), "after"),
+            ],
+        )
+        
+        obj = {"before": 0xAA, "after": 0xBB}
+        data = serialize(schema, obj)
+        
+        # Calculate expected byte count
+        # 8 bits (before) + width bits (void) + 8 bits (after) = 16 + width bits
+        total_bits = 16 + width
+        expected_bytes = (total_bits + 7) // 8
+        
+        assert len(data) == expected_bytes, f"void{width}: expected {expected_bytes} bytes, got {len(data)}"
+        
+        # Verify first byte is 0xAA (before field)
+        assert data[0] == 0xAA, f"void{width}: before field corrupted"
+        
+        # Verify last byte contains 0xBB in the appropriate bits
+        # The after field starts at bit position 8 + width
+        # For byte-aligned cases, it's straightforward
+        if (8 + width) % 8 == 0:
+            # After field is byte-aligned
+            after_byte_index = (8 + width) // 8
+            assert data[after_byte_index] == 0xBB, f"void{width}: after field corrupted"
+        else:
+            # After field is not byte-aligned; verify via deserialization
+            result = deserialize(schema, data)
+            assert result == obj, f"void{width}: roundtrip failed"
+
+
+# ============================================================================
+# IMPLICIT ZERO EXTENSION AT COMPOSITE LEVEL (Task 2)
+# ============================================================================
+
+
+def _unittest_implicit_zero_extension_struct_truncated_data() -> None:
+    schema = _mk_structure(
+        "test.ZeroExtStructTruncated",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([42]))
+    assert result == {"x": 42, "y": 0}
+
+
+def _unittest_implicit_zero_extension_struct_empty_data() -> None:
+    schema = _mk_structure(
+        "test.ZeroExtStructEmpty",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
+        ],
+    )
+
+    result = deserialize(schema, bytes())
+    assert result == {"x": 0, "y": 0}
+
+
+def _unittest_implicit_zero_extension_multibyte_field() -> None:
+    schema = _mk_structure(
+        "test.ZeroExtMultibyte",
+        [
+            Field(UnsignedIntegerType(32, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "b"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([0x78, 0x56, 0x34, 0x12]))
+    assert result == {"a": 0x12345678, "b": 0}
+
+
+def _unittest_implicit_zero_extension_bool_fields() -> None:
+    schema = _mk_structure(
+        "test.ZeroExtBools",
+        [
+            Field(BooleanType(), "a"),
+            Field(BooleanType(), "b"),
+            Field(BooleanType(), "c"),
+            Field(BooleanType(), "d"),
+            Field(BooleanType(), "e"),
+            Field(BooleanType(), "f"),
+            Field(BooleanType(), "g"),
+            Field(BooleanType(), "h"),
+            Field(BooleanType(), "i"),
+            Field(BooleanType(), "j"),
+            Field(BooleanType(), "k"),
+            Field(BooleanType(), "l"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([0b10110010]))
+    assert result == {
+        "a": False,
+        "b": True,
+        "c": False,
+        "d": False,
+        "e": True,
+        "f": True,
+        "g": False,
+        "h": True,
+        "i": False,
+        "j": False,
+        "k": False,
+        "l": False,
+    }
+
+
+def _unittest_implicit_zero_extension_nested_struct() -> None:
+    inner = _mk_structure("test.ZeroExtInner", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
+    outer = _mk_structure(
+        "test.ZeroExtOuter",
+        [
+            Field(inner, "inner"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "y"),
+        ],
+    )
+
+    result = deserialize(outer, bytes([23]))
+    assert result == {"inner": {"x": 23}, "y": 0}
+
+
+def _unittest_implicit_zero_extension_array_field() -> None:
+    schema = _mk_structure(
+        "test.ZeroExtFixedArray",
+        [
+            Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 4), "values"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([1, 2]))
+    assert result == {"values": [1, 2, 0, 0]}
+
+
+def _unittest_implicit_zero_extension_variable_array() -> None:
+    schema = _mk_structure(
+        "test.ZeroExtVarArray",
+        [
+            Field(VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 8), "values"),
+        ],
+    )
+
+    result = deserialize(schema, bytes([3, 0x34, 0x12, 0x56]))
+    assert result == {"values": [0x1234, 0x0056, 0x0000]}
