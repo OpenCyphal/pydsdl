@@ -2899,3 +2899,878 @@ def _unittest_float_from_bool_input() -> None:
         true_result = _deserialize_primitive(_BitReader(w.finish()), schema)
         assert isinstance(true_result, float)
         assert true_result == 1.0
+
+def _unittest_bool_fixed_array_roundtrip() -> None:
+    schema = FixedLengthArrayType(BooleanType(), 8)
+    values = [True, True, False, True, False, False, True, True]
+
+    writer = _BitWriter()
+    _serialize_array(writer, schema, values)
+    encoded = writer.finish()
+
+    expected = _pack_chunks_lsb_first([(int(v), 1) for v in values])
+    assert len(encoded) == 1
+    assert encoded == expected
+    assert _deserialize_array(_BitReader(encoded), schema) == values
+
+
+@_typed_parametrize("length", [1, 2, 3, 7, 8, 9, 16])
+def _unittest_bool_fixed_array_various_lengths(length: int) -> None:
+    schema = FixedLengthArrayType(BooleanType(), length)
+    values = [(index % 2) == 0 for index in range(length)]
+
+    writer = _BitWriter()
+    _serialize_array(writer, schema, values)
+    encoded = writer.finish()
+
+    expected = _pack_chunks_lsb_first([(int(v), 1) for v in values])
+    assert len(encoded) == (length + 7) // 8
+    assert encoded == expected
+    assert _deserialize_array(_BitReader(encoded), schema) == values
+
+
+def _unittest_uint3_fixed_array_roundtrip() -> None:
+    schema = FixedLengthArrayType(UnsignedIntegerType(3, CM.TRUNCATED), 4)
+    values = [1, 2, 3, 4]
+
+    writer = _BitWriter()
+    _serialize_array(writer, schema, values)
+    encoded = writer.finish()
+
+    expected = _pack_chunks_lsb_first([(value, 3) for value in values])
+    assert len(encoded) == 2
+    assert encoded == expected == bytes([0xD1, 0x08])
+    assert _deserialize_array(_BitReader(encoded), schema) == values
+
+
+def _unittest_uint5_fixed_array_roundtrip() -> None:
+    schema = FixedLengthArrayType(UnsignedIntegerType(5, CM.TRUNCATED), 3)
+    values = [1, 17, 31]
+
+    writer = _BitWriter()
+    _serialize_array(writer, schema, values)
+    encoded = writer.finish()
+
+    expected = _pack_chunks_lsb_first([(value, 5) for value in values])
+    assert len(encoded) == 2
+    assert encoded == expected == bytes([0x21, 0x7E])
+    assert _deserialize_array(_BitReader(encoded), schema) == values
+
+
+def _unittest_subbyte_variable_array_roundtrip() -> None:
+    schema = VariableLengthArrayType(UnsignedIntegerType(3, CM.TRUNCATED), 10)
+    values = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1]
+
+    writer = _BitWriter()
+    _serialize_array(writer, schema, values)
+    encoded = writer.finish()
+
+    expected = _pack_chunks_lsb_first(
+        [(len(values), schema.length_field_type.bit_length)] + [(value, 3) for value in values]
+    )
+    assert len(encoded) == 5
+    assert encoded == expected
+    assert _deserialize_array(_BitReader(encoded), schema) == values
+
+
+def _unittest_mixed_subbyte_struct() -> None:
+    schema = _mk_structure(
+        "test.MixedSubbyteStruct",
+        [
+            Field(UnsignedIntegerType(3, CM.TRUNCATED), "a"),
+            Field(BooleanType(), "b"),
+            Field(UnsignedIntegerType(5, CM.TRUNCATED), "c"),
+        ],
+    )
+    obj = {"a": 5, "b": True, "c": 17}
+
+    encoded = serialize(schema, obj)
+    expected = _pack_chunks_lsb_first([(5, 3), (1, 1), (17, 5)])
+    assert len(encoded) == 2
+    assert encoded == expected == bytes([0x1D, 0x01])
+    assert deserialize(schema, encoded) == obj
+
+
+def _unittest_bool_array_known_pattern() -> None:
+    schema = FixedLengthArrayType(BooleanType(), 8)
+    values = [True, False, True, False, True, False, True, False]
+
+    writer = _BitWriter()
+    _serialize_array(writer, schema, values)
+    encoded = writer.finish()
+
+    expected = _pack_chunks_lsb_first([(int(v), 1) for v in values])
+    assert encoded == expected == bytes([0x55])
+    assert _deserialize_array(_BitReader(encoded), schema) == values
+
+
+def _mk_union_for_scaling_tests(name: str, variant_count: int) -> UnionType:
+    return UnionType(  # type: ignore
+        name=name,
+        version=Version(1, 0),
+        attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), f"v{index}") for index in range(variant_count)],
+        deprecated=False,
+        fixed_port_id=None,
+        source_file_path=Path("test", name.split(".")[-1]),
+        has_parent_service=False,
+    )
+
+
+def _unittest_union_3_variants_roundtrip() -> None:
+    schema = _mk_union_for_scaling_tests("test.UnionThreeVariants", 3)
+    assert schema.tag_field_type.bit_length == 8
+
+    for index in range(3):
+        obj = {f"v{index}": 10 + index}
+        _roundtrip_assert(schema, obj)
+
+
+def _unittest_union_4_variants_roundtrip() -> None:
+    schema = _mk_union_for_scaling_tests("test.UnionFourVariants", 4)
+    assert schema.tag_field_type.bit_length == 8
+
+    for index in range(4):
+        obj = {f"v{index}": 20 + index}
+        _roundtrip_assert(schema, obj)
+
+
+def _unittest_union_256_variants_tag_8bit() -> None:
+    schema = _mk_union_for_scaling_tests("test.UnionTwoHundredFiftySixVariants", 256)
+    assert schema.tag_field_type.bit_length == 8
+
+    for index in [0, 255]:
+        obj = {f"v{index}": 30 + (index % 200)}
+        encoded = serialize(schema, obj)
+        assert encoded[0] == index
+        assert deserialize(schema, encoded) == obj
+
+
+def _unittest_union_257_variants_tag_16bit() -> None:
+    schema = _mk_union_for_scaling_tests("test.UnionTwoHundredFiftySevenVariants", 257)
+    assert schema.tag_field_type.bit_length == 16
+
+    for index in [0, 256]:
+        obj = {f"v{index}": 40 + (index % 200)}
+        encoded = serialize(schema, obj)
+        assert int.from_bytes(encoded[:2], "little") == index
+        assert deserialize(schema, encoded) == obj
+
+
+def _unittest_union_tag_width_boundary_verification() -> None:
+    def expected_tag_width(variant_count: int) -> int:
+        return 2 ** math.ceil(math.log2(max(8, (variant_count - 1).bit_length())))
+
+    for variant_count in [2, 3, 4, 256, 257]:
+        schema = _mk_union_for_scaling_tests(f"test.UnionTagWidth{variant_count}", variant_count)
+        assert schema.tag_field_type.bit_length == expected_tag_width(variant_count)
+
+    assert expected_tag_width(256) == 8
+    assert expected_tag_width(257) == 16
+
+
+@_typed_parametrize("variant_count", [3, 4])
+def _unittest_union_deserialize_all_variants(variant_count: int) -> None:
+    schema = _mk_union_for_scaling_tests(f"test.UnionDeserializeAll{variant_count}", variant_count)
+
+    for index in range(variant_count):
+        obj = {f"v{index}": 50 + index}
+        encoded = serialize(schema, obj)
+        assert deserialize(schema, encoded) == obj
+
+def _unittest_nested_struct_3_levels() -> None:
+    level3 = _mk_structure(
+        "test.Task12Nested3Level3",
+        [Field(UnsignedIntegerType(16, CM.TRUNCATED), "value"), Field(BooleanType(), "ok")],
+    )
+    level2 = _mk_structure(
+        "test.Task12Nested3Level2",
+        [Field(level3, "inner"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "seq")],
+    )
+    level1 = _mk_structure(
+        "test.Task12Nested3Level1",
+        [Field(level2, "middle"), Field(BooleanType(), "ready")],
+    )
+
+    _roundtrip_assert(
+        level1,
+        {
+            "middle": {"inner": {"value": 0x1234, "ok": True}, "seq": 9},
+            "ready": False,
+        },
+    )
+
+
+def _unittest_nested_struct_4_levels() -> None:
+    level4 = _mk_structure(
+        "test.Task12Nested4Level4",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "leaf"), Field(BooleanType(), "valid")],
+    )
+    level3 = _mk_structure(
+        "test.Task12Nested4Level3",
+        [Field(level4, "node"), Field(UnsignedIntegerType(16, CM.TRUNCATED), "crc")],
+    )
+    level2 = _mk_structure(
+        "test.Task12Nested4Level2",
+        [Field(level3, "branch"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "index")],
+    )
+    level1 = _mk_structure(
+        "test.Task12Nested4Level1",
+        [Field(level2, "root"), Field(BooleanType(), "armed")],
+    )
+
+    _roundtrip_assert(
+        level1,
+        {
+            "root": {
+                "branch": {"node": {"leaf": 77, "valid": True}, "crc": 0xBEEF},
+                "index": 3,
+            },
+            "armed": True,
+        },
+    )
+
+
+def _unittest_array_of_structs() -> None:
+    point = _mk_structure(
+        "test.Task12ArrayOfStructsPoint",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "y")],
+    )
+    schema = _mk_structure(
+        "test.Task12ArrayOfStructs",
+        [
+            Field(FixedLengthArrayType(point, 3), "points"),
+            Field(BooleanType(), "ready"),
+        ],
+    )
+
+    _roundtrip_assert(
+        schema,
+        {
+            "points": [
+                {"x": 1, "y": 2},
+                {"x": 10, "y": 20},
+                {"x": 254, "y": 253},
+            ],
+            "ready": True,
+        },
+    )
+
+
+def _unittest_array_of_unions() -> None:
+    detail = _mk_structure(
+        "test.Task12ArrayOfUnionsDetail",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "code"), Field(BooleanType(), "enabled")],
+    )
+    choice = _mk_union(
+        "test.Task12ArrayOfUnionsChoice",
+        [
+            Field(BooleanType(), "flag"),
+            Field(detail, "detail"),
+        ],
+    )
+    schema = _mk_structure(
+        "test.Task12ArrayOfUnions",
+        [Field(FixedLengthArrayType(choice, 3), "items")],
+    )
+
+    _roundtrip_assert(
+        schema,
+        {
+            "items": [
+                {"flag": True},
+                {"detail": {"code": 42, "enabled": False}},
+                {"flag": False},
+            ]
+        },
+    )
+
+
+def _unittest_union_with_struct_variants() -> None:
+    alpha = _mk_structure(
+        "test.Task12UnionWithStructAlpha",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"), Field(BooleanType(), "y")],
+    )
+    beta = _mk_structure(
+        "test.Task12UnionWithStructBeta",
+        [Field(UnsignedIntegerType(16, CM.TRUNCATED), "z")],
+    )
+    schema = _mk_union(
+        "test.Task12UnionWithStructVariants",
+        [
+            Field(alpha, "alpha"),
+            Field(beta, "beta"),
+        ],
+    )
+
+    _roundtrip_assert(schema, {"alpha": {"x": 11, "y": True}})
+    _roundtrip_assert(schema, {"beta": {"z": 0xCAFE}})
+
+
+def _unittest_struct_union_struct_nesting() -> None:
+    left = _mk_structure(
+        "test.Task12StructUnionStructLeft",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"), Field(BooleanType(), "b")],
+    )
+    right = _mk_structure(
+        "test.Task12StructUnionStructRight",
+        [Field(UnsignedIntegerType(16, CM.TRUNCATED), "c")],
+    )
+    nested_union = _mk_union(
+        "test.Task12StructUnionStructUnion",
+        [
+            Field(left, "left"),
+            Field(right, "right"),
+        ],
+    )
+    schema = _mk_structure(
+        "test.Task12StructUnionStructOuter",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "prefix"),
+            Field(nested_union, "payload"),
+            Field(BooleanType(), "tail"),
+        ],
+    )
+
+    _roundtrip_assert(schema, {"prefix": 1, "payload": {"left": {"a": 7, "b": True}}, "tail": False})
+    _roundtrip_assert(schema, {"prefix": 2, "payload": {"right": {"c": 1024}}, "tail": True})
+
+
+def _unittest_struct_array_struct_nesting() -> None:
+    item = _mk_structure(
+        "test.Task12StructArrayStructItem",
+        [Field(UnsignedIntegerType(16, CM.TRUNCATED), "sample"), Field(BooleanType(), "good")],
+    )
+    schema = _mk_structure(
+        "test.Task12StructArrayStructOuter",
+        [
+            Field(FixedLengthArrayType(item, 2), "samples"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "count"),
+        ],
+    )
+
+    _roundtrip_assert(
+        schema,
+        {
+            "samples": [
+                {"sample": 0x1001, "good": True},
+                {"sample": 0x2002, "good": False},
+            ],
+            "count": 2,
+        },
+    )
+
+
+def _unittest_complex_mixed_nesting() -> None:
+    sensor = _mk_structure(
+        "test.Task12ComplexSensor",
+        [Field(UnsignedIntegerType(16, CM.TRUNCATED), "reading"), Field(BooleanType(), "healthy")],
+    )
+    meta = _mk_structure(
+        "test.Task12ComplexMeta",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "node_id"), Field(sensor, "snapshot")],
+    )
+    event = _mk_structure(
+        "test.Task12ComplexEvent",
+        [
+            Field(FixedLengthArrayType(sensor, 2), "recent"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "severity"),
+        ],
+    )
+    payload = _mk_union(
+        "test.Task12ComplexPayload",
+        [
+            Field(meta, "meta"),
+            Field(event, "event"),
+        ],
+    )
+    schema = _mk_structure(
+        "test.Task12ComplexRoot",
+        [
+            Field(payload, "primary"),
+            Field(FixedLengthArrayType(payload, 2), "fallbacks"),
+            Field(FixedLengthArrayType(sensor, 2), "history"),
+            Field(BooleanType(), "ack"),
+        ],
+    )
+
+    _roundtrip_assert(
+        schema,
+        {
+            "primary": {"meta": {"node_id": 12, "snapshot": {"reading": 500, "healthy": True}}},
+            "fallbacks": [
+                {"event": {"recent": [{"reading": 1, "healthy": True}, {"reading": 2, "healthy": False}], "severity": 3}},
+                {"meta": {"node_id": 99, "snapshot": {"reading": 1000, "healthy": False}}},
+            ],
+            "history": [
+                {"reading": 300, "healthy": True},
+                {"reading": 301, "healthy": True},
+            ],
+            "ack": True,
+        },
+    )
+
+    _roundtrip_assert(
+        schema,
+        {
+            "primary": {"event": {"recent": [{"reading": 7, "healthy": True}, {"reading": 8, "healthy": True}], "severity": 1}},
+            "fallbacks": [
+                {"meta": {"node_id": 1, "snapshot": {"reading": 9, "healthy": True}}},
+                {"event": {"recent": [{"reading": 10, "healthy": False}, {"reading": 11, "healthy": True}], "severity": 2}},
+            ],
+            "history": [
+                {"reading": 12, "healthy": False},
+                {"reading": 13, "healthy": True},
+            ],
+            "ack": False,
+        },
+    )
+
+
+# ============================================================================
+# MIXED ALIGNMENT, DEFAULTS, AND API EDGE CASE TESTS (Task 13)
+# ============================================================================
+
+
+def _unittest_mixed_alignment_struct() -> None:
+    """
+    Test struct with mixed alignment: byte-aligned and sub-byte fields.
+    
+    Struct: {uint8 a, bool b, uint16 c}
+    - uint8: 8 bits (bits 0-7)
+    - bool: 1 bit (bit 8)
+    - uint16: 16 bits (bits 9-24)
+    
+    Note: Primitives have alignment_requirement=1 (bit-aligned, no padding).
+    Only composite types enforce alignment > 1.
+    
+    Expected wire layout (bit-packed, no alignment padding):
+    - Bits 0-7: uint8 a
+    - Bit 8: bool b
+    - Bits 9-24: uint16 c (little-endian)
+    Total: 25 bits → 4 bytes (with 7 padding bits at end)
+    """
+    schema = _mk_structure(
+        "test.MixedAlignment",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(BooleanType(), "b"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "c"),
+        ],
+    )
+    
+    obj = {"a": 0xAA, "b": True, "c": 0x1234}
+    data = serialize(schema, obj)
+    
+    # Verify wire format (primitives are bit-packed):
+    # Byte 0: 0xAA (bits 0-7)
+    # Byte 1: 0x69 (bit 8: True, bits 9-15: first 7 bits of 0x1234)
+    # Byte 2: 0x24 (bits 16-23: middle 8 bits of 0x1234)
+    # Byte 3: 0x00 (bit 24: last bit of 0x1234, bits 25-31: padding)
+    assert len(data) == 4
+    assert data == bytes([0xAA, 0x69, 0x24, 0x00])
+    
+    # Verify roundtrip
+    result = deserialize(schema, data)
+    assert result == obj
+
+
+def _unittest_alignment_padding_insertion() -> None:
+    """
+    Test alignment padding insertion for COMPOSITE types (not primitives).
+    
+    Primitives have alignment_requirement=1 (bit-packed).
+    Composite types (structs) have alignment based on their max field alignment.
+    Verify that composite fields within structs enforce alignment.
+    """
+    inner_uint3 = _mk_structure(
+        "test.AlignmentPaddingInnerUint3",
+        [Field(UnsignedIntegerType(3, CM.TRUNCATED), "value")],
+    )
+    inner_bool = _mk_structure(
+        "test.AlignmentPaddingInnerBool",
+        [Field(BooleanType(), "flag")],
+    )
+    
+    schema1 = _mk_structure(
+        "test.AlignmentPadding1",
+        [
+            Field(inner_uint3, "x"),
+            Field(inner_bool, "y"),
+        ],
+    )
+    
+    obj1 = {"x": {"value": 5}, "y": {"flag": True}}
+    data1 = serialize(schema1, obj1)
+    
+    inner_uint3_alignment = inner_uint3.alignment_requirement
+    inner_bool_alignment = inner_bool.alignment_requirement
+    assert inner_uint3_alignment == 8
+    assert inner_bool_alignment == 8
+    assert len(data1) == 2
+    
+    result1 = deserialize(schema1, data1)
+    assert result1 == obj1
+    
+    inner_multi = _mk_structure(
+        "test.AlignmentPaddingMulti",
+        [
+            Field(BooleanType(), "a"),
+            Field(BooleanType(), "b"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "c"),
+        ],
+    )
+    
+    schema2 = _mk_structure(
+        "test.AlignmentPadding2",
+        [
+            Field(UnsignedIntegerType(3, CM.TRUNCATED), "prefix"),
+            Field(inner_multi, "nested"),
+        ],
+    )
+    
+    obj2 = {"prefix": 7, "nested": {"a": True, "b": False, "c": 42}}
+    data2 = serialize(schema2, obj2)
+    
+    result2 = deserialize(schema2, data2)
+    assert result2 == obj2
+
+
+def _unittest_struct_with_all_defaults() -> None:
+    """
+    Test struct where all fields have default values.
+    
+    When deserializing with missing data (empty bytes or truncated payload),
+    all fields should use their default values.
+    """
+    schema = _mk_structure(
+        "test.AllDefaults",
+        [
+            Field(BooleanType(), "flag"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "count"),
+            Field(FloatType(32, CM.SATURATED), "value"),
+            Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 10), "items"),  # type: ignore
+        ],
+    )
+    
+    # Deserialize from empty bytes
+    result_empty = deserialize(schema, bytes())
+    expected_defaults = {
+        "flag": False,
+        "count": 0,
+        "value": 0.0,
+        "items": [],
+    }
+    assert result_empty == expected_defaults
+    
+    # Serialize empty object (uses defaults) and verify roundtrip
+    data = serialize(schema, {})
+    result_roundtrip = deserialize(schema, data)
+    assert result_roundtrip == expected_defaults
+
+
+def _unittest_partial_defaults_struct() -> None:
+    """
+    Test struct with partial defaults: some fields provided, others use defaults.
+    
+    Verify that provided fields are serialized correctly and missing fields
+    use default values during deserialization.
+    """
+    inner = _mk_structure(
+        "test.PartialDefaultsInner",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+    schema = _mk_structure(
+        "test.PartialDefaults",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(BooleanType(), "b"),
+            Field(inner, "nested"),
+            Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 2), "arr"),
+        ],
+    )
+    
+    # Provide only first field
+    partial1 = {"a": 42}
+    data1 = serialize(schema, partial1)
+    result1 = deserialize(schema, data1)
+    assert result1 == {
+        "a": 42,
+        "b": False,
+        "nested": {"x": 0},
+        "arr": [0, 0],
+    }
+    
+    # Provide first two fields
+    partial2 = {"a": 99, "b": True}
+    data2 = serialize(schema, partial2)
+    result2 = deserialize(schema, data2)
+    assert result2 == {
+        "a": 99,
+        "b": True,
+        "nested": {"x": 0},
+        "arr": [0, 0],
+    }
+    
+    # Provide all but array
+    partial3 = {"a": 10, "b": False, "nested": {"x": 20}}
+    data3 = serialize(schema, partial3)
+    result3 = deserialize(schema, data3)
+    assert result3 == {
+        "a": 10,
+        "b": False,
+        "nested": {"x": 20},
+        "arr": [0, 0],
+    }
+
+
+def _unittest_empty_struct_roundtrip() -> None:
+    """
+    Test empty struct (no fields) serialization and deserialization.
+    
+    Empty structs should serialize to zero bytes and deserialize to empty dict.
+    """
+    schema = _mk_structure("test.EmptyStruct", [])
+    
+    obj = {}
+    data = serialize(schema, obj)
+    
+    # Empty struct serializes to empty bytes
+    assert data == bytes()
+    
+    # Roundtrip
+    result = deserialize(schema, data)
+    assert result == {}
+    
+    # Deserialize from any bytes (implicit truncation)
+    result_truncated = deserialize(schema, bytes([0xFF, 0xAA, 0x55]))
+    assert result_truncated == {}
+
+
+def _unittest_single_field_struct() -> None:
+    """
+    Test struct with exactly one field.
+    
+    Verify minimal struct serialization and deserialization.
+    """
+    # Test 1: Single primitive field
+    schema1 = _mk_structure(
+        "test.SingleFieldPrimitive",
+        [Field(UnsignedIntegerType(16, CM.TRUNCATED), "value")],
+    )
+    
+    obj1 = {"value": 0xABCD}
+    data1 = serialize(schema1, obj1)
+    assert data1 == bytes([0xCD, 0xAB])  # little-endian
+    
+    result1 = deserialize(schema1, data1)
+    assert result1 == obj1
+    
+    # Test 2: Single composite field (nested struct)
+    inner = _mk_structure(
+        "test.SingleFieldInner",
+        [Field(BooleanType(), "flag")],
+    )
+    schema2 = _mk_structure(
+        "test.SingleFieldComposite",
+        [Field(inner, "nested")],
+    )
+    
+    obj2 = {"nested": {"flag": True}}
+    data2 = serialize(schema2, obj2)
+    assert data2 == bytes([0x01])
+    
+    result2 = deserialize(schema2, data2)
+    assert result2 == obj2
+    
+    # Test 3: Single array field
+    schema3 = _mk_structure(
+        "test.SingleFieldArray",
+        [Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "items")],
+    )
+    
+    obj3 = {"items": [10, 20, 30]}
+    data3 = serialize(schema3, obj3)
+    assert data3 == bytes([10, 20, 30])
+    
+    result3 = deserialize(schema3, data3)
+    assert result3 == obj3
+
+
+def _unittest_single_variant_union() -> None:
+    """
+    Test union with minimum allowed variants (2).
+    
+    UnionType requires MIN_NUMBER_OF_VARIANTS=2.
+    Test that a 2-variant union works correctly when only using one variant.
+    """
+    schema = _mk_union(  # type: ignore
+        "test.TwoVariantUnion",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "option_a"),
+            Field(UnsignedIntegerType(16, CM.TRUNCATED), "option_b"),
+        ],
+    )
+    
+    assert schema.tag_field_type.bit_length == 8
+    
+    obj_a = {"option_a": 42}
+    data_a = serialize(schema, obj_a)
+    
+    assert data_a[0] == 0
+    assert deserialize(schema, data_a) == obj_a
+    
+    obj_b = {"option_b": 0x1234}
+    data_b = serialize(schema, obj_b)
+    
+    assert data_b[0] == 1
+    assert deserialize(schema, data_b) == obj_b
+    
+    with pytest.raises(UnionFieldError, match="Unknown union variant"):
+        serialize(schema, {"nonexistent": 123})
+
+
+def _unittest_api_type_coercion_int_to_float() -> None:
+    """
+    Test API type coercion: int → float.
+    
+    Integer values should be accepted for float fields and coerced to float.
+    """
+    schema = _mk_structure(
+        "test.IntToFloatCoercion",
+        [
+            Field(FloatType(32, CM.SATURATED), "value32"),
+            Field(FloatType(64, CM.SATURATED), "value64"),
+        ],
+    )
+    
+    # Provide integers for float fields
+    obj_int = {"value32": 42, "value64": 123}
+    data = serialize(schema, obj_int)
+    result = deserialize(schema, data)
+    
+    # Verify coercion: integers are converted to floats
+    assert isinstance(result["value32"], float)
+    assert isinstance(result["value64"], float)
+    assert result["value32"] == 42.0
+    assert result["value64"] == 123.0
+    
+    # Test with negative integers
+    obj_negative = {"value32": -99, "value64": -456}
+    data_negative = serialize(schema, obj_negative)
+    result_negative = deserialize(schema, data_negative)
+    assert result_negative["value32"] == -99.0
+    assert result_negative["value64"] == -456.0
+
+
+def _unittest_api_type_coercion_list_to_tuple() -> None:
+    """
+    Test API type coercion: list → tuple for arrays.
+    
+    Arrays should accept both list and tuple inputs and always deserialize as list.
+    """
+    schema = _mk_structure(
+        "test.ListTupleCoercion",
+        [
+            Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "fixed"),
+            Field(VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 10), "variable"),  # type: ignore
+        ],
+    )
+    
+    # Test 1: Provide tuples for array fields
+    obj_tuple = {
+        "fixed": (10, 20, 30),
+        "variable": (100, 200, 300),
+    }
+    data_tuple = serialize(schema, obj_tuple)
+    result_tuple = deserialize(schema, data_tuple)
+    
+    # Verify deserialization returns lists (canonical form)
+    assert isinstance(result_tuple["fixed"], list)
+    assert isinstance(result_tuple["variable"], list)
+    assert result_tuple == {
+        "fixed": [10, 20, 30],
+        "variable": [100, 200, 300],
+    }
+    
+    # Test 2: Provide lists (should work identically)
+    obj_list = {
+        "fixed": [10, 20, 30],
+        "variable": [100, 200, 300],
+    }
+    data_list = serialize(schema, obj_list)
+    result_list = deserialize(schema, data_list)
+    
+    assert result_list == result_tuple
+    assert data_list == data_tuple
+
+
+def _unittest_api_error_handling_invalid_input() -> None:
+    """
+    Test API error handling for invalid inputs.
+    
+    Verify that appropriate exceptions are raised for:
+    - Invalid field names
+    - Type mismatches
+    - Out-of-range values
+    - Invalid union variants
+    """
+    # Test 1: Unknown field in struct
+    schema_struct = _mk_structure(
+        "test.ErrorHandlingStruct",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
+    )
+    
+    with pytest.raises(ValueError, match="Unknown field"):
+        serialize(schema_struct, {"x": 10, "unknown": 20})
+    
+    # Test 2: Non-dict value for struct
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        serialize(schema_struct, typing.cast(_Obj, typing.cast(object, "not a dict")))
+    
+    # Test 3: Invalid array length (fixed-length array)
+    schema_array = _mk_structure(
+        "test.ErrorHandlingArray",
+        [Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "arr")],
+    )
+    
+    with pytest.raises(ArrayLengthError):
+        serialize(schema_array, {"arr": [1, 2]})  # Too short
+    
+    with pytest.raises(ArrayLengthError):
+        serialize(schema_array, {"arr": [1, 2, 3, 4]})  # Too long
+    
+    # Test 4: Invalid union variant
+    schema_union = _mk_union(  # type: ignore
+        "test.ErrorHandlingUnion",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
+        ],
+    )
+    
+    with pytest.raises(UnionFieldError, match="Unknown union variant"):
+        serialize(schema_union, {"unknown_variant": 42})
+    
+    with pytest.raises(ValueError, match="exactly one field"):
+        serialize(schema_union, {})  # No variant selected
+    
+    with pytest.raises(ValueError, match="exactly one field"):
+        serialize(schema_union, {"a": 10, "b": 20})  # Multiple variants
+    
+    # Test 5: Type mismatch for primitive arrays
+    schema_byte_array = _mk_structure(
+        "test.ErrorHandlingByteArray",
+        [Field(VariableLengthArrayType(ByteType(), 10), "data")],  # type: ignore
+    )
+    
+    with pytest.raises(TypeError, match="Byte array requires"):
+        serialize(schema_byte_array, {"data": 123})  # Not a sequence
+    
+    # Test 6: Variable-length array capacity exceeded
+    schema_vararray = _mk_structure(
+        "test.ErrorHandlingVarArray",
+        [Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "items")],  # type: ignore
+    )
+    
+    with pytest.raises(ArrayLengthError):
+        serialize(schema_vararray, {"items": [1, 2, 3, 4]})  # Exceeds capacity
