@@ -19,7 +19,7 @@ def main() -> None:
     )
     schema = types[0]
     print(f"✓ Loaded type: {schema.full_name} v{schema.version.major}.{schema.version.minor}")
-    print(f"  Fields: {[f.name for f in schema.fields_except_padding]}")
+    print("  Fields:", [f"{f.data_type} {f.name}" for f in schema.fields_except_padding])
 
     print("Creating example object:")
     obj = {

@@ -979,6 +979,23 @@ def test_array_utf8_type_error() -> None:
         _serialize_array(_BitWriter(), schema, 123)
 
 
+def test_api_accepts_str_and_bytes_for_utf8_and_byte_arrays() -> None:
+    schema = _mk_structure(
+        "test.StringLikeArrays",
+        [
+            Field(VariableLengthArrayType(UTF8Type(), 64), "text"),
+            Field(VariableLengthArrayType(ByteType(), 64), "blob"),
+        ],
+    )
+
+    cases = [
+        ({"text": "hello", "blob": b"\x00\x01\x02"}, {"text": "hello", "blob": b"\x00\x01\x02"}),
+        ({"text": b"world", "blob": "abc"}, {"text": "world", "blob": b"abc"}),
+    ]
+    for obj, expected in cases:
+        assert deserialize(schema, serialize(schema, obj)) == expected
+
+
 def test_array_unknown_type_error() -> None:
     class MockArray:
         element_type = UnsignedIntegerType(8, CM.TRUNCATED)
@@ -1286,6 +1303,7 @@ def _unittest_serdes_branch_coverage_tests() -> None:
     test_array_byte_from_list_input((104, 105))
     test_array_byte_type_error()
     test_array_utf8_type_error()
+    test_api_accepts_str_and_bytes_for_utf8_and_byte_arrays()
     test_array_unknown_type_error()
     test_array_deserialized_length_overflow()
     test_array_composite_elements()
