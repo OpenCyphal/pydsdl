@@ -396,7 +396,7 @@ def _construct_dsdl_definitions_from_files(
     valid_roots: list[Path],
 ) -> SortedFileList[ReadableDSDLFile]:
     """ """
-    output = set()  # type:  set[ReadableDSDLFile]
+    output = set()  # type: set[ReadableDSDLFile]
     for fp in dsdl_files:
         if fp.suffix == DSDL_FILE_SUFFIX_LEGACY:
             _logger.warning(

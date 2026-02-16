@@ -1530,7 +1530,7 @@ def _unittest_float_saturated_no_overflow_regression() -> None:
     _serialize_primitive(w, schema32, 1e100)
     result32 = _deserialize_primitive(_BitReader(w.finish()), schema32)
     assert isinstance(result32, float)
-    assert abs(result32 - 3.4028235e+38) < 1e+32  # IEEE 754 float32 max
+    assert abs(result32 - 3.4028235e38) < 1e32  # IEEE 754 float32 max
 
     schema16 = FloatType(16, CM.SATURATED)
     w = _BitWriter()

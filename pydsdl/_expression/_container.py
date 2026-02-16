@@ -9,7 +9,6 @@ import typing
 import functools
 from . import _any, _primitive, _operator
 
-
 _O = typing.TypeVar("_O")
 
 
