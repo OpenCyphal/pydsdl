@@ -104,8 +104,7 @@ def _unittest_serdes_api() -> None:
         deserialize(mock_service, bytes([0]))
 
     # Test 3: with_delimiter_header=True on non-delimited type raises ValueError
-    # Create a mock StructureType
-    class MockStructureType(StructureType):
+    class MockStructureType(StructureType):  # type: ignore[misc]
         pass
 
     mock_struct = MockStructureType.__new__(MockStructureType)

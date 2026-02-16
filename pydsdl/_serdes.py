@@ -11,6 +11,7 @@ Deserialized objects are represented using Python primitives: composites are dic
 
 from __future__ import annotations
 
+import math
 import struct
 import typing
 
@@ -32,7 +33,6 @@ from ._serializable import (
     UnionType,
     ServiceType,
     DelimitedType,
-    Field,
     PaddingField,
 )
 
@@ -162,7 +162,11 @@ def deserialize(
             payload_bit_length = payload_byte_length * 8
 
             if payload_bit_length > reader.remaining_bits:
-                inner_type_name = schema.inner_type.full_name if hasattr(schema.inner_type, 'full_name') else type(schema.inner_type).__name__
+                inner_type_name = (
+                    schema.inner_type.full_name
+                    if hasattr(schema.inner_type, "full_name")
+                    else type(schema.inner_type).__name__
+                )
                 raise DelimiterHeaderError(
                     f"Delimiter header specifies {payload_byte_length} bytes ({payload_bit_length} bits) "
                     + f"but only {reader.remaining_bits} bits remain (delimited type: {inner_type_name})"
@@ -350,23 +354,32 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
     """
     if isinstance(schema, BooleanType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Boolean requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+            raise ValueError(
+                f"Boolean requires numeric input, got {type(value).__name__} "
+                f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+            )
         if isinstance(value, float):
             if not (-float("inf") < value < float("inf")):
-                raise ValueError(f"Non-finite float cannot be converted to bool (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+                raise ValueError(
+                    f"Non-finite float cannot be converted to bool "
+                    f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+                )
         bit_value = 1 if value else 0
         writer.write_bits(bit_value, 1)
 
     elif isinstance(schema, FloatType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Float requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+            raise ValueError(
+                f"Float requires numeric input, got {type(value).__name__} "
+                f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+            )
         float_value = float(value)
 
         if schema.cast_mode == PrimitiveType.CastMode.SATURATED:
             range_val = schema.inclusive_value_range
             min_bound = float(range_val.min)
             max_bound = float(range_val.max)
-            if float_value != float_value:
+            if math.isnan(float_value):
                 pass
             elif float_value == float("inf"):
                 pass
@@ -389,10 +402,16 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
 
     elif isinstance(schema, SignedIntegerType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Integer requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+            raise ValueError(
+                f"Integer requires numeric input, got {type(value).__name__} "
+                f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+            )
         if isinstance(value, float):
             if not (-float("inf") < value < float("inf")):
-                raise ValueError(f"Non-finite float cannot be converted to int (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+                raise ValueError(
+                    f"Non-finite float cannot be converted to int "
+                    f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+                )
             int_value = int(round(value))
         else:
             int_value = int(value)
@@ -411,10 +430,16 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
 
     elif isinstance(schema, UnsignedIntegerType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Integer requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+            raise ValueError(
+                f"Integer requires numeric input, got {type(value).__name__} "
+                f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+            )
         if isinstance(value, float):
             if not (-float("inf") < value < float("inf")):
-                raise ValueError(f"Non-finite float cannot be converted to int (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
+                raise ValueError(
+                    f"Non-finite float cannot be converted to int "
+                    f"(schema: {type(schema).__name__}, bit_length: {schema.bit_length})"
+                )
             int_value = int(round(value))
         else:
             int_value = int(value)
@@ -496,7 +521,11 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
         elif isinstance(value, (bytes, bytearray)):
             _ = value.decode("utf-8")
         else:
-            raise TypeError(f"UTF-8 array requires str, bytes, or bytearray input, got {type(value).__name__} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
+            raise TypeError(
+                f"UTF-8 array requires str, bytes, or bytearray input, "
+                f"got {type(value).__name__} (array type: {type(schema).__name__}, "
+                f"capacity: {schema.capacity})"
+            )
         value = list(value)
 
     elif isinstance(schema.element_type, ByteType):
@@ -518,14 +547,22 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
 
     if isinstance(schema, FixedLengthArrayType):
         if len(value) != schema.capacity:
-            raise ArrayLengthError(f"Fixed-length array requires exactly {schema.capacity} elements, got {len(value)} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
+            raise ArrayLengthError(
+                f"Fixed-length array requires exactly {schema.capacity} elements, "
+                f"got {len(value)} (array type: {type(schema).__name__}, "
+                f"capacity: {schema.capacity})"
+            )
 
         for element in value:
             _serialize_element(writer, schema.element_type, element)
 
     elif isinstance(schema, VariableLengthArrayType):
         if not (0 <= len(value) <= schema.capacity):
-            raise ArrayLengthError(f"Variable-length array length {len(value)} exceeds capacity {schema.capacity} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
+            raise ArrayLengthError(
+                f"Variable-length array length {len(value)} exceeds capacity "
+                f"{schema.capacity} (array type: {type(schema).__name__}, "
+                f"capacity: {schema.capacity})"
+            )
 
         writer.write_bits(len(value), schema.length_field_type.bit_length)
 
@@ -547,7 +584,9 @@ def _deserialize_array(reader: _BitReader, schema: ArrayType) -> _Value:
     elif isinstance(schema, VariableLengthArrayType):
         length = reader.read_bits(schema.length_field_type.bit_length)
         if length > schema.capacity:
-            raise ArrayLengthError(f"Variable-length array length {length} exceeds capacity {schema.capacity} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
+            raise ArrayLengthError(
+                f"Variable-length array length {length} exceeds capacity {schema.capacity} (array type: {type(schema).__name__}, capacity: {schema.capacity})"
+            )
     else:
         raise ValueError(f"Unknown array type: {type(schema).__name__}")
 
@@ -611,9 +650,9 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
         if not isinstance(obj, dict):
             raise ValueError("Union value must be a dict")
         if len(obj) == 0:
-            raise ValueError(f"Union must have exactly one field, got none (union type: {schema.full_name})")
+            raise ValueError(f"Union must have exactly one field, got none " f"(union type: {schema.full_name})")
         if len(obj) > 1:
-            raise ValueError(f"Union must have exactly one field, got multiple (union type: {schema.full_name})")
+            raise ValueError(f"Union must have exactly one field, got multiple " f"(union type: {schema.full_name})")
 
         key = next(iter(obj.keys()))
         value = obj[key]
@@ -627,7 +666,10 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
                 break
 
         if tag_index is None:
-            raise UnionFieldError(f"Unknown union variant: {key} (union type: {schema.full_name}, valid variants: {[f.name for f in schema.fields]})")
+            valid_variants = [f.name for f in schema.fields]
+            raise UnionFieldError(
+                f"Unknown union variant: {key} (union type: {schema.full_name}, " f"valid variants: {valid_variants})"
+            )
 
         assert field is not None
         writer.write_bits(tag_index, schema.tag_field_type.bit_length)
@@ -669,7 +711,11 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
         payload_bit_length = payload_byte_length * 8
 
         if payload_bit_length > reader.remaining_bits:
-            inner_type_name = schema.inner_type.full_name if hasattr(schema.inner_type, 'full_name') else type(schema.inner_type).__name__
+            inner_type_name = (
+                schema.inner_type.full_name
+                if hasattr(schema.inner_type, "full_name")
+                else type(schema.inner_type).__name__
+            )
             raise DelimiterHeaderError(
                 f"Delimiter header specifies {payload_byte_length} bytes ({payload_bit_length} bits) "
                 + f"but only {reader.remaining_bits} bits remain (delimited type: {inner_type_name})"
@@ -681,7 +727,9 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
     elif isinstance(schema, UnionType):
         tag = reader.read_bits(schema.tag_field_type.bit_length)
         if tag >= len(schema.fields):
-            raise UnionTagError(f"Invalid union tag: {tag} (union type: {schema.full_name}, valid range: 0-{len(schema.fields)-1})")
+            raise UnionTagError(
+                f"Invalid union tag: {tag} (union type: {schema.full_name}, valid range: 0-{len(schema.fields)-1})"
+            )
 
         field = schema.fields[tag]
         value = _deserialize_field_value(reader, field.data_type)
