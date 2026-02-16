@@ -58,6 +58,12 @@ from ._serializable._composite import Version
 
 __all__: list[str] = []
 
+_F = typing.TypeVar("_F", bound=typing.Callable[..., typing.Any])
+
+
+def _typed_parametrize(*args: typing.Any, **kwargs: typing.Any) -> typing.Callable[[_F], _F]:
+    return typing.cast(typing.Callable[[_F], _F], pytest.mark.parametrize(*args, **kwargs))
+
 
 def _unittest_serdes_module() -> None:
     """
@@ -797,7 +803,7 @@ def _mk_union(name: str, attributes: list[Field]) -> UnionType:
     )
 
 
-def test_serialize_delimited_with_header() -> None:
+def _unittest_serialize_delimited_with_header() -> None:
     inner = _mk_structure("test.InnerA1", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     schema = DelimitedType(inner, inner.extent)
     obj = {"x": 123}
@@ -812,7 +818,7 @@ def test_serialize_delimited_with_header() -> None:
     assert with_header[4:] == bytes([123])
 
 
-def test_deserialize_delimited_with_header() -> None:
+def _unittest_deserialize_delimited_with_header() -> None:
     inner = _mk_structure("test.InnerA2", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     schema = DelimitedType(inner, inner.extent)
     obj = {"x": 42}
@@ -828,7 +834,7 @@ def test_deserialize_delimited_with_header() -> None:
         deserialize(schema, bytes([2, 0, 0, 0, 1]), with_delimiter_header=True)
 
 
-def test_serialize_plain_composite_via_api() -> None:
+def _unittest_serialize_plain_composite_via_api() -> None:
     schema = _mk_structure(
         "test.PlainA3",
         [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"), Field(BooleanType(), "b")],
@@ -836,7 +842,7 @@ def test_serialize_plain_composite_via_api() -> None:
     assert serialize(schema, {"a": 7, "b": True}) == bytes([7, 1])
 
 
-def test_deserialize_plain_composite_via_api() -> None:
+def _unittest_deserialize_plain_composite_via_api() -> None:
     schema = _mk_structure(
         "test.PlainA4",
         [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"), Field(BooleanType(), "b")],
@@ -844,7 +850,7 @@ def test_deserialize_plain_composite_via_api() -> None:
     assert deserialize(schema, bytes([8, 0])) == {"a": 8, "b": False}
 
 
-def test_primitive_float16() -> None:
+def _unittest_primitive_float16() -> None:
     w = _BitWriter()
     schema = FloatType(16, CM.SATURATED)
     _serialize_primitive(w, schema, 1.5)
@@ -856,7 +862,8 @@ def test_primitive_float16() -> None:
     assert abs(value - 1.5) < 0.01
 
 
-def test_primitive_float_saturated_special_values(special: float) -> None:
+@_typed_parametrize("special", [float("nan"), float("inf"), float("-inf")], ids=["nan", "pos_inf", "neg_inf"])
+def _unittest_primitive_float_saturated_special_values(special: float) -> None:
     schema = FloatType(32, CM.SATURATED)
     w = _BitWriter()
     _serialize_primitive(w, schema, special)
@@ -870,7 +877,7 @@ def test_primitive_float_saturated_special_values(special: float) -> None:
         assert value == float("-inf")
 
 
-def test_primitive_float_truncated_mode() -> None:
+def _unittest_primitive_float_truncated_mode() -> None:
     schema = FloatType(32, CM.TRUNCATED)
     w = _BitWriter()
     _serialize_primitive(w, schema, 1.234)
@@ -879,7 +886,16 @@ def test_primitive_float_truncated_mode() -> None:
     assert abs(float(value) - 1.234) < 1e-6
 
 
-def test_primitive_bool_from_float(value: float, expected: bool | None, should_fail: bool) -> None:
+@_typed_parametrize(
+    ("value", "expected", "should_fail"),
+    [
+        (1.0, True, False),
+        (0.0, False, False),
+        (float("nan"), None, True),
+    ],
+    ids=["one_true", "zero_false", "nan_error"],
+)
+def _unittest_primitive_bool_from_float(value: float, expected: bool | None, should_fail: bool) -> None:
     w = _BitWriter()
     if should_fail:
         with pytest.raises(ValueError, match="Non-finite float"):
@@ -890,7 +906,7 @@ def test_primitive_bool_from_float(value: float, expected: bool | None, should_f
         assert decoded is expected
 
 
-def test_primitive_signed_truncated_mode() -> None:
+def _unittest_primitive_signed_truncated_mode() -> None:
     schema = SignedIntegerType(8, CM.SATURATED)
     schema._cast_mode = CM.TRUNCATED
     w = _BitWriter()
@@ -898,13 +914,13 @@ def test_primitive_signed_truncated_mode() -> None:
     assert w.finish() == bytes([0xFF])
 
 
-def test_primitive_float_to_int_coercion() -> None:
+def _unittest_primitive_float_to_int_coercion() -> None:
     w = _BitWriter()
     _serialize_primitive(w, UnsignedIntegerType(8, CM.TRUNCATED), 2.6)
     assert _deserialize_primitive(_BitReader(w.finish()), UnsignedIntegerType(8, CM.TRUNCATED)) == 3
 
 
-def test_primitive_unknown_type_error() -> None:
+def _unittest_primitive_unknown_type_error() -> None:
     with pytest.raises(ValueError, match="Unknown primitive type"):
         _serialize_primitive(_BitWriter(), typing.cast(typing.Any, object()), 0)
 
@@ -912,7 +928,7 @@ def test_primitive_unknown_type_error() -> None:
         _deserialize_primitive(_BitReader(bytes([0])), typing.cast(typing.Any, object()))
 
 
-def test_primitive_invalid_float_bit_length_paths() -> None:
+def _unittest_primitive_invalid_float_bit_length_paths() -> None:
     bad = FloatType(32, CM.SATURATED)
     bad._bit_length = 24
 
@@ -923,7 +939,7 @@ def test_primitive_invalid_float_bit_length_paths() -> None:
         _deserialize_primitive(_BitReader(bytes([0, 0, 0])), bad)
 
 
-def test_primitive_input_validation_errors() -> None:
+def _unittest_primitive_input_validation_errors() -> None:
     with pytest.raises(ValueError, match="Boolean requires numeric input"):
         _serialize_primitive(_BitWriter(), BooleanType(), "x")
 
@@ -937,7 +953,8 @@ def test_primitive_input_validation_errors() -> None:
         _serialize_primitive(_BitWriter(), SignedIntegerType(8, CM.SATURATED), float("inf"))
 
 
-def test_float_widths_parametrized(width: int) -> None:
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_widths_parametrized(width: int) -> None:
     schema = FloatType(width, CM.SATURATED)
     w = _BitWriter()
     _serialize_primitive(w, schema, 0.5)
@@ -946,7 +963,15 @@ def test_float_widths_parametrized(width: int) -> None:
     assert abs(float(value) - 0.5) < 0.01
 
 
-def test_unsigned_integer_widths_and_cast_modes_parametrized(width: int, cast_mode: PrimitiveType.CastMode) -> None:
+@_typed_parametrize("width", [2, 3, 5, 8, 16, 32, 64])
+@_typed_parametrize(
+    "cast_mode",
+    [CM.SATURATED, CM.TRUNCATED],
+    ids=["saturated", "truncated"],
+)
+def _unittest_unsigned_integer_widths_and_cast_modes_parametrized(
+    width: int, cast_mode: PrimitiveType.CastMode
+) -> None:
     schema = UnsignedIntegerType(width, cast_mode)
     value = (1 << width) + 1
     w = _BitWriter()
@@ -956,26 +981,37 @@ def test_unsigned_integer_widths_and_cast_modes_parametrized(width: int, cast_mo
     assert decoded == expected
 
 
-def test_array_byte_from_list_input(container: list[int] | tuple[int, ...]) -> None:
+@_typed_parametrize("container", [[104, 105], (104, 105)], ids=["list", "tuple"])
+def _unittest_array_byte_from_list_input(container: list[int] | tuple[int, ...]) -> None:
     schema = VariableLengthArrayType(ByteType(), 8)
     w = _BitWriter()
     _serialize_array(w, schema, container)
     assert _deserialize_array(_BitReader(w.finish()), schema) == b"hi"
 
 
-def test_array_byte_type_error() -> None:
+def _unittest_array_byte_type_error() -> None:
     schema = VariableLengthArrayType(ByteType(), 8)
     with pytest.raises(TypeError, match="Byte array requires"):
         _serialize_array(_BitWriter(), schema, 123)
 
 
-def test_array_utf8_type_error() -> None:
+def _unittest_array_utf8_type_error() -> None:
     schema = VariableLengthArrayType(UTF8Type(), 8)
     with pytest.raises(TypeError, match="UTF-8 array requires"):
         _serialize_array(_BitWriter(), schema, 123)
 
 
-def test_api_accepts_str_and_bytes_for_utf8_and_byte_arrays() -> None:
+@_typed_parametrize(
+    ("obj", "expected"),
+    [
+        ({"text": "hello", "blob": b"\x00\x01\x02"}, {"text": "hello", "blob": b"\x00\x01\x02"}),
+        ({"text": b"world", "blob": "abc"}, {"text": "world", "blob": b"abc"}),
+    ],
+    ids=["str_utf8_bytes_blob", "bytes_utf8_str_blob"],
+)
+def _unittest_api_accepts_str_and_bytes_for_utf8_and_byte_arrays(
+    obj: dict[str, _Value], expected: dict[str, _Value]
+) -> None:
     schema = _mk_structure(
         "test.StringLikeArrays",
         [
@@ -984,15 +1020,10 @@ def test_api_accepts_str_and_bytes_for_utf8_and_byte_arrays() -> None:
         ],
     )
 
-    cases = [
-        ({"text": "hello", "blob": b"\x00\x01\x02"}, {"text": "hello", "blob": b"\x00\x01\x02"}),
-        ({"text": b"world", "blob": "abc"}, {"text": "world", "blob": b"abc"}),
-    ]
-    for obj, expected in cases:
-        assert deserialize(schema, serialize(schema, obj)) == expected
+    assert deserialize(schema, serialize(schema, obj)) == expected
 
 
-def test_array_unknown_type_error() -> None:
+def _unittest_array_unknown_type_error() -> None:
     class MockArray:
         element_type = UnsignedIntegerType(8, CM.TRUNCATED)
 
@@ -1003,13 +1034,13 @@ def test_array_unknown_type_error() -> None:
         _deserialize_array(_BitReader(bytes([1])), typing.cast(ArrayType, typing.cast(object, MockArray())))
 
 
-def test_array_deserialized_length_overflow() -> None:
+def _unittest_array_deserialized_length_overflow() -> None:
     schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 2)
     with pytest.raises(ArrayLengthError, match="exceeds capacity"):
         _deserialize_array(_BitReader(bytes([3, 1, 2, 3])), schema)
 
 
-def test_array_composite_elements() -> None:
+def _unittest_array_composite_elements() -> None:
     elem = _mk_structure("test.ArrayElem", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     schema = FixedLengthArrayType(elem, 2)
     w = _BitWriter()
@@ -1017,7 +1048,7 @@ def test_array_composite_elements() -> None:
     assert _deserialize_array(_BitReader(w.finish()), schema) == [{"x": 1}, {"x": 2}]
 
 
-def test_array_nested_array_elements() -> None:
+def _unittest_array_nested_array_elements() -> None:
     inner = FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 2)
     outer = FixedLengthArrayType(inner, 2)
     w = _BitWriter()
@@ -1025,7 +1056,7 @@ def test_array_nested_array_elements() -> None:
     assert _deserialize_array(_BitReader(w.finish()), outer) == [[5, 6], [7, 8]]
 
 
-def test_element_unknown_type_error() -> None:
+def _unittest_element_unknown_type_error() -> None:
     with pytest.raises(ValueError, match="Unknown element type"):
         _serialize_element(_BitWriter(), object(), 1)
 
@@ -1033,7 +1064,7 @@ def test_element_unknown_type_error() -> None:
         _deserialize_element(_BitReader(bytes([0])), object())
 
 
-def test_composite_union_non_dict_error() -> None:
+def _unittest_composite_union_non_dict_error() -> None:
     schema = _mk_union(
         "test.Undict",
         [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "b")],
@@ -1042,7 +1073,7 @@ def test_composite_union_non_dict_error() -> None:
         _serialize_composite(_BitWriter(), schema, typing.cast(_Obj, typing.cast(object, "bad")))
 
 
-def test_composite_service_type_error() -> None:
+def _unittest_composite_service_type_error() -> None:
     class MockServiceType(ServiceType):
         pass
 
@@ -1053,7 +1084,7 @@ def test_composite_service_type_error() -> None:
         _deserialize_composite(_BitReader(bytes([0])), schema)
 
 
-def test_composite_unknown_type_error() -> None:
+def _unittest_composite_unknown_type_error() -> None:
     class MockComposite:
         pass
 
@@ -1064,7 +1095,7 @@ def test_composite_unknown_type_error() -> None:
         _deserialize_composite(_BitReader(bytes([0])), typing.cast(typing.Any, MockComposite()))
 
 
-def test_composite_delimited_in_composite() -> None:
+def _unittest_composite_delimited_in_composite() -> None:
     inner = _mk_structure("test.InnerD1", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     delimited = DelimitedType(inner, inner.extent)
     outer = _mk_structure(
@@ -1076,14 +1107,14 @@ def test_composite_delimited_in_composite() -> None:
     assert deserialize(outer, data) == obj
 
 
-def test_composite_deserialized_delimited_truncated() -> None:
+def _unittest_composite_deserialized_delimited_truncated() -> None:
     inner = _mk_structure("test.InnerD2", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     delimited = DelimitedType(inner, inner.extent)
     with pytest.raises(DelimiterHeaderError, match="Delimiter header specifies"):
         _deserialize_composite(_BitReader(bytes([2, 0, 0, 0, 1])), delimited)
 
 
-def test_composite_deserialize_union_invalid_tag() -> None:
+def _unittest_composite_deserialize_union_invalid_tag() -> None:
     schema = _mk_union(
         "test.BadTag",
         [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "b")],
@@ -1092,7 +1123,7 @@ def test_composite_deserialize_union_invalid_tag() -> None:
         _deserialize_composite(_BitReader(bytes([255])), schema)
 
 
-def test_composite_struct_padding_field() -> None:
+def _unittest_composite_struct_padding_field() -> None:
     schema = _mk_structure(
         "test.WithPadding",
         [Field(UnsignedIntegerType(3, CM.TRUNCATED), "a"), PaddingField(VoidType(5)), Field(BooleanType(), "b")],
@@ -1102,28 +1133,28 @@ def test_composite_struct_padding_field() -> None:
     assert deserialize(schema, data) == {"a": 5, "b": True}
 
 
-def test_field_value_unknown_type_error() -> None:
+def _unittest_field_value_unknown_type_error() -> None:
     with pytest.raises(ValueError, match="Unknown field type"):
         _serialize_field_value(_BitWriter(), object(), 1)
     with pytest.raises(ValueError, match="Unknown field type"):
         _deserialize_field_value(_BitReader(bytes([0])), object())
 
 
-def test_field_value_composite_in_struct() -> None:
+def _unittest_field_value_composite_in_struct() -> None:
     inner = _mk_structure("test.InnerField", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     outer = _mk_structure("test.OuterField", [Field(inner, "inner")])
     obj = {"inner": {"x": 77}}
     assert deserialize(outer, serialize(outer, obj)) == obj
 
 
-def test_field_value_array_in_struct() -> None:
+def _unittest_field_value_array_in_struct() -> None:
     arr = FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3)
     schema = _mk_structure("test.ArrayField", [Field(arr, "items")])
     obj = {"items": [1, 2, 3]}
     assert deserialize(schema, serialize(schema, obj)) == obj
 
 
-def test_default_value_all_types() -> None:
+def _unittest_default_value_all_types() -> None:
     struct_inner = _mk_structure("test.DefaultStruct", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     union_inner = _mk_union(
         "test.DefaultUnion",
@@ -1148,7 +1179,7 @@ def test_default_value_all_types() -> None:
         _default_value(object())
 
 
-def test_default_value_struct_with_missing_fields() -> None:
+def _unittest_default_value_struct_with_missing_fields() -> None:
     nested = _mk_structure("test.NestedDefault", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
     schema = _mk_structure(
         "test.MissingDefaults",
@@ -1161,7 +1192,7 @@ def test_default_value_struct_with_missing_fields() -> None:
     assert deserialize(schema, serialize(schema, {})) == {"flag": False, "arr": [0, 0], "nested": {"x": 0}}
 
 
-def test_bit_writer_align_to_zero() -> None:
+def _unittest_bit_writer_align_to_zero() -> None:
     w = _BitWriter()
     w.write_bits(0b101, 3)
     before = w.bit_offset
@@ -1171,7 +1202,21 @@ def test_bit_writer_align_to_zero() -> None:
     assert w.bit_offset == before
 
 
-def test_bit_reader_align_to_zero() -> None:
+def _unittest_bit_writer_aligned_overwrite_paths() -> None:
+    writer = _BitWriter()
+    writer.write_bits(0x112233, 24)
+    writer._bit_offset = 8  # pylint: disable=protected-access
+    writer.write_bits(0xAA, 8)
+    assert writer.finish() == bytes([0x33, 0xAA, 0x11])
+
+    writer = _BitWriter()
+    writer.write_bits(0xBBAA, 16)
+    writer._bit_offset = 8  # pylint: disable=protected-access
+    writer.write_bits(0xCCDD, 16)
+    assert writer.finish() == bytes([0xAA, 0xDD, 0xCC])
+
+
+def _unittest_bit_reader_align_to_zero() -> None:
     r = _BitReader(bytes([0xFF]))
     _ = r.read_bits(3)
     before = r.bit_offset
@@ -1179,7 +1224,13 @@ def test_bit_reader_align_to_zero() -> None:
     assert r.bit_offset == before
 
 
-def test_bit_reader_remaining_bits_with_limit() -> None:
+def _unittest_bit_reader_unaligned_out_of_bounds_zero_extension() -> None:
+    r = _BitReader(bytes([0b00000101]))
+    assert r.read_bits(3) == 0b101
+    assert r.read_bits(6) == 0
+
+
+def _unittest_bit_reader_remaining_bits_with_limit() -> None:
     parent = _BitReader(bytes([0x12, 0x34]))
     child = parent.bounded_subreader(8)
     assert child.remaining_bits == 8
@@ -1198,28 +1249,29 @@ def _pack_chunks_lsb_first(chunks: list[tuple[int, int]]) -> bytes:
     return total_value.to_bytes((total_bit_length + 7) // 8, "little")
 
 
-def test_bit_io_aligned_roundtrip() -> None:
-    cases = [
+@_typed_parametrize(
+    ("value", "bit_length"),
+    [
         (0xAB, 8),
         (0xABCD, 16),
         (0xDEADBEEF, 32),
         (0x0123456789ABCDEF, 64),
-    ]
+    ],
+)
+def _unittest_bit_io_aligned_roundtrip(value: int, bit_length: int) -> None:
+    expected = value.to_bytes(bit_length // 8, "little")
+    writer = _BitWriter()
+    writer.write_bits(value, bit_length)
+    encoded = writer.finish()
+    assert encoded == expected
+    assert writer.bit_offset == bit_length
 
-    for value, bit_length in cases:
-        expected = value.to_bytes(bit_length // 8, "little")
-        writer = _BitWriter()
-        writer.write_bits(value, bit_length)
-        encoded = writer.finish()
-        assert encoded == expected
-        assert writer.bit_offset == bit_length
-
-        reader = _BitReader(encoded)
-        assert reader.read_bits(bit_length) == value
-        assert reader.bit_offset == bit_length
+    reader = _BitReader(encoded)
+    assert reader.read_bits(bit_length) == value
+    assert reader.bit_offset == bit_length
 
 
-def test_bit_io_aligned_non_multiple_of_byte() -> None:
+def _unittest_bit_io_aligned_non_multiple_of_byte() -> None:
     value = 0xABC
     bit_length = 12
     expected = _pack_chunks_lsb_first([(value, bit_length)])
@@ -1233,7 +1285,7 @@ def test_bit_io_aligned_non_multiple_of_byte() -> None:
     assert reader.read_bits(bit_length) == value
 
 
-def test_bit_io_unaligned_sequence() -> None:
+def _unittest_bit_io_unaligned_sequence() -> None:
     chunks = [(0b101, 3), (0xABCD, 16), (0b11, 2)]
     expected = _pack_chunks_lsb_first(chunks)
 
@@ -1248,7 +1300,7 @@ def test_bit_io_unaligned_sequence() -> None:
         assert reader.read_bits(bit_length) == value
 
 
-def test_bit_io_mixed_aligned_unaligned_sequence() -> None:
+def _unittest_bit_io_mixed_aligned_unaligned_sequence() -> None:
     chunks_before_alignment = [(0xEF, 8), (0b101, 3), (0x5A, 8)]
     alignment_padding = 5
     chunks_after_alignment = [(0xBEEF, 16)]
@@ -1269,60 +1321,3 @@ def test_bit_io_mixed_aligned_unaligned_sequence() -> None:
     reader.align_to(8)
     for value, bit_length in chunks_after_alignment:
         assert reader.read_bits(bit_length) == value
-
-
-def _unittest_serdes_branch_coverage_tests() -> None:
-    test_serialize_delimited_with_header()
-    test_deserialize_delimited_with_header()
-    test_serialize_plain_composite_via_api()
-    test_deserialize_plain_composite_via_api()
-
-    test_primitive_float16()
-    for special in [float("nan"), float("inf"), float("-inf")]:
-        test_primitive_float_saturated_special_values(special)
-    test_primitive_float_truncated_mode()
-    test_primitive_bool_from_float(1.0, True, False)
-    test_primitive_bool_from_float(0.0, False, False)
-    test_primitive_bool_from_float(float("nan"), None, True)
-    test_primitive_signed_truncated_mode()
-    test_primitive_float_to_int_coercion()
-    test_primitive_unknown_type_error()
-    test_primitive_invalid_float_bit_length_paths()
-    test_primitive_input_validation_errors()
-    for width in [16, 32, 64]:
-        test_float_widths_parametrized(width)
-    for width in [2, 3, 5, 8, 16, 32, 64]:
-        for cast_mode in [CM.SATURATED, CM.TRUNCATED]:
-            test_unsigned_integer_widths_and_cast_modes_parametrized(width, cast_mode)
-
-    test_array_byte_from_list_input([104, 105])
-    test_array_byte_from_list_input((104, 105))
-    test_array_byte_type_error()
-    test_array_utf8_type_error()
-    test_api_accepts_str_and_bytes_for_utf8_and_byte_arrays()
-    test_array_unknown_type_error()
-    test_array_deserialized_length_overflow()
-    test_array_composite_elements()
-    test_array_nested_array_elements()
-    test_element_unknown_type_error()
-
-    test_composite_union_non_dict_error()
-    test_composite_service_type_error()
-    test_composite_unknown_type_error()
-    test_composite_delimited_in_composite()
-    test_composite_deserialized_delimited_truncated()
-    test_composite_deserialize_union_invalid_tag()
-    test_composite_struct_padding_field()
-    test_field_value_unknown_type_error()
-    test_field_value_composite_in_struct()
-    test_field_value_array_in_struct()
-    test_default_value_all_types()
-    test_default_value_struct_with_missing_fields()
-
-    test_bit_writer_align_to_zero()
-    test_bit_reader_align_to_zero()
-    test_bit_reader_remaining_bits_with_limit()
-    test_bit_io_aligned_roundtrip()
-    test_bit_io_aligned_non_multiple_of_byte()
-    test_bit_io_unaligned_sequence()
-    test_bit_io_mixed_aligned_unaligned_sequence()
