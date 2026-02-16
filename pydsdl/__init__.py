@@ -30,6 +30,7 @@ from ._namespace import read_namespace as read_namespace
 from ._namespace import read_files as read_files
 
 # Error model.
+from ._error import Error as Error
 from ._error import FrontendError as FrontendError
 from ._error import InvalidDefinitionError as InvalidDefinitionError
 from ._error import InternalError as InternalError

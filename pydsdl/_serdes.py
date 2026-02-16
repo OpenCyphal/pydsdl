@@ -14,6 +14,7 @@ from __future__ import annotations
 import struct
 import typing
 
+from ._error import Error
 from ._serializable import (
     CompositeType,
     PrimitiveType,
@@ -36,7 +37,7 @@ from ._serializable import (
 )
 
 
-class SerDesError(Exception):
+class SerDesError(Error):
     """
     Root exception for serialization/deserialization errors.
     This is raised when serialization or deserialization operations fail.
@@ -82,18 +83,13 @@ def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool =
     """
     Serialize a Python object to bytes according to the given schema.
 
-    Args:
-        schema: The composite type schema defining the structure.
-        obj: The Python object to serialize (typically a dict).
-        with_delimiter_header: If True, prepend a delimiter header to the output.
-
-    Returns:
-        The serialized bytes.
-
-    Raises:
-        SerDesError: If serialization fails.
-        TypeError: If schema is a ServiceType.
-        ValueError: If with_delimiter_header=True on a non-delimited type.
+    :param schema: The composite type schema defining the structure.
+    :param obj: The Python object to serialize (typically a dict).
+    :param with_delimiter_header: If True, prepend a delimiter header to the output.
+    :return: The serialized bytes.
+    :raises SerDesError: If serialization fails.
+    :raises TypeError: If schema is a ServiceType.
+    :raises ValueError: If with_delimiter_header=True on a non-delimited type.
     """
     # Reject ServiceType
     if isinstance(schema, ServiceType):
@@ -138,18 +134,13 @@ def deserialize(
     """
     Deserialize bytes to a Python object according to the given schema.
 
-    Args:
-        schema: The composite type schema defining the structure.
-        data: The bytes to deserialize.
-        with_delimiter_header: If True, expect and parse a delimiter header from the input.
-
-    Returns:
-        The deserialized Python object (typically a dict).
-
-    Raises:
-        SerDesError: If deserialization fails.
-        TypeError: If schema is a ServiceType.
-        ValueError: If with_delimiter_header=True on a non-delimited type.
+    :param schema: The composite type schema defining the structure.
+    :param data: The bytes to deserialize.
+    :param with_delimiter_header: If True, expect and parse a delimiter header from the input.
+    :return: The deserialized Python object (typically a dict).
+    :raises SerDesError: If deserialization fails.
+    :raises TypeError: If schema is a ServiceType.
+    :raises ValueError: If with_delimiter_header=True on a non-delimited type.
     """
     # Reject ServiceType
     if isinstance(schema, ServiceType):
@@ -171,9 +162,10 @@ def deserialize(
             payload_bit_length = payload_byte_length * 8
 
             if payload_bit_length > reader.remaining_bits:
+                inner_type_name = schema.inner_type.full_name if hasattr(schema.inner_type, 'full_name') else type(schema.inner_type).__name__
                 raise DelimiterHeaderError(
                     f"Delimiter header specifies {payload_byte_length} bytes ({payload_bit_length} bits) "
-                    + f"but only {reader.remaining_bits} bits remain"
+                    + f"but only {reader.remaining_bits} bits remain (delimited type: {inner_type_name})"
                 )
 
             sub_reader = reader.bounded_subreader(payload_bit_length)
@@ -204,8 +196,31 @@ class _BitWriter:
     def write_bits(self, value: int, bit_length: int) -> None:
         """
         Write bit_length bits from value to the buffer.
+
         Bits are written LSB-first within each byte, little-endian for multi-byte values.
         """
+        if self._bit_offset % 8 == 0 and bit_length >= 8:
+            full_bytes, remaining = divmod(bit_length, 8)
+            mask = (1 << (full_bytes * 8)) - 1
+            byte_data = (value & mask).to_bytes(full_bytes, "little")
+
+            start_byte = self._bit_offset // 8
+            end_byte = start_byte + full_bytes
+            if start_byte >= len(self._buffer):
+                self._buffer.extend(b"\x00" * (start_byte - len(self._buffer)))
+                self._buffer.extend(byte_data)
+            elif end_byte <= len(self._buffer):
+                self._buffer[start_byte:end_byte] = byte_data
+            else:
+                overlap = len(self._buffer) - start_byte
+                self._buffer[start_byte:] = byte_data[:overlap]
+                self._buffer.extend(byte_data[overlap:])
+
+            self._bit_offset += full_bytes * 8
+            if remaining > 0:
+                self.write_bits(value >> (full_bytes * 8), remaining)
+            return
+
         for i in range(bit_length):
             bit = (value >> i) & 1
             byte_index = (self._bit_offset + i) // 8
@@ -222,9 +237,7 @@ class _BitWriter:
         self._bit_offset += bit_length
 
     def align_to(self, bit_alignment: int) -> None:
-        """
-        Write zero pad bits until bit_offset is a multiple of bit_alignment.
-        """
+        """Write zero pad bits until bit_offset is a multiple of bit_alignment."""
         if bit_alignment <= 0:
             return
         remainder = self._bit_offset % bit_alignment
@@ -233,9 +246,7 @@ class _BitWriter:
             self.write_bits(0, pad_bits)
 
     def finish(self) -> bytes:
-        """
-        Return immutable bytes from the internal buffer.
-        """
+        """Return immutable bytes from the internal buffer."""
         return bytes(self._buffer)
 
     @property
@@ -253,14 +264,31 @@ class _BitReader:
 
     def __init__(self, data: bytes | bytearray | memoryview, bit_offset: int = 0, bit_limit: int | None = None) -> None:
         self._data: bytes = bytes(data) if isinstance(data, (bytearray, memoryview)) else data
+        self._start_offset: int = bit_offset
         self._bit_offset: int = bit_offset
         self._bit_limit: int | None = bit_limit
 
     def read_bits(self, bit_length: int) -> int:
         """
         Read bit_length bits from current position with LSB-first ordering.
+
         Out-of-bounds bits return zeros (implicit zero extension).
         """
+        if self._bit_offset % 8 == 0 and bit_length >= 8:
+            full_bytes, remaining = divmod(bit_length, 8)
+            start_byte = self._bit_offset // 8
+            end_byte = start_byte + full_bytes
+
+            chunk = self._data[start_byte:end_byte]
+            if len(chunk) < full_bytes:
+                chunk += b"\x00" * (full_bytes - len(chunk))
+            result = int.from_bytes(chunk, "little")
+
+            self._bit_offset += full_bytes * 8
+            if remaining > 0:
+                result |= self.read_bits(remaining) << (full_bytes * 8)
+            return result
+
         result = 0
         for i in range(bit_length):
             byte_index = (self._bit_offset + i) // 8
@@ -277,9 +305,7 @@ class _BitReader:
         return result
 
     def align_to(self, bit_alignment: int) -> None:
-        """
-        Skip bits until position is a multiple of bit_alignment.
-        """
+        """Skip bits until position is a multiple of bit_alignment."""
         if bit_alignment <= 0:
             return
         remainder = self._bit_offset % bit_alignment
@@ -290,6 +316,7 @@ class _BitReader:
     def bounded_subreader(self, bit_count: int) -> _BitReader:
         """
         Create a reader limited to bit_count bits from current position.
+
         Advances the parent reader past those bits.
         """
         subreader = _BitReader(self._data, self._bit_offset, bit_count)
@@ -300,7 +327,7 @@ class _BitReader:
     def remaining_bits(self) -> int:
         """Bits remaining before limit (or end of data if no limit)."""
         if self._bit_limit is not None:
-            return max(0, self._bit_limit - (self._bit_offset - (self._bit_offset - self._bit_limit)))
+            return max(0, self._bit_limit - (self._bit_offset - self._start_offset))
         else:
             return max(0, len(self._data) * 8 - self._bit_offset)
 
@@ -318,20 +345,21 @@ class _BitReader:
 def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, value: _Value) -> None:
     """
     Serialize a primitive value to bits according to the schema.
+
     Handles input coercion, cast-mode handling, and encoding.
     """
     if isinstance(schema, BooleanType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Boolean requires numeric input, got {type(value).__name__}")
+            raise ValueError(f"Boolean requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
         if isinstance(value, float):
             if not (-float("inf") < value < float("inf")):
-                raise ValueError(f"Non-finite float cannot be converted to bool")
+                raise ValueError(f"Non-finite float cannot be converted to bool (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
         bit_value = 1 if value else 0
         writer.write_bits(bit_value, 1)
 
     elif isinstance(schema, FloatType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Float requires numeric input, got {type(value).__name__}")
+            raise ValueError(f"Float requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
         float_value = float(value)
 
         if schema.cast_mode == PrimitiveType.CastMode.SATURATED:
@@ -361,10 +389,10 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
 
     elif isinstance(schema, SignedIntegerType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Integer requires numeric input, got {type(value).__name__}")
+            raise ValueError(f"Integer requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
         if isinstance(value, float):
             if not (-float("inf") < value < float("inf")):
-                raise ValueError(f"Non-finite float cannot be converted to int")
+                raise ValueError(f"Non-finite float cannot be converted to int (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
             int_value = int(round(value))
         else:
             int_value = int(value)
@@ -383,10 +411,10 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
 
     elif isinstance(schema, UnsignedIntegerType):
         if not isinstance(value, (bool, int, float)):
-            raise ValueError(f"Integer requires numeric input, got {type(value).__name__}")
+            raise ValueError(f"Integer requires numeric input, got {type(value).__name__} (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
         if isinstance(value, float):
             if not (-float("inf") < value < float("inf")):
-                raise ValueError(f"Non-finite float cannot be converted to int")
+                raise ValueError(f"Non-finite float cannot be converted to int (schema: {type(schema).__name__}, bit_length: {schema.bit_length})")
             int_value = int(round(value))
         else:
             int_value = int(value)
@@ -410,9 +438,7 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
 
 
 def _deserialize_primitive(reader: _BitReader, schema: PrimitiveType | VoidType) -> _Value:
-    """
-    Deserialize a primitive value from bits according to the schema.
-    """
+    """Deserialize a primitive value from bits according to the schema."""
     if isinstance(schema, BooleanType):
         bit_value = reader.read_bits(1)
         return bool(bit_value)
@@ -461,6 +487,7 @@ def _deserialize_primitive(reader: _BitReader, schema: PrimitiveType | VoidType)
 def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> None:
     """
     Serialize an array value to bits according to the schema.
+
     Handles fixed-length and variable-length arrays with special cases for UTF-8 and byte arrays.
     """
     if isinstance(schema.element_type, UTF8Type):
@@ -469,7 +496,7 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
         elif isinstance(value, (bytes, bytearray)):
             _ = value.decode("utf-8")
         else:
-            raise TypeError(f"UTF-8 array requires str, bytes, or bytearray input, got {type(value).__name__}")
+            raise TypeError(f"UTF-8 array requires str, bytes, or bytearray input, got {type(value).__name__} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
         value = list(value)
 
     elif isinstance(schema.element_type, ByteType):
@@ -481,7 +508,7 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
             pass
         else:
             raise TypeError(
-                f"Byte array requires list, tuple, bytes, bytearray, or str input, got {type(value).__name__}"
+                f"Byte array requires list, tuple, bytes, bytearray, or str input, got {type(value).__name__} (array type: {type(schema).__name__}, capacity: {schema.capacity})"
             )
 
     elif isinstance(value, (list, tuple)):
@@ -491,14 +518,14 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
 
     if isinstance(schema, FixedLengthArrayType):
         if len(value) != schema.capacity:
-            raise ArrayLengthError(f"Fixed-length array requires exactly {schema.capacity} elements, got {len(value)}")
+            raise ArrayLengthError(f"Fixed-length array requires exactly {schema.capacity} elements, got {len(value)} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
 
         for element in value:
             _serialize_element(writer, schema.element_type, element)
 
     elif isinstance(schema, VariableLengthArrayType):
         if not (0 <= len(value) <= schema.capacity):
-            raise ArrayLengthError(f"Variable-length array length {len(value)} exceeds capacity {schema.capacity}")
+            raise ArrayLengthError(f"Variable-length array length {len(value)} exceeds capacity {schema.capacity} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
 
         writer.write_bits(len(value), schema.length_field_type.bit_length)
 
@@ -512,6 +539,7 @@ def _serialize_array(writer: _BitWriter, schema: ArrayType, value: _Value) -> No
 def _deserialize_array(reader: _BitReader, schema: ArrayType) -> _Value:
     """
     Deserialize an array value from bits according to the schema.
+
     Returns str for UTF-8 arrays, bytes for byte arrays, and list for other arrays.
     """
     if isinstance(schema, FixedLengthArrayType):
@@ -519,7 +547,7 @@ def _deserialize_array(reader: _BitReader, schema: ArrayType) -> _Value:
     elif isinstance(schema, VariableLengthArrayType):
         length = reader.read_bits(schema.length_field_type.bit_length)
         if length > schema.capacity:
-            raise ArrayLengthError(f"Variable-length array length {length} exceeds capacity {schema.capacity}")
+            raise ArrayLengthError(f"Variable-length array length {length} exceeds capacity {schema.capacity} (array type: {type(schema).__name__}, capacity: {schema.capacity})")
     else:
         raise ValueError(f"Unknown array type: {type(schema).__name__}")
 
@@ -537,9 +565,7 @@ def _deserialize_array(reader: _BitReader, schema: ArrayType) -> _Value:
 
 
 def _serialize_element(writer: _BitWriter, element_type: typing.Any, value: _Value) -> None:
-    """
-    Serialize a single array element based on its type.
-    """
+    """Serialize a single array element based on its type."""
     if isinstance(element_type, (PrimitiveType, VoidType)):
         _serialize_primitive(writer, element_type, value)
     elif isinstance(element_type, ArrayType):
@@ -551,9 +577,7 @@ def _serialize_element(writer: _BitWriter, element_type: typing.Any, value: _Val
 
 
 def _deserialize_element(reader: _BitReader, element_type: typing.Any) -> _Value:
-    """
-    Deserialize a single array element based on its type.
-    """
+    """Deserialize a single array element based on its type."""
     if isinstance(element_type, (PrimitiveType, VoidType)):
         return _deserialize_primitive(reader, element_type)
     elif isinstance(element_type, ArrayType):
@@ -572,6 +596,7 @@ def _deserialize_element(reader: _BitReader, element_type: typing.Any) -> _Value
 def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -> None:
     """
     Serialize a composite value to bits according to the schema.
+
     Handles structures, unions, and delimited types with proper alignment and field ordering.
     """
     if isinstance(schema, DelimitedType):
@@ -586,9 +611,9 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
         if not isinstance(obj, dict):
             raise ValueError("Union value must be a dict")
         if len(obj) == 0:
-            raise ValueError("Union must have exactly one field, got none")
+            raise ValueError(f"Union must have exactly one field, got none (union type: {schema.full_name})")
         if len(obj) > 1:
-            raise ValueError("Union must have exactly one field, got multiple")
+            raise ValueError(f"Union must have exactly one field, got multiple (union type: {schema.full_name})")
 
         key = next(iter(obj.keys()))
         value = obj[key]
@@ -602,7 +627,7 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
                 break
 
         if tag_index is None:
-            raise UnionFieldError(f"Unknown union variant: {key}")
+            raise UnionFieldError(f"Unknown union variant: {key} (union type: {schema.full_name}, valid variants: {[f.name for f in schema.fields]})")
 
         assert field is not None
         writer.write_bits(tag_index, schema.tag_field_type.bit_length)
@@ -612,7 +637,7 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
         valid_fields = {f.name for f in schema.fields_except_padding}
         for key in obj.keys():
             if key not in valid_fields:
-                raise ValueError(f"Unknown field: {key}")
+                raise ValueError(f"Unknown field: {key} (structure type: {schema.full_name})")
 
         for field in schema.fields:
             writer.align_to(field.data_type.alignment_requirement)
@@ -636,6 +661,7 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
 def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
     """
     Deserialize a composite value from bits according to the schema.
+
     Returns a dict with field names as keys and deserialized values.
     """
     if isinstance(schema, DelimitedType):
@@ -643,9 +669,10 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
         payload_bit_length = payload_byte_length * 8
 
         if payload_bit_length > reader.remaining_bits:
+            inner_type_name = schema.inner_type.full_name if hasattr(schema.inner_type, 'full_name') else type(schema.inner_type).__name__
             raise DelimiterHeaderError(
                 f"Delimiter header specifies {payload_byte_length} bytes ({payload_bit_length} bits) "
-                + f"but only {reader.remaining_bits} bits remain"
+                + f"but only {reader.remaining_bits} bits remain (delimited type: {inner_type_name})"
             )
 
         sub_reader = reader.bounded_subreader(payload_bit_length)
@@ -654,7 +681,7 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
     elif isinstance(schema, UnionType):
         tag = reader.read_bits(schema.tag_field_type.bit_length)
         if tag >= len(schema.fields):
-            raise UnionTagError(f"Invalid union tag: {tag}")
+            raise UnionTagError(f"Invalid union tag: {tag} (union type: {schema.full_name}, valid range: 0-{len(schema.fields)-1})")
 
         field = schema.fields[tag]
         value = _deserialize_field_value(reader, field.data_type)
@@ -682,9 +709,7 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
 
 
 def _serialize_field_value(writer: _BitWriter, field_type: typing.Any, value: _Value) -> None:
-    """
-    Serialize a single field value based on its type.
-    """
+    """Serialize a single field value based on its type."""
     if isinstance(field_type, (PrimitiveType, VoidType)):
         _serialize_primitive(writer, field_type, value)
     elif isinstance(field_type, ArrayType):
@@ -696,9 +721,7 @@ def _serialize_field_value(writer: _BitWriter, field_type: typing.Any, value: _V
 
 
 def _deserialize_field_value(reader: _BitReader, field_type: typing.Any) -> _Value:
-    """
-    Deserialize a single field value based on its type.
-    """
+    """Deserialize a single field value based on its type."""
     if isinstance(field_type, (PrimitiveType, VoidType)):
         return _deserialize_primitive(reader, field_type)
     elif isinstance(field_type, ArrayType):
@@ -710,9 +733,7 @@ def _deserialize_field_value(reader: _BitReader, field_type: typing.Any) -> _Val
 
 
 def _default_value(schema: typing.Any) -> _Value:
-    """
-    Recursively compute default values for a given type.
-    """
+    """Recursively compute default values for a given type."""
     if isinstance(schema, BooleanType):
         return False
     elif isinstance(schema, (SignedIntegerType, UnsignedIntegerType)):
@@ -742,5 +763,3 @@ def _default_value(schema: typing.Any) -> _Value:
         return _default_value(schema.inner_type)
     else:
         raise ValueError(f"Unknown type for default value: {type(schema).__name__}")
-
-

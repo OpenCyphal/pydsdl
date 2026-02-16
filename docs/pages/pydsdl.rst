@@ -19,6 +19,41 @@ The main functions
 .. autofunction:: pydsdl.read_files
 
 
+Serialization
++++++++++++++
+
+PyDSDL provides built-in serialization and deserialization functions for binary encoding/decoding
+of DSDL types without code generation.
+
+.. autofunction:: pydsdl.serialize
+.. autofunction:: pydsdl.deserialize
+
+Object Representation Convention
+---------------------------------
+
+Deserialized objects use Python primitives:
+
+- **Composites (StructureType)**: ``dict[str, Any]`` with field names as keys
+- **Unions (UnionType)**: ``dict`` with exactly one key (the active variant)
+- **Arrays (Fixed/Variable)**: ``list``
+- **UTF-8 arrays**: ``str``
+- **Byte arrays**: ``bytes``
+- **Primitives**: ``bool``, ``int``, ``float``
+- **Void**: ``None`` (skipped in output)
+
+Example::
+
+    obj = {"flag": True, "values": [1, 2, 3], "text": "hello"}
+    data = pydsdl.serialize(schema, obj)
+    reconstructed = pydsdl.deserialize(schema, data)
+    assert obj == reconstructed
+
+See ``demo/demo_serdes.py`` for a complete working example.
+
+.. autoexception:: pydsdl.SerDesError
+   :show-inheritance:
+
+
 Type model
 ++++++++++
 
@@ -36,13 +71,16 @@ Exceptions
 
 .. computron-injection::
     :filename: ../descendant_diagram.py
-    :argv: FrontendError
+    :argv: Error
 
-.. autoexception:: pydsdl.FrontendError
+.. autoexception:: pydsdl.Error
    :undoc-members:
    :no-inherited-members:
    :show-inheritance:
    :special-members:
+
+.. note::
+   ``FrontendError`` is retained as a backward-compatibility alias for ``Error``.
 
 .. autoexception:: pydsdl.InvalidDefinitionError
    :undoc-members:

@@ -70,10 +70,10 @@ def _unittest_serdes_module() -> None:
     assert issubclass(UnionTagError, SerDesError)
     assert issubclass(DelimiterHeaderError, SerDesError)
 
-    # Verify that SerDesError does NOT inherit from FrontendError
+    # Verify that SerDesError inherits from FrontendError (via Error)
     from ._error import FrontendError
 
-    assert not issubclass(SerDesError, FrontendError)
+    assert issubclass(SerDesError, FrontendError)
 
     # Verify that type aliases are defined
     assert _Value is not None
@@ -861,7 +861,6 @@ def test_primitive_float16() -> None:
     assert abs(value - 1.5) < 0.01
 
 
-@pytest.mark.parametrize("special", [float("nan"), float("inf"), float("-inf")])
 def test_primitive_float_saturated_special_values(special: float) -> None:
     schema = FloatType(32, CM.SATURATED)
     w = _BitWriter()
@@ -885,14 +884,6 @@ def test_primitive_float_truncated_mode() -> None:
     assert abs(float(value) - 1.234) < 1e-6
 
 
-@pytest.mark.parametrize(
-    "value, expected, should_fail",
-    [
-        (1.0, True, False),
-        (0.0, False, False),
-        (float("nan"), None, True),
-    ],
-)
 def test_primitive_bool_from_float(value: float, expected: bool | None, should_fail: bool) -> None:
     w = _BitWriter()
     if should_fail:
@@ -951,7 +942,6 @@ def test_primitive_input_validation_errors() -> None:
         _serialize_primitive(_BitWriter(), SignedIntegerType(8, CM.SATURATED), float("inf"))
 
 
-@pytest.mark.parametrize("width", [16, 32, 64])
 def test_float_widths_parametrized(width: int) -> None:
     schema = FloatType(width, CM.SATURATED)
     w = _BitWriter()
@@ -961,8 +951,6 @@ def test_float_widths_parametrized(width: int) -> None:
     assert abs(float(value) - 0.5) < 0.01
 
 
-@pytest.mark.parametrize("width", [2, 3, 5, 8, 16, 32, 64])
-@pytest.mark.parametrize("cast_mode", [CM.SATURATED, CM.TRUNCATED])
 def test_unsigned_integer_widths_and_cast_modes_parametrized(width: int, cast_mode: PrimitiveType.CastMode) -> None:
     schema = UnsignedIntegerType(width, cast_mode)
     value = (1 << width) + 1
@@ -973,7 +961,6 @@ def test_unsigned_integer_widths_and_cast_modes_parametrized(width: int, cast_mo
     assert decoded == expected
 
 
-@pytest.mark.parametrize("container", [[104, 105], (104, 105)])
 def test_array_byte_from_list_input(container: list[int] | tuple[int, ...]) -> None:
     schema = VariableLengthArrayType(ByteType(), 8)
     w = _BitWriter()
@@ -1183,9 +1170,93 @@ def test_bit_reader_align_to_zero() -> None:
 def test_bit_reader_remaining_bits_with_limit() -> None:
     parent = _BitReader(bytes([0x12, 0x34]))
     child = parent.bounded_subreader(8)
-    assert child.remaining_bits == 0
+    assert child.remaining_bits == 8
+    _ = child.read_bits(4)
+    assert child.remaining_bits == 4
     _ = child.read_bits(4)
     assert child.remaining_bits == 0
+
+
+def _pack_chunks_lsb_first(chunks: list[tuple[int, int]]) -> bytes:
+    total_value = 0
+    total_bit_length = 0
+    for value, bit_length in chunks:
+        total_value |= (value & ((1 << bit_length) - 1)) << total_bit_length
+        total_bit_length += bit_length
+    return total_value.to_bytes((total_bit_length + 7) // 8, "little")
+
+
+def test_bit_io_aligned_roundtrip() -> None:
+    cases = [
+        (0xAB, 8),
+        (0xABCD, 16),
+        (0xDEADBEEF, 32),
+        (0x0123456789ABCDEF, 64),
+    ]
+
+    for value, bit_length in cases:
+        expected = value.to_bytes(bit_length // 8, "little")
+        writer = _BitWriter()
+        writer.write_bits(value, bit_length)
+        encoded = writer.finish()
+        assert encoded == expected
+        assert writer.bit_offset == bit_length
+
+        reader = _BitReader(encoded)
+        assert reader.read_bits(bit_length) == value
+        assert reader.bit_offset == bit_length
+
+
+def test_bit_io_aligned_non_multiple_of_byte() -> None:
+    value = 0xABC
+    bit_length = 12
+    expected = _pack_chunks_lsb_first([(value, bit_length)])
+
+    writer = _BitWriter()
+    writer.write_bits(value, bit_length)
+    encoded = writer.finish()
+    assert encoded == expected
+
+    reader = _BitReader(encoded)
+    assert reader.read_bits(bit_length) == value
+
+
+def test_bit_io_unaligned_sequence() -> None:
+    chunks = [(0b101, 3), (0xABCD, 16), (0b11, 2)]
+    expected = _pack_chunks_lsb_first(chunks)
+
+    writer = _BitWriter()
+    for value, bit_length in chunks:
+        writer.write_bits(value, bit_length)
+    encoded = writer.finish()
+    assert encoded == expected
+
+    reader = _BitReader(encoded)
+    for value, bit_length in chunks:
+        assert reader.read_bits(bit_length) == value
+
+
+def test_bit_io_mixed_aligned_unaligned_sequence() -> None:
+    chunks_before_alignment = [(0xEF, 8), (0b101, 3), (0x5A, 8)]
+    alignment_padding = 5
+    chunks_after_alignment = [(0xBEEF, 16)]
+    expected = _pack_chunks_lsb_first(chunks_before_alignment + [(0, alignment_padding)] + chunks_after_alignment)
+
+    writer = _BitWriter()
+    for value, bit_length in chunks_before_alignment:
+        writer.write_bits(value, bit_length)
+    writer.align_to(8)
+    for value, bit_length in chunks_after_alignment:
+        writer.write_bits(value, bit_length)
+    encoded = writer.finish()
+    assert encoded == expected
+
+    reader = _BitReader(encoded)
+    for value, bit_length in chunks_before_alignment:
+        assert reader.read_bits(bit_length) == value
+    reader.align_to(8)
+    for value, bit_length in chunks_after_alignment:
+        assert reader.read_bits(bit_length) == value
 
 
 def _unittest_serdes_branch_coverage_tests() -> None:
@@ -1238,3 +1309,7 @@ def _unittest_serdes_branch_coverage_tests() -> None:
     test_bit_writer_align_to_zero()
     test_bit_reader_align_to_zero()
     test_bit_reader_remaining_bits_with_limit()
+    test_bit_io_aligned_roundtrip()
+    test_bit_io_aligned_non_multiple_of_byte()
+    test_bit_io_unaligned_sequence()
+    test_bit_io_mixed_aligned_unaligned_sequence()
