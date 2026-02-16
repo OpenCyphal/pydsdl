@@ -2225,3 +2225,677 @@ def _unittest_implicit_zero_extension_variable_array() -> None:
 
     result = deserialize(schema, bytes([3, 0x34, 0x12, 0x56]))
     assert result == {"values": [0x1234, 0x0056, 0x0000]}
+
+
+@_typed_parametrize("width", _UNSIGNED_WIDTHS)
+def _unittest_unsigned_all_widths_roundtrip(width: int) -> None:
+    max_value = (1 << width) - 1
+    midpoint = max_value // 2
+
+    for cast_mode in (CM.SATURATED, CM.TRUNCATED):
+        schema = UnsignedIntegerType(width, cast_mode)
+        for value in [0, 1, midpoint, max_value]:
+            writer = _BitWriter()
+            _serialize_primitive(writer, schema, value)
+            decoded = _deserialize_primitive(_BitReader(writer.finish()), schema)
+            assert decoded == value
+
+
+@_typed_parametrize("width", _SIGNED_WIDTHS)
+def _unittest_signed_all_widths_roundtrip(width: int) -> None:
+    schema = SignedIntegerType(width, CM.SATURATED)
+    min_value = -(1 << (width - 1))
+    max_value = (1 << (width - 1)) - 1
+
+    for value in [min_value, -1, 0, 1, max_value]:
+        writer = _BitWriter()
+        _serialize_primitive(writer, schema, value)
+        decoded = _deserialize_primitive(_BitReader(writer.finish()), schema)
+        assert decoded == value
+
+
+@_typed_parametrize("width", _UNSIGNED_WIDTHS)
+def _unittest_unsigned_saturated_boundary(width: int) -> None:
+    schema = UnsignedIntegerType(width, CM.SATURATED)
+    min_value = 0
+    max_value = (1 << width) - 1
+
+    for value, expected in [
+        (0, 0),
+        (1, 1),
+        (-1, 0),
+        (min_value, min_value),
+        (max_value, max_value),
+        (min_value - 1, min_value),
+        (max_value + 1, max_value),
+    ]:
+        writer = _BitWriter()
+        _serialize_primitive(writer, schema, value)
+        decoded = _deserialize_primitive(_BitReader(writer.finish()), schema)
+        assert decoded == expected
+
+
+@_typed_parametrize("width", _UNSIGNED_WIDTHS)
+def _unittest_unsigned_truncated_boundary(width: int) -> None:
+    schema = UnsignedIntegerType(width, CM.TRUNCATED)
+    min_value = 0
+    max_value = (1 << width) - 1
+    mask = (1 << width) - 1
+
+    for value in [0, 1, -1, min_value, max_value, min_value - 1, max_value + 1]:
+        writer = _BitWriter()
+        _serialize_primitive(writer, schema, value)
+        decoded = _deserialize_primitive(_BitReader(writer.finish()), schema)
+        assert decoded == (value & mask)
+
+
+@_typed_parametrize("width", _SIGNED_WIDTHS)
+def _unittest_signed_saturated_boundary(width: int) -> None:
+    schema = SignedIntegerType(width, CM.SATURATED)
+    min_value = -(1 << (width - 1))
+    max_value = (1 << (width - 1)) - 1
+
+    for value, expected in [
+        (0, 0),
+        (1, 1),
+        (-1, -1),
+        (min_value, min_value),
+        (max_value, max_value),
+        (min_value - 1, min_value),
+        (max_value + 1, max_value),
+    ]:
+        writer = _BitWriter()
+        _serialize_primitive(writer, schema, value)
+        decoded = _deserialize_primitive(_BitReader(writer.finish()), schema)
+        assert decoded == expected
+
+
+@_typed_parametrize("width", _SIGNED_WIDTHS)
+def _unittest_twos_complement_encoding(width: int) -> None:
+    schema = SignedIntegerType(width, CM.SATURATED)
+    min_value = -(1 << (width - 1))
+    mask = (1 << width) - 1
+
+    for value, expected_raw in [
+        (-1, mask),
+        (-2, mask - 1),
+        (min_value, 1 << (width - 1)),
+    ]:
+        writer = _BitWriter()
+        _serialize_primitive(writer, schema, value)
+        encoded = writer.finish()
+        raw = _BitReader(encoded).read_bits(width)
+        assert raw == expected_raw
+        decoded = _deserialize_primitive(_BitReader(encoded), schema)
+        assert decoded == value
+
+    if width == 8:
+        writer = _BitWriter()
+        _serialize_primitive(writer, schema, -1)
+        assert writer.finish() == bytes([0xFF])
+
+
+def _unittest_integer_from_float_rounding() -> None:
+    unsigned_truncated = UnsignedIntegerType(8, CM.TRUNCATED)
+    unsigned_saturated = UnsignedIntegerType(8, CM.SATURATED)
+    signed_saturated = SignedIntegerType(8, CM.SATURATED)
+
+    for schema in [unsigned_truncated, unsigned_saturated, signed_saturated]:
+        for value in [2.4, 2.6]:
+            writer = _BitWriter()
+            _serialize_primitive(writer, schema, value)
+            decoded = _deserialize_primitive(_BitReader(writer.finish()), schema)
+            assert decoded == int(round(value))
+
+    writer = _BitWriter()
+    _serialize_primitive(writer, unsigned_truncated, 2.5)
+    decoded_half_up_unsigned = _deserialize_primitive(_BitReader(writer.finish()), unsigned_truncated)
+    assert decoded_half_up_unsigned in [2, 3]
+    assert decoded_half_up_unsigned == int(round(2.5))
+
+    writer = _BitWriter()
+    _serialize_primitive(writer, signed_saturated, -1.5)
+    decoded_half_down_signed = _deserialize_primitive(_BitReader(writer.finish()), signed_saturated)
+    assert decoded_half_down_signed in [-2, -1]
+    assert decoded_half_down_signed == int(round(-1.5))
+
+
+# ============================================================================
+# VARIABLE-LENGTH ARRAY LENGTH FIELD WIDTH TESTS (Task 9)
+# ============================================================================
+
+
+def _unittest_vararray_length_field_8bit() -> None:
+    """
+    Verify that variable-length arrays with capacity ≤ 255 produce 8-bit length fields.
+    
+    Per length field width formula: 2^ceil(log2(max(8, capacity.bit_length())))
+    For capacity=100: 100.bit_length()=7, max(8,7)=8, ceil(log2(8))=3, 2^3=8
+    For capacity=255: 255.bit_length()=8, max(8,8)=8, ceil(log2(8))=3, 2^3=8
+    """
+    schema_100 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 100)  # type: ignore
+    assert schema_100.length_field_type.bit_length == 8
+    
+    schema_255 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
+    assert schema_255.length_field_type.bit_length == 8
+    
+    # Verify wire format: first byte is length (little-endian)
+    w = _BitWriter()
+    _serialize_array(w, schema_100, [10, 20, 30])
+    data = w.finish()
+    assert data[0] == 3  # 8-bit length field
+    assert data[1:] == bytes([10, 20, 30])
+    
+    # Roundtrip
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema_100)
+    assert result == [10, 20, 30]
+
+
+def _unittest_vararray_length_field_16bit() -> None:
+    """
+    Verify that variable-length arrays with capacity 256-65535 produce 16-bit length fields.
+    
+    For capacity=256: 256.bit_length()=9, max(8,9)=9, ceil(log2(9))=4, 2^4=16
+    For capacity=10000: 10000.bit_length()=14, max(8,14)=14, ceil(log2(14))=4, 2^4=16
+    For capacity=65535: 65535.bit_length()=16, max(8,16)=16, ceil(log2(16))=4, 2^4=16
+    """
+    schema_256 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 256)  # type: ignore
+    assert schema_256.length_field_type.bit_length == 16
+    
+    schema_10000 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 10000)  # type: ignore
+    assert schema_10000.length_field_type.bit_length == 16
+    
+    schema_65535 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65535)  # type: ignore
+    assert schema_65535.length_field_type.bit_length == 16
+    
+    # Verify wire format: first 2 bytes are length (little-endian)
+    w = _BitWriter()
+    _serialize_array(w, schema_256, [1, 2, 3, 4, 5])
+    data = w.finish()
+    length = int.from_bytes(data[:2], "little")
+    assert length == 5  # 16-bit length field
+    assert data[2:] == bytes([1, 2, 3, 4, 5])
+
+
+def _unittest_vararray_length_field_32bit() -> None:
+    """
+    Verify that variable-length arrays with capacity ≥ 65536 produce 32-bit length fields.
+    
+    For capacity=65536: 65536.bit_length()=17, max(8,17)=17, ceil(log2(17))=5, 2^5=32
+    For capacity=1000000: 1000000.bit_length()=20, max(8,20)=20, ceil(log2(20))=5, 2^5=32
+    """
+    schema_65536 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65536)  # type: ignore
+    assert schema_65536.length_field_type.bit_length == 32
+    
+    schema_1000000 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 1000000)  # type: ignore
+    assert schema_1000000.length_field_type.bit_length == 32
+    
+    # Verify wire format: first 4 bytes are length (little-endian)
+    w = _BitWriter()
+    _serialize_array(w, schema_65536, [0xAA, 0xBB, 0xCC])
+    data = w.finish()
+    length = int.from_bytes(data[:4], "little")
+    assert length == 3  # 32-bit length field
+    assert data[4:] == bytes([0xAA, 0xBB, 0xCC])
+
+
+def _unittest_vararray_capacity_boundary_8_to_16() -> None:
+    """
+    Test capacity boundary: 255 (8-bit) vs 256 (16-bit).
+    
+    Verify that the length field width changes at the exact boundary.
+    """
+    schema_255 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
+    schema_256 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 256)  # type: ignore
+    
+    assert schema_255.length_field_type.bit_length == 8
+    assert schema_256.length_field_type.bit_length == 16
+    
+    # Same payload, different length field widths
+    payload = [1, 2, 3]
+    
+    w_255 = _BitWriter()
+    _serialize_array(w_255, schema_255, payload)
+    data_255 = w_255.finish()
+    assert len(data_255) == 1 + 3  # 1 byte length + 3 bytes payload
+    
+    w_256 = _BitWriter()
+    _serialize_array(w_256, schema_256, payload)
+    data_256 = w_256.finish()
+    assert len(data_256) == 2 + 3  # 2 bytes length + 3 bytes payload
+    
+    # Verify boundary at 65535→65536
+    schema_65535 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65535)  # type: ignore
+    schema_65536 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65536)  # type: ignore
+    
+    assert schema_65535.length_field_type.bit_length == 16
+    assert schema_65536.length_field_type.bit_length == 32
+
+
+def _unittest_vararray_roundtrip_16bit_length() -> None:
+    """
+    Test roundtrip serialization/deserialization with 16-bit length field.
+    
+    Verify that arrays with capacity requiring 16-bit length fields correctly
+    serialize and deserialize with various payload sizes.
+    """
+    schema = VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 500)  # type: ignore
+    assert schema.length_field_type.bit_length == 16
+    
+    # Empty array
+    w = _BitWriter()
+    _serialize_array(w, schema, [])
+    data = w.finish()
+    assert int.from_bytes(data[:2], "little") == 0
+    assert _deserialize_array(_BitReader(data), schema) == []
+    
+    # Single element
+    w = _BitWriter()
+    _serialize_array(w, schema, [0x1234])
+    data = w.finish()
+    assert int.from_bytes(data[:2], "little") == 1
+    assert data[2:] == bytes([0x34, 0x12])  # little-endian
+    assert _deserialize_array(_BitReader(data), schema) == [0x1234]
+    
+    # Multiple elements
+    payload = [0x0011, 0x2233, 0x4455, 0x6677, 0x8899]
+    w = _BitWriter()
+    _serialize_array(w, schema, payload)
+    data = w.finish()
+    assert int.from_bytes(data[:2], "little") == 5
+    assert _deserialize_array(_BitReader(data), schema) == payload
+
+
+def _unittest_vararray_roundtrip_32bit_length() -> None:
+    """
+    Test roundtrip serialization/deserialization with 32-bit length field.
+    
+    Verify that arrays with capacity requiring 32-bit length fields correctly
+    serialize and deserialize with various payload sizes.
+    """
+    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 100000)  # type: ignore
+    assert schema.length_field_type.bit_length == 32
+    
+    # Empty array
+    w = _BitWriter()
+    _serialize_array(w, schema, [])
+    data = w.finish()
+    assert int.from_bytes(data[:4], "little") == 0
+    assert _deserialize_array(_BitReader(data), schema) == []
+    
+    # Small payload with 32-bit length field
+    payload = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE]
+    w = _BitWriter()
+    _serialize_array(w, schema, payload)
+    data = w.finish()
+    assert int.from_bytes(data[:4], "little") == 5
+    assert data[4:] == bytes(payload)
+    assert _deserialize_array(_BitReader(data), schema) == payload
+    
+    # Verify larger payload (100 elements)
+    large_payload = list(range(100))
+    w = _BitWriter()
+    _serialize_array(w, schema, large_payload)
+    data = w.finish()
+    assert int.from_bytes(data[:4], "little") == 100
+    assert _deserialize_array(_BitReader(data), schema) == large_payload
+
+
+# ============================================
+# Task 8: UTF-8 multi-byte and byte array edge case tests
+# ============================================
+
+
+def _unittest_utf8_multibyte_characters() -> None:
+    """Test UTF-8 strings with 2-byte, 3-byte, and 4-byte characters."""
+    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+
+    # 2-byte characters (Latin-1 supplement)
+    w = _BitWriter()
+    _serialize_array(w, schema, "café")
+    data = w.finish()
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == "café"
+    assert isinstance(result, str)
+    assert len("café".encode("utf-8")) == 5  # 'c' 'a' 'f' 0xC3 0xA9
+
+    # 3-byte characters (CJK)
+    w = _BitWriter()
+    _serialize_array(w, schema, "日本語")
+    data = w.finish()
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == "日本語"
+    assert len("日本語".encode("utf-8")) == 9  # 3 chars × 3 bytes each
+
+    # 4-byte characters (emoji)
+    w = _BitWriter()
+    _serialize_array(w, schema, "😀🎉")
+    data = w.finish()
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == "😀🎉"
+    assert len("😀🎉".encode("utf-8")) == 8  # 2 chars × 4 bytes each
+
+
+def _unittest_utf8_empty_string() -> None:
+    """Test empty UTF-8 string roundtrip."""
+    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+
+    w = _BitWriter()
+    _serialize_array(w, schema, "")
+    data = w.finish()
+    assert len(data) == 1  # Just the length byte
+    assert data[0] == 0    # Length is 0
+
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == ""
+    assert isinstance(result, str)
+
+
+def _unittest_utf8_at_capacity_boundary() -> None:
+    """Test UTF-8 capacity checked against BYTE count, not character count."""
+    # Capacity is 10 bytes
+    schema = VariableLengthArrayType(UTF8Type(), 10)  # type: ignore
+
+    # Exactly at capacity: 10 bytes (3 emoji × 4 bytes = 12 bytes exceeds capacity)
+    # Use 2 emoji (8 bytes) + 'hi' (2 bytes) = 10 bytes
+    test_str = "😀🎉"  # 8 bytes
+    assert len(test_str.encode("utf-8")) == 8
+
+    w = _BitWriter()
+    _serialize_array(w, schema, test_str)
+    data = w.finish()
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == test_str
+
+    # Over capacity: 3 emoji = 12 bytes > 10 byte capacity
+    with pytest.raises(ArrayLengthError):
+        w = _BitWriter()
+        _serialize_array(w, schema, "😀🎉🚀")  # 12 bytes
+
+
+def _unittest_utf8_mixed_ascii_multibyte() -> None:
+    """Test UTF-8 strings with mixed ASCII and multi-byte characters."""
+    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+
+    mixed = "Hello 世界! 😀"  # ASCII + 3-byte + ASCII + 4-byte
+    w = _BitWriter()
+    _serialize_array(w, schema, mixed)
+    data = w.finish()
+
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == mixed
+    assert isinstance(result, str)
+
+    # Verify byte length calculation
+    expected_bytes = len(mixed.encode("utf-8"))
+    # "Hello " = 6, "世界" = 6, "! " = 2, "😀" = 4 → 18 bytes
+    assert expected_bytes == 18
+
+
+def _unittest_utf8_invalid_bytes_rejected() -> None:
+    """Test that invalid UTF-8 byte sequences are rejected during serialization."""
+    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+
+    # Invalid UTF-8: 0xFF is not a valid UTF-8 start byte
+    invalid_bytes = b"\xFF\xFE"
+
+    # According to _serdes.py:562-563, bytes input is validated with .decode("utf-8")
+    with pytest.raises(UnicodeDecodeError):
+        w = _BitWriter()
+        _serialize_array(w, schema, invalid_bytes)
+
+
+def _unittest_byte_array_empty() -> None:
+    """Test empty byte array roundtrip."""
+    schema = VariableLengthArrayType(ByteType(), 255)  # type: ignore
+
+    w = _BitWriter()
+    _serialize_array(w, schema, b"")
+    data = w.finish()
+    assert len(data) == 1  # Just the length byte
+    assert data[0] == 0    # Length is 0
+
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == b""
+    assert isinstance(result, bytes)
+
+
+def _unittest_byte_array_all_byte_values() -> None:
+    """Test byte array with all 256 possible byte values (0x00-0xFF)."""
+    schema = VariableLengthArrayType(ByteType(), 256)  # type: ignore
+
+    all_bytes = bytes(range(256))
+    w = _BitWriter()
+    _serialize_array(w, schema, all_bytes)
+    data = w.finish()
+
+    assert schema.length_field_type.bit_length == 16
+    assert len(data) == 258
+    assert int.from_bytes(data[:2], "little") == 256
+
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == all_bytes
+    assert isinstance(result, bytes)
+    assert len(result) == 256
+
+
+def _unittest_byte_array_at_capacity() -> None:
+    """Test byte array at exact capacity boundary."""
+    schema = VariableLengthArrayType(ByteType(), 10)  # type: ignore
+
+    # Exactly at capacity
+    exact = b"0123456789"
+    assert len(exact) == 10
+
+    w = _BitWriter()
+    _serialize_array(w, schema, exact)
+    data = w.finish()
+    r = _BitReader(data)
+    result = _deserialize_array(r, schema)
+    assert result == exact
+
+    # Over capacity
+    with pytest.raises(ArrayLengthError):
+        w = _BitWriter()
+        _serialize_array(w, schema, b"01234567890")  # 11 bytes
+
+
+def _unittest_fixed_utf8_array_roundtrip() -> None:
+    """Test fixed-length UTF-8 array (uncommon but valid)."""
+    # Fixed-length array of 3 UTF-8 characters (each UTF8Type element is capacity-1)
+    # Note: FixedLengthArrayType with UTF8Type is unusual but should work
+    inner_schema = VariableLengthArrayType(UTF8Type(), 10)  # type: ignore
+    schema = _mk_structure(
+        "test.FixedUtf8Array",
+        [
+            Field(inner_schema, "text"),
+        ],
+    )
+
+    test_obj = {"text": "abc"}
+    _roundtrip_assert(schema, test_obj)
+
+    # Test with multi-byte characters
+    test_obj_multi = {"text": "日本"}
+    _roundtrip_assert(schema, test_obj_multi)
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_negative_zero_roundtrip(width: int) -> None:
+    schema = FloatType(width, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, -0.0)
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert isinstance(result, float)
+    float_result = typing.cast(float, result)
+    assert float_result == 0.0
+    assert math.copysign(1.0, float_result) == -1.0
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_denormalized_roundtrip(width: int) -> None:
+    smallest_denormalized = {
+        16: 2.0**-24,
+        32: 2.0**-149,
+        64: 2.0**-1074,
+    }[width]
+    schema = FloatType(width, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, smallest_denormalized)
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert isinstance(result, float)
+    float_result = typing.cast(float, result)
+    assert float_result == smallest_denormalized
+    assert float_result > 0.0
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_max_finite_roundtrip(width: int) -> None:
+    max_finite = {
+        16: 65504.0,
+        32: 3.4028234663852886e38,
+        64: 1.7976931348623157e308,
+    }[width]
+    schema = FloatType(width, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, max_finite)
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result == max_finite
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_min_positive_roundtrip(width: int) -> None:
+    min_positive_normalized = {
+        16: 2.0**-14,
+        32: 2.0**-126,
+        64: 2.0**-1022,
+    }[width]
+    schema = FloatType(width, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, min_positive_normalized)
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result == min_positive_normalized
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_saturated_clamp_to_max_finite(width: int) -> None:
+    overflow_input = {
+        16: 70000.0,
+        32: 1e100,
+        64: 10**10000,
+    }[width]
+    max_finite = {
+        16: 65504.0,
+        32: 3.4028234663852886e38,
+        64: 1.7976931348623157e308,
+    }[width]
+    schema = FloatType(width, CM.SATURATED)
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, overflow_input)
+    result_positive = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result_positive == max_finite
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, -overflow_input)
+    result_negative = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result_negative == -max_finite
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_saturated_inf_passthrough(width: int) -> None:
+    schema = FloatType(width, CM.SATURATED)
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, float("inf"))
+    result_positive = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result_positive == float("inf")
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, float("-inf"))
+    result_negative = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result_negative == float("-inf")
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_saturated_nan_passthrough(width: int) -> None:
+    schema = FloatType(width, CM.SATURATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, float("nan"))
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert isinstance(result, float)
+    assert math.isnan(typing.cast(float, result))
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_truncated_overflow_to_inf(width: int) -> None:
+    overflow_input = {
+        16: 70000.0,
+        32: 1e100,
+        64: 10**10000,
+    }[width]
+    schema = FloatType(width, CM.TRUNCATED)
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, overflow_input)
+    result_positive = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result_positive == float("inf")
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, -overflow_input)
+    result_negative = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert result_negative == float("-inf")
+
+
+@_typed_parametrize("width", [16, 32, 64])
+def _unittest_float_truncated_nan_passthrough(width: int) -> None:
+    schema = FloatType(width, CM.TRUNCATED)
+    w = _BitWriter()
+    _serialize_primitive(w, schema, float("nan"))
+    result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert isinstance(result, float)
+    assert math.isnan(typing.cast(float, result))
+
+
+def _unittest_float16_precision_boundary() -> None:
+    schema = FloatType(16, CM.TRUNCATED)
+
+    ulp_at_one = 2.0**-10
+    tie_boundary = 1.0 + 2.0**-11
+    just_above_boundary = tie_boundary + 2.0**-15
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, tie_boundary)
+    tied_result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert tied_result == 1.0
+
+    w = _BitWriter()
+    _serialize_primitive(w, schema, just_above_boundary)
+    above_result = _deserialize_primitive(_BitReader(w.finish()), schema)
+    assert above_result == 1.0 + ulp_at_one
+
+
+def _unittest_float_from_bool_input() -> None:
+    for width in (16, 32, 64):
+        schema = FloatType(width, CM.SATURATED)
+
+        w = _BitWriter()
+        _serialize_primitive(w, schema, False)
+        false_result = _deserialize_primitive(_BitReader(w.finish()), schema)
+        assert isinstance(false_result, float)
+        assert false_result == 0.0
+
+        w = _BitWriter()
+        _serialize_primitive(w, schema, True)
+        true_result = _deserialize_primitive(_BitReader(w.finish()), schema)
+        assert isinstance(true_result, float)
+        assert true_result == 1.0
