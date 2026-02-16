@@ -105,13 +105,15 @@ def _unittest_define(wrkspc: Workspace) -> None:
 def _unittest_simple(wrkspc: Workspace) -> None:
     abc = wrkspc.parse_new(
         "vendor/nested/7000.Abc.1.2.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         uint8 CHARACTER = '#'
         int8 a
         saturated int64[<33] b
         @extent 1024 * 8
-        """),
+        """
+        ),
     )
     assert abc.fixed_port_id == 7000
     assert abc.full_name == "vendor.nested.Abc"
@@ -153,15 +155,18 @@ def _unittest_simple(wrkspc: Workspace) -> None:
 
     constants = wrkspc.parse_new(
         "another/Constants.5.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @sealed
         float64 PI = 3.1415926535897932384626433
-        """),
+        """
+        ),
     )
 
     service = wrkspc.parse_new(
         "another/300.Service.0.1.dsdl",
-        dedent("""
+        dedent(
+            """
         @union
         @deprecated
         vendor.nested.Empty.255.255 new_empty_implicit
@@ -172,7 +177,8 @@ def _unittest_simple(wrkspc: Workspace) -> None:
         @sealed                      # RESPONSE SEALED REQUEST NOT
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
-        """),
+        """
+        ),
     )
 
     p = parse_definition(
@@ -270,14 +276,16 @@ def _unittest_simple(wrkspc: Workspace) -> None:
 
     union = wrkspc.parse_new(
         "another/Union.5.9.dsdl",
-        dedent("""
+        dedent(
+            """
         @union
         @sealed
         truncated float16 PI = 3.1415926535897932384626433
         uint8 a
         vendor.nested.Empty.255.255[5] b
         bool [ <= 255 ] c
-        """),
+        """
+        ),
     )
 
     p = parse_definition(
@@ -309,7 +317,8 @@ def _unittest_simple(wrkspc: Workspace) -> None:
 def _unittest_comments(wrkspc: Workspace) -> None:
     abc = wrkspc.parse_new(
         "vendor/nested/7000.Abc.1.2.dsdl",
-        dedent("""\
+        dedent(
+            """\
         # header comment here
         # multiline
 
@@ -324,7 +333,8 @@ def _unittest_comments(wrkspc: Workspace) -> None:
         # comment on array
         # and another
         @extent 1024 * 8
-        """),
+        """
+        ),
     )
 
     p = parse_definition(abc, [])
@@ -342,10 +352,12 @@ def _unittest_comments(wrkspc: Workspace) -> None:
 
     constants = wrkspc.parse_new(
         "another/Constants.5.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @sealed
         float64 PI = 3.1415926535897932384626433 # no header comment
-        """),
+        """
+        ),
     )
 
     p = parse_definition(constants, [])
@@ -354,7 +366,8 @@ def _unittest_comments(wrkspc: Workspace) -> None:
 
     service = wrkspc.parse_new(
         "another/300.Service.0.1.dsdl",
-        dedent("""\
+        dedent(
+            """\
         # first header comment here
         # multiline
         @union
@@ -369,7 +382,8 @@ def _unittest_comments(wrkspc: Workspace) -> None:
         @sealed                      # RESPONSE SEALED REQUEST NOT
         Constants.5.0 constants      # RELATIVE REFERENCE
         vendor.nested.Abc.1.2 abc
-        """),
+        """
+        ),
     )
 
     p = parse_definition(
@@ -388,7 +402,8 @@ def _unittest_comments(wrkspc: Workspace) -> None:
 
     union = wrkspc.parse_new(
         "another/Union.5.9.dsdl",
-        dedent("""
+        dedent(
+            """
         @union
         # sandwiched comment has no effect
         @sealed
@@ -396,7 +411,8 @@ def _unittest_comments(wrkspc: Workspace) -> None:
         uint8 a
         vendor.nested.Empty.255.255[5] b
         bool [ <= 255 ] c
-        """),
+        """
+        ),
     )
 
     p = parse_definition(
@@ -542,26 +558,30 @@ def _unittest_error(wrkspc: Workspace) -> None:
     with raises(_error.InvalidDefinitionError, match=r"(?i).*not defined for.*"):
         standalone(
             "vendor/types/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    @union
                    int8 a
                    @assert _offset_.count >= 1
                    int16 b
                    @sealed
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match=r"(?i).*field offset is not defined for unions.*"):
         standalone(
             "vendor/types/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    @union
                    int8 a
                    int16 b
                    @assert _offset_.count >= 1
                    int8 c
                    @sealed
-                   """),
+                   """
+            ),
         )
 
     with raises(_data_type_builder.UndefinedDataTypeError, match=r".*ns.Type_.*1\.0"):
@@ -626,13 +646,15 @@ def _unittest_error(wrkspc: Workspace) -> None:
     try:
         standalone(
             "vendor/types/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int8 a  # Comment
                    # Empty
                    @assert false  # Will error here, line number 4
                    # Blank
                    @sealed
-                   """),
+                   """
+            ),
         )
     except _error.Error as ex:
         assert ex.path and ex.path.parts[-3:] == ("vendor", "types", "A.1.0.dsdl")
@@ -651,76 +673,92 @@ def _unittest_error(wrkspc: Workspace) -> None:
     with raises(_error.InvalidDefinitionError, match="(?i).*seal.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int8 a
                    @extent 128
                    @sealed
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int8 a
                    @sealed
                    @extent 128
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*sealed.*expression.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int8 a
                    @sealed 12345678
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*expression.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int8 a
                    @extent
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int16 a
                    @extent 8  # Too small
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int16 a
                    @extent {16}  # Wrong type
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*"):
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int16 a
                    @extent 64
                    int8 b
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*extent.*"):  # Neither extent nor sealed are specified.
         standalone(
             "vendor/sealing/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                    int16 a
                    int8 b
-                   """),
+                   """
+            ),
         )
 
     with raises(_error.InvalidDefinitionError, match="(?i).*not a valid field type.*"):
@@ -777,7 +815,8 @@ def _unittest_assert(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
             @assert _offset_ == {0}
             @assert _offset_.min == _offset_.max
             Array.1.0[2] bar
@@ -804,7 +843,8 @@ def _unittest_assert(wrkspc: Workspace) -> None:
             @assert Array.1.0._extent_ == 8 + 8 + 8
             @assert Array.1.0._extent_ == Array.1.0._bit_length_.max
             @sealed
-            """),
+            """
+            ),
         ),
         [wrkspc.parse_new("ns/Array.1.0.dsdl", "uint8[<=2] foo\n@sealed")],
     )
@@ -813,11 +853,13 @@ def _unittest_assert(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                 uint64 big
                 @assert _offset_ == 64
                 @sealed
-                """),
+                """
+                ),
             ),
             [],
         )
@@ -845,13 +887,15 @@ def _unittest_assert(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/D.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
             @union
             float32 a
             uint64 b
             @assert _offset_ == {40, 72}
             @sealed
-            """),
+            """
+            ),
         ),
         [],
     )
@@ -859,7 +903,8 @@ def _unittest_assert(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/E.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
             @union
             uint8 A = 0
             float32 a
@@ -869,7 +914,8 @@ def _unittest_assert(wrkspc: Workspace) -> None:
             @assert _offset_ == {40, 72}
             uint8 D = 3
             @sealed
-            """),
+            """
+            ),
         ),
         [],
     )
@@ -878,14 +924,16 @@ def _unittest_assert(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/F.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                 @union
                 @assert _offset_.min == 33
                 float32 a
                 uint64 b
                 @assert _offset_ == {40, 72}
                 @sealed
-                """),
+                """
+                ),
             ),
             [],
         )
@@ -894,11 +942,13 @@ def _unittest_assert(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/G.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                 float32 a
                 @assert _offset_.min == 8
                 @sealed
-                """),
+                """
+                ),
             ),
             [],
         )
@@ -907,11 +957,13 @@ def _unittest_assert(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/H.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                 float32 a
                 @assert _offset_.min
                 @sealed
-                """),
+                """
+                ),
             ),
             [],
         )
@@ -920,13 +972,15 @@ def _unittest_assert(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/I.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
             @assert J.1.0._extent_ == 64
             @assert J.1.0._bit_length_ == {0, 1, 2, 3, 4, 5, 6, 7, 8} * 8 + 32
             @assert K.1.0._extent_ == 8
             @assert K.1.0._bit_length_ == {8}
             @sealed
-            """),
+            """
+            ),
         ),
         [
             wrkspc.parse_new("ns/J.1.0.dsdl", "uint8 foo\n@extent 64"),
@@ -938,7 +992,8 @@ def _unittest_assert(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/L.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
             @assert _offset_ == {0}
             uint3 a
             @assert _offset_ == {3}
@@ -954,7 +1009,8 @@ def _unittest_assert(wrkspc: Workspace) -> None:
             M.1.0 variable
             @assert _offset_ == 32 + {24, 32, 40}  # Aligned; variability due to extensibility (non-sealing)
             @sealed
-            """),
+            """
+            ),
         ),
         [
             wrkspc.parse_new("ns/M.1.0.dsdl", "@extent 16"),
@@ -977,27 +1033,32 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "zubax/First.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         uint8[<256] a
         @assert _offset_.min == 8
         @assert _offset_.max == 2048
         @sealed
-        """),
+        """
+        ),
     )
 
     wrkspc.new(
         "zubax/7001.Message.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         zubax.First.1.0[<=2] a
         @assert _offset_.min == 8
         @assert _offset_.max == 4104
         @extent _offset_.max * 8
-        """),
+        """
+        ),
     )
 
     wrkspc.new(
         "zubax/nested/300.Spartans.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         float16 small
@@ -1007,7 +1068,8 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
         ---
         @print _offset_     # Will print zero {0}
         @sealed
-        """),
+        """
+        ),
     )
 
     wrkspc.new("zubax/nested/300.Spartans.30.0.txt", "completely unrelated stuff")
@@ -1030,11 +1092,13 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "zubax/colliding/300.Iceberg.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @extent 1024
         ---
         @extent 1024
-        """),
+        """
+        ),
     )
 
     with raises(_namespace.FixedPortIDCollisionError):
@@ -1054,11 +1118,13 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "zubax/colliding/iceberg/300.Ice.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @sealed
         ---
         @sealed
-        """),
+        """
+        ),
     )
     with raises(_namespace.FixedPortIDCollisionError):
         _namespace.read_namespace(
@@ -1075,11 +1141,13 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
     (wrkspc.directory / "zubax/colliding/iceberg/300.Ice.30.0.dsdl").unlink()
     wrkspc.new(
         "zubax/COLLIDING/300.Iceberg.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @extent 1024
         ---
         @extent 1024
-        """),
+        """
+        ),
     )
     with raises(_namespace.FixedPortIDCollisionError):
         _namespace.read_namespace(
@@ -1097,19 +1165,23 @@ def _unittest_parse_namespace(wrkspc: Workspace) -> None:
         pass  # We're running on a platform where paths are not case-sensitive.
     wrkspc.new(
         "zubax/noncolliding/iceberg/Ice.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @extent 1024
         ---
         @extent 1024
-        """),
+        """
+        ),
     )
     wrkspc.new(
         "zubax/noncolliding/Iceb.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @extent 1024
         ---
         @extent 1024
-        """),
+        """
+        ),
     )
     parsed = _namespace.read_namespace(wrkspc.directory / "zubax", wrkspc.directory / "zubax")
     assert "zubax.noncolliding.iceberg.Ice" in [x.full_name for x in parsed]
@@ -1127,24 +1199,30 @@ def _unittest_collision_on_case_sensitive_filesystem(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "atlantic/ships/Titanic.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         greenland.colliding.IceBerg.1.0[<=2] bergs
         @sealed
-        """),
+        """
+        ),
     )
 
     wrkspc.new(
         "greenland/colliding/IceBerg.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @sealed
-        """),
+        """
+        ),
     )
 
     wrkspc.new(
         "greenland/COLLIDING/IceBerg.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @sealed
-        """),
+        """
+        ),
     )
 
     with raises(_data_type_builder.DataTypeNameCollisionError, match=".*letter case.*"):
@@ -1161,7 +1239,8 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "ns/Spartans.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         float16 small
@@ -1170,12 +1249,14 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
         @extent 1024
         ---
         @extent 1024
-        """),
+        """
+        ),
     )
 
     wrkspc.new(
         "ns/Spartans.30.1.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
@@ -1184,7 +1265,8 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
         @extent 1024
         ---
         @extent 1024
-        """),
+        """
+        ),
     )
 
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
@@ -1193,14 +1275,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "ns/Spartans.30.2.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         int32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     with raises(_namespace.VersionsOfDifferentKindError):
@@ -1210,14 +1294,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "ns/Spartans.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
@@ -1226,26 +1312,30 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
 
     wrkspc.new(
         "ns/Spartans.30.1.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         int64 woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     wrkspc.new(
         "ns/6700.Spartans.30.2.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         int32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     _namespace.read_namespace((wrkspc.directory / "ns"), [])
@@ -1258,14 +1348,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     wrkspc.drop("ns/Spartans.30.0.dsdl")
     wrkspc.new(
         "ns/6700.Spartans.30.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     with raises(_namespace.MinorVersionFixedPortIDError):
@@ -1274,14 +1366,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     wrkspc.drop("ns/Spartans.30.1.dsdl")
     wrkspc.new(
         "ns/6700.Spartans.30.1.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])
@@ -1290,14 +1384,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     wrkspc.drop("ns/6700.Spartans.30.1.dsdl")
     wrkspc.new(
         "ns/6701.Spartans.30.1.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     with raises(_namespace.MinorVersionFixedPortIDError):
@@ -1307,14 +1403,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     wrkspc.drop("ns/6701.Spartans.30.1.dsdl")
     wrkspc.new(
         "ns/6700.Spartans.31.0.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     with raises(_namespace.FixedPortIDCollisionError):
@@ -1324,14 +1422,16 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     wrkspc.drop("ns/6700.Spartans.31.0.dsdl")
     wrkspc.new(
         "ns/6700.Spartans.0.1.dsdl",
-        dedent("""
+        dedent(
+            """
         @deprecated
         @union
         uint16 small
         float32 just_right
         float64[1] woah
         @extent 1024
-        """),
+        """
+        ),
     )
 
     # These are needed to ensure full branch coverage, see the checking code.
@@ -1382,37 +1482,43 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     # Extent consistency -- request
     wrkspc.new(
         "ns/Consistency.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
             uint8 a
             @extent 128
             ---
             uint8 a
             @extent 128
-            """),
+            """
+        ),
     )
     wrkspc.new(
         "ns/Consistency.1.1.dsdl",
-        dedent("""
+        dedent(
+            """
             uint8 a
             uint8 b
             @extent 128
             ---
             uint8 a
             @extent 128
-            """),
+            """
+        ),
     )
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
     wrkspc.new(
         "ns/Consistency.1.2.dsdl",
-        dedent("""
+        dedent(
+            """
             uint8 a
             uint8 b
             @extent 256
             ---
             uint8 a
             @extent 128
-            """),
+            """
+        ),
     )
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency.* is 256 bits.*"
@@ -1425,36 +1531,42 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     # Extent consistency -- response
     wrkspc.new(
         "ns/Consistency.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
             uint8 a
             @extent 128
             ---
             uint8 a
             @extent 128
-            """),
+            """
+        ),
     )
     wrkspc.new(
         "ns/Consistency.1.1.dsdl",
-        dedent("""
+        dedent(
+            """
             uint8 a
             @extent 128
             ---
             uint8 a
             uint8 b
             @extent 128
-            """),
+            """
+        ),
     )
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
     wrkspc.new(
         "ns/Consistency.1.2.dsdl",
-        dedent("""
+        dedent(
+            """
             uint8 a
             @extent 128
             ---
             uint8 a
             @extent 256
-            """),
+            """
+        ),
     )
     with raises(
         _namespace.ExtentConsistencyError, match=r"(?i).*extent of ns\.Consistency.* is 256 bits.*"
@@ -1479,35 +1591,41 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     # Sealing consistency -- request
     wrkspc.new(
         "ns/Consistency.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
             uint64 a
             @extent 64
             ---
             uint64 a
             @extent 64
-            """),
+            """
+        ),
     )
     wrkspc.new(
         "ns/Consistency.1.1.dsdl",
-        dedent("""
+        dedent(
+            """
             uint64 a
             @extent 64
             ---
             uint64 a
             @extent 64
-            """),
+            """
+        ),
     )
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
     wrkspc.new(
         "ns/Consistency.1.2.dsdl",
-        dedent("""
+        dedent(
+            """
             uint64 a
             @sealed
             ---
             uint64 a
             @extent 64
-            """),
+            """
+        ),
     )
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency.* is sealed.*") as ei_sealing:
         _namespace.read_namespace((wrkspc.directory / "ns"), [])
@@ -1518,35 +1636,41 @@ def _unittest_parse_namespace_versioning(wrkspc: Workspace) -> None:
     # Sealing consistency -- response
     wrkspc.new(
         "ns/Consistency.1.0.dsdl",
-        dedent("""
+        dedent(
+            """
             uint64 a
             @extent 64
             ---
             uint64 a
             @extent 64
-            """),
+            """
+        ),
     )
     wrkspc.new(
         "ns/Consistency.1.1.dsdl",
-        dedent("""
+        dedent(
+            """
             uint64 a
             @extent 64
             ---
             uint64 a
             @extent 64
-            """),
+            """
+        ),
     )
     parsed = _namespace.read_namespace((wrkspc.directory / "ns"), [])  # no error
     assert len(parsed) == 10
     wrkspc.new(
         "ns/Consistency.1.2.dsdl",
-        dedent("""
+        dedent(
+            """
             uint64 a
             @extent 64
             ---
             uint64 a
             @sealed
-            """),
+            """
+        ),
     )
     with raises(_namespace.SealingConsistencyError, match=r"(?i).*ns\.Consistency.* is sealed.*") as ei_sealing:
         _namespace.read_namespace((wrkspc.directory / "ns"), [])
@@ -1615,11 +1739,13 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
         [
             wrkspc.parse_new(
                 "ns/B.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                     @deprecated
                     A.1.0 a
                     @sealed
-                    """),
+                    """
+                ),
             )
         ],
     )
@@ -1628,10 +1754,12 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                 X.1.0 b
                 @sealed
-                """),
+                """
+                ),
             ),
             [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
@@ -1641,10 +1769,12 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/C.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                 X.1.0[<9] b  # Ensure the deprecation property is transitive.
                 @sealed
-                """),
+                """
+                ),
             ),
             [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
         )
@@ -1653,11 +1783,13 @@ def _unittest_inconsistent_deprecation(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/D.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                 @deprecated
                 X.1.0 b
                 @sealed
-                """),
+                """
+            ),
         ),
         [wrkspc.parse_new("ns/X.1.0.dsdl", "@deprecated\n@sealed")],
     )
@@ -1669,13 +1801,15 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                 @union
                 @deprecated
                 int8 a
                 float16 b
                 @sealed
-                """),
+                """
+            ),
         ),
         [],
     )
@@ -1684,11 +1818,13 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                     @deprecated
                     @deprecated
                     @sealed
-                    """),
+                    """
+                ),
             ),
             [],
         )
@@ -1697,13 +1833,15 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                     @deprecated
                     @sealed
                     ---
                     @deprecated
                     @sealed
-                    """),
+                    """
+                ),
             ),
             [],
         )
@@ -1711,7 +1849,8 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent("""
+            dedent(
+                """
                 @union
                 int8 a
                 float16 b
@@ -1721,7 +1860,8 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
                 int8 a
                 float16 b
                 @sealed
-                """),
+                """
+            ),
         ),
         [],
     )
@@ -1730,13 +1870,15 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                     @union
                     @union
                     int8 a
                     float16 b
                     @sealed
-                    """),
+                    """
+                ),
             ),
             [],
         )
@@ -1745,13 +1887,15 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                     @sealed
                     @sealed
                     int8 a
                     float16 b
                     @sealed
-                    """),
+                    """
+                ),
             ),
             [],
         )
@@ -1760,13 +1904,15 @@ def _unittest_repeated_directives(wrkspc: Workspace) -> None:
         parse_definition(
             wrkspc.parse_new(
                 "ns/A.1.0.dsdl",
-                dedent("""
+                dedent(
+                    """
                     int8 a
                     float16 b
                     @extent 256
                     @extent 800
                     @sealed
-                    """),
+                    """
+                ),
             ),
             [],
         )
@@ -1779,7 +1925,8 @@ def _unittest_dsdl_parser_basics(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent(r"""
+            dedent(
+                r"""
                 @deprecated
                 void16
                 int8           [<=123+456] array_inclusive
@@ -1795,7 +1942,8 @@ def _unittest_dsdl_parser_basics(wrkspc: Workspace) -> None:
                 @assert ns.Foo.1.0.THE_CONSTANT == 42
                 @assert ns.Bar.1.23.B == ns.Bar.1.23.A + 1
                 @extent 32 * 1024 * 8
-                """),
+                """
+            ),
         ),
         [
             wrkspc.parse_new("ns/Foo.1.0.dsdl", "int8 THE_CONSTANT = 42\n@extent 1024"),
@@ -1808,12 +1956,14 @@ def _unittest_dsdl_parser_utf8_bytes(wrkspc: Workspace) -> None:
     ty = parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent(r"""
+            dedent(
+                r"""
                 byte[10] bytes_fixed
                 byte[<=10] bytes_variable
                 utf8[<=10] string
                 @extent 256 * 8
-                """),
+                """
+            ),
         ),
         [],
     )
@@ -1881,7 +2031,8 @@ def _unittest_dsdl_parser_expressions(wrkspc: Workspace) -> None:
     parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent(r"""
+            dedent(
+                r"""
                 float64 PI = 3.141592653589793
                 float64 E  = 2.718281828459045
                 @assert (PI ** E > 22.4) && (PI ** E < 22.5)
@@ -1927,7 +2078,8 @@ def _unittest_dsdl_parser_expressions(wrkspc: Workspace) -> None:
                 @assert 0xFF_00 | 0x00_FF == 0xFFFF
                 @assert 0xFF_00 ^ 0x0F_FF == 0xF0FF
                 @sealed
-                """),
+                """
+            ),
         ),
         [],
     )
@@ -1939,14 +2091,16 @@ def _unittest_pickle(wrkspc: Workspace) -> None:
     p = parse_definition(
         wrkspc.parse_new(
             "ns/A.1.0.dsdl",
-            dedent(r"""
+            dedent(
+                r"""
                 float64 PI = 3.141592653589793
                 float64 big_pi
                 @sealed
                 ---
                 float16 small_pi
                 @extent 1024 * 8
-                """),
+                """
+            ),
         ),
         [],
     )
