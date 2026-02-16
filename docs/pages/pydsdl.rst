@@ -15,17 +15,10 @@ You can find a practical usage example in the Nunavut code generation library th
 The main functions
 ++++++++++++++++++
 
-DSDL parsing frint-end:
-
 .. autofunction:: pydsdl.read_namespace
 .. autofunction:: pydsdl.read_files
-
-Data (de)serialization:
-
 .. autofunction:: pydsdl.serialize
 .. autofunction:: pydsdl.deserialize
-
-See ``demo/demo_serdes.py`` for a complete working example.
 
 
 Type model

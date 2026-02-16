@@ -90,6 +90,16 @@ def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool =
     :raises SerDesError: If serialization fails.
     :raises TypeError: If schema is a ServiceType.
     :raises ValueError: If with_delimiter_header=True on a non-delimited type.
+
+    .. rubric:: Usage demo
+
+    .. literalinclude:: ../../demo/DemoMessage.1.0.dsdl
+       :language: python
+       :caption: demo/DemoMessage.1.0.dsdl
+
+    .. literalinclude:: ../../demo/demo_serdes.py
+       :language: python
+       :caption: demo/demo_serdes.py
     """
     # Reject ServiceType
     if isinstance(schema, ServiceType):
@@ -132,7 +142,7 @@ def deserialize(
     schema: CompositeType, data: bytes | bytearray | memoryview, *, with_delimiter_header: bool = False
 ) -> _Obj:
     """
-    Deserialize bytes to a Python object according to the given schema.
+    The counterpart of :func:`pydsdl.serialize`.
 
     :param schema: The composite type schema defining the structure.
     :param data: The bytes to deserialize.
