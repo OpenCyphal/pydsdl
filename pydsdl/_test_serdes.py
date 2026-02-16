@@ -586,7 +586,7 @@ def _unittest_serdes_composite_codec() -> None:
 
     with pytest.raises(ValueError, match="exactly one field"):
         w = _BitWriter()
-        schema = UnionType(  # type: ignore
+        schema = UnionType(
             name="test.U",
             version=Version(1, 0),
             attributes=[
@@ -597,12 +597,12 @@ def _unittest_serdes_composite_codec() -> None:
             fixed_port_id=None,
             source_file_path=Path("test", "U"),
             has_parent_service=False,
-        )
+        )  # type: ignore
         _serialize_composite(w, schema, {})
 
     with pytest.raises(ValueError, match="exactly one field"):
         w = _BitWriter()
-        schema = UnionType(  # type: ignore
+        schema = UnionType(
             name="test.U2",
             version=Version(1, 0),
             attributes=[
@@ -613,12 +613,12 @@ def _unittest_serdes_composite_codec() -> None:
             fixed_port_id=None,
             source_file_path=Path("test", "U2"),
             has_parent_service=False,
-        )
+        )  # type: ignore
         _serialize_composite(w, schema, {"a": 1, "b": 2})
 
     with pytest.raises(UnionFieldError, match="Unknown union variant"):
         w = _BitWriter()
-        schema = UnionType(  # type: ignore
+        schema = UnionType(
             name="test.U3",
             version=Version(1, 0),
             attributes=[
@@ -629,11 +629,11 @@ def _unittest_serdes_composite_codec() -> None:
             fixed_port_id=None,
             source_file_path=Path("test", "U3"),
             has_parent_service=False,
-        )
+        )  # type: ignore
         _serialize_composite(w, schema, {"unknown": 1})
 
     w = _BitWriter()
-    schema = UnionType(  # type: ignore
+    schema = UnionType(
         name="test.U4",
         version=Version(1, 0),
         attributes=[
@@ -644,7 +644,7 @@ def _unittest_serdes_composite_codec() -> None:
         fixed_port_id=None,
         source_file_path=Path("test", "U4"),
         has_parent_service=False,
-    )
+    )  # type: ignore
     _serialize_composite(w, schema, {"a": 42})
     data = w.finish()
 
@@ -653,7 +653,7 @@ def _unittest_serdes_composite_codec() -> None:
     assert result == {"a": 42}
 
     w = _BitWriter()
-    schema = UnionType(  # type: ignore
+    schema = UnionType(
         name="test.U5",
         version=Version(1, 0),
         attributes=[
@@ -664,7 +664,7 @@ def _unittest_serdes_composite_codec() -> None:
         fixed_port_id=None,
         source_file_path=Path("test", "U5"),
         has_parent_service=False,
-    )
+    )  # type: ignore
     _serialize_composite(w, schema, {"b": 99})
     data = w.finish()
 
@@ -815,7 +815,7 @@ _SIGNED_WIDTHS = [2, 3, 4, 5, 7, 8, 9, 12, 15, 16, 17, 24, 31, 32, 33, 48, 63, 6
 def _mk_delimited(name: str, attributes: list[Field], extent: int | None = None) -> DelimitedType:
     """
     Create a DelimitedType wrapping a StructureType.
-    
+
     :param name: The name of the inner structure.
     :param attributes: The fields of the inner structure.
     :param extent: The extent in bits. If None, uses the inner structure's extent.
@@ -830,7 +830,7 @@ def _mk_delimited(name: str, attributes: list[Field], extent: int | None = None)
 def _roundtrip(schema: CompositeType, obj: _Obj) -> _Obj:
     """
     Serialize an object and then deserialize it back.
-    
+
     :param schema: The composite type schema.
     :param obj: The object to roundtrip.
     :return: The deserialized object.
@@ -841,7 +841,7 @@ def _roundtrip(schema: CompositeType, obj: _Obj) -> _Obj:
 def _roundtrip_assert(schema: CompositeType, obj: _Obj) -> None:
     """
     Assert that an object survives a serialize-deserialize roundtrip.
-    
+
     :param schema: The composite type schema.
     :param obj: The object to roundtrip.
     :raises AssertionError: If the roundtrip result differs from the original.
@@ -2001,7 +2001,7 @@ def _unittest_void_deserialize_nonzero_bits() -> None:
     """
     Test that void padding with non-zero bits is accepted during deserialization.
     Per DSDL spec: void bits are IGNORED during deserialization (any bit pattern is valid).
-    
+
     Construct a struct with void padding where the padding bytes contain non-zero bits.
     Verify that deserialization succeeds and the surrounding fields are unaffected.
     """
@@ -2014,19 +2014,19 @@ def _unittest_void_deserialize_nonzero_bits() -> None:
             Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
         ],
     )
-    
+
     # Serialize with known values
     obj = {"a": 42, "b": 99}
     data = serialize(schema, obj)
-    
+
     # Verify serialized void is zeros
     assert data == bytes([42, 0, 99])
-    
+
     # Now deserialize from data where void byte is non-zero (0xFF)
     # This should succeed and ignore the non-zero void bits
     corrupted_data = bytes([42, 0xFF, 99])
     result = deserialize(schema, corrupted_data)
-    
+
     # Verify surrounding fields are correct despite non-zero void
     assert result == {"a": 42, "b": 99}
 
@@ -2039,28 +2039,28 @@ def _unittest_void_various_widths() -> None:
     - Deserialization accepts any bit pattern
     """
     void_widths = [1, 2, 3, 4, 5, 7, 8, 16, 32, 64]
-    
+
     for width in void_widths:
         # Test serialization: void always serializes as zeros
         w = _BitWriter()
         _serialize_primitive(w, VoidType(width), None)
         serialized = w.finish()
-        
+
         # Verify all bits are zero
         for byte_val in serialized:
             assert byte_val == 0, f"void{width} serialized non-zero byte: {byte_val:#x}"
-        
+
         # Test deserialization: any bit pattern is accepted
         # Create data with all bits set to 1
         byte_count = (width + 7) // 8
         all_ones_data = bytes([0xFF] * byte_count)
-        
+
         r = _BitReader(all_ones_data)
         result = _deserialize_primitive(r, VoidType(width))
-        
+
         # Void deserialization returns None
         assert result is None
-        
+
         # Verify reader consumed exactly the right number of bits
         assert r._bit_offset == width
 
@@ -2071,7 +2071,7 @@ def _unittest_void_serialize_always_zero() -> None:
     Test void fields within structs to ensure serialization is consistent.
     """
     void_widths = [1, 2, 3, 4, 5, 7, 8, 16, 32, 64]
-    
+
     for width in void_widths:
         # Create struct: {uint8 before, voidN, uint8 after}
         schema = _mk_structure(
@@ -2082,20 +2082,20 @@ def _unittest_void_serialize_always_zero() -> None:
                 Field(UnsignedIntegerType(8, CM.TRUNCATED), "after"),
             ],
         )
-        
+
         obj = {"before": 0xAA, "after": 0xBB}
         data = serialize(schema, obj)
-        
+
         # Calculate expected byte count
         # 8 bits (before) + width bits (void) + 8 bits (after) = 16 + width bits
         total_bits = 16 + width
         expected_bytes = (total_bits + 7) // 8
-        
+
         assert len(data) == expected_bytes, f"void{width}: expected {expected_bytes} bytes, got {len(data)}"
-        
+
         # Verify first byte is 0xAA (before field)
         assert data[0] == 0xAA, f"void{width}: before field corrupted"
-        
+
         # Verify last byte contains 0xBB in the appropriate bits
         # The after field starts at bit position 8 + width
         # For byte-aligned cases, it's straightforward
@@ -2368,24 +2368,24 @@ def _unittest_integer_from_float_rounding() -> None:
 def _unittest_vararray_length_field_8bit() -> None:
     """
     Verify that variable-length arrays with capacity ≤ 255 produce 8-bit length fields.
-    
+
     Per length field width formula: 2^ceil(log2(max(8, capacity.bit_length())))
     For capacity=100: 100.bit_length()=7, max(8,7)=8, ceil(log2(8))=3, 2^3=8
     For capacity=255: 255.bit_length()=8, max(8,8)=8, ceil(log2(8))=3, 2^3=8
     """
-    schema_100 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 100)  # type: ignore
+    schema_100 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 100)
     assert schema_100.length_field_type.bit_length == 8
-    
-    schema_255 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
+
+    schema_255 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)
     assert schema_255.length_field_type.bit_length == 8
-    
+
     # Verify wire format: first byte is length (little-endian)
     w = _BitWriter()
     _serialize_array(w, schema_100, [10, 20, 30])
     data = w.finish()
     assert data[0] == 3  # 8-bit length field
     assert data[1:] == bytes([10, 20, 30])
-    
+
     # Roundtrip
     r = _BitReader(data)
     result = _deserialize_array(r, schema_100)
@@ -2395,20 +2395,20 @@ def _unittest_vararray_length_field_8bit() -> None:
 def _unittest_vararray_length_field_16bit() -> None:
     """
     Verify that variable-length arrays with capacity 256-65535 produce 16-bit length fields.
-    
+
     For capacity=256: 256.bit_length()=9, max(8,9)=9, ceil(log2(9))=4, 2^4=16
     For capacity=10000: 10000.bit_length()=14, max(8,14)=14, ceil(log2(14))=4, 2^4=16
     For capacity=65535: 65535.bit_length()=16, max(8,16)=16, ceil(log2(16))=4, 2^4=16
     """
-    schema_256 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 256)  # type: ignore
+    schema_256 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 256)
     assert schema_256.length_field_type.bit_length == 16
-    
-    schema_10000 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 10000)  # type: ignore
+
+    schema_10000 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 10000)
     assert schema_10000.length_field_type.bit_length == 16
-    
-    schema_65535 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65535)  # type: ignore
+
+    schema_65535 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65535)
     assert schema_65535.length_field_type.bit_length == 16
-    
+
     # Verify wire format: first 2 bytes are length (little-endian)
     w = _BitWriter()
     _serialize_array(w, schema_256, [1, 2, 3, 4, 5])
@@ -2421,16 +2421,16 @@ def _unittest_vararray_length_field_16bit() -> None:
 def _unittest_vararray_length_field_32bit() -> None:
     """
     Verify that variable-length arrays with capacity ≥ 65536 produce 32-bit length fields.
-    
+
     For capacity=65536: 65536.bit_length()=17, max(8,17)=17, ceil(log2(17))=5, 2^5=32
     For capacity=1000000: 1000000.bit_length()=20, max(8,20)=20, ceil(log2(20))=5, 2^5=32
     """
-    schema_65536 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65536)  # type: ignore
+    schema_65536 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65536)
     assert schema_65536.length_field_type.bit_length == 32
-    
-    schema_1000000 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 1000000)  # type: ignore
+
+    schema_1000000 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 1000000)
     assert schema_1000000.length_field_type.bit_length == 32
-    
+
     # Verify wire format: first 4 bytes are length (little-endian)
     w = _BitWriter()
     _serialize_array(w, schema_65536, [0xAA, 0xBB, 0xCC])
@@ -2443,32 +2443,32 @@ def _unittest_vararray_length_field_32bit() -> None:
 def _unittest_vararray_capacity_boundary_8_to_16() -> None:
     """
     Test capacity boundary: 255 (8-bit) vs 256 (16-bit).
-    
+
     Verify that the length field width changes at the exact boundary.
     """
-    schema_255 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)  # type: ignore
-    schema_256 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 256)  # type: ignore
-    
+    schema_255 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 255)
+    schema_256 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 256)
+
     assert schema_255.length_field_type.bit_length == 8
     assert schema_256.length_field_type.bit_length == 16
-    
+
     # Same payload, different length field widths
     payload = [1, 2, 3]
-    
+
     w_255 = _BitWriter()
     _serialize_array(w_255, schema_255, payload)
     data_255 = w_255.finish()
     assert len(data_255) == 1 + 3  # 1 byte length + 3 bytes payload
-    
+
     w_256 = _BitWriter()
     _serialize_array(w_256, schema_256, payload)
     data_256 = w_256.finish()
     assert len(data_256) == 2 + 3  # 2 bytes length + 3 bytes payload
-    
+
     # Verify boundary at 65535→65536
-    schema_65535 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65535)  # type: ignore
-    schema_65536 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65536)  # type: ignore
-    
+    schema_65535 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65535)
+    schema_65536 = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 65536)
+
     assert schema_65535.length_field_type.bit_length == 16
     assert schema_65536.length_field_type.bit_length == 32
 
@@ -2476,20 +2476,20 @@ def _unittest_vararray_capacity_boundary_8_to_16() -> None:
 def _unittest_vararray_roundtrip_16bit_length() -> None:
     """
     Test roundtrip serialization/deserialization with 16-bit length field.
-    
+
     Verify that arrays with capacity requiring 16-bit length fields correctly
     serialize and deserialize with various payload sizes.
     """
-    schema = VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 500)  # type: ignore
+    schema = VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 500)
     assert schema.length_field_type.bit_length == 16
-    
+
     # Empty array
     w = _BitWriter()
     _serialize_array(w, schema, [])
     data = w.finish()
     assert int.from_bytes(data[:2], "little") == 0
     assert _deserialize_array(_BitReader(data), schema) == []
-    
+
     # Single element
     w = _BitWriter()
     _serialize_array(w, schema, [0x1234])
@@ -2497,7 +2497,7 @@ def _unittest_vararray_roundtrip_16bit_length() -> None:
     assert int.from_bytes(data[:2], "little") == 1
     assert data[2:] == bytes([0x34, 0x12])  # little-endian
     assert _deserialize_array(_BitReader(data), schema) == [0x1234]
-    
+
     # Multiple elements
     payload = [0x0011, 0x2233, 0x4455, 0x6677, 0x8899]
     w = _BitWriter()
@@ -2510,20 +2510,20 @@ def _unittest_vararray_roundtrip_16bit_length() -> None:
 def _unittest_vararray_roundtrip_32bit_length() -> None:
     """
     Test roundtrip serialization/deserialization with 32-bit length field.
-    
+
     Verify that arrays with capacity requiring 32-bit length fields correctly
     serialize and deserialize with various payload sizes.
     """
-    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 100000)  # type: ignore
+    schema = VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 100000)
     assert schema.length_field_type.bit_length == 32
-    
+
     # Empty array
     w = _BitWriter()
     _serialize_array(w, schema, [])
     data = w.finish()
     assert int.from_bytes(data[:4], "little") == 0
     assert _deserialize_array(_BitReader(data), schema) == []
-    
+
     # Small payload with 32-bit length field
     payload = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE]
     w = _BitWriter()
@@ -2532,7 +2532,7 @@ def _unittest_vararray_roundtrip_32bit_length() -> None:
     assert int.from_bytes(data[:4], "little") == 5
     assert data[4:] == bytes(payload)
     assert _deserialize_array(_BitReader(data), schema) == payload
-    
+
     # Verify larger payload (100 elements)
     large_payload = list(range(100))
     w = _BitWriter()
@@ -2549,7 +2549,7 @@ def _unittest_vararray_roundtrip_32bit_length() -> None:
 
 def _unittest_utf8_multibyte_characters() -> None:
     """Test UTF-8 strings with 2-byte, 3-byte, and 4-byte characters."""
-    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+    schema = VariableLengthArrayType(UTF8Type(), 255)
 
     # 2-byte characters (Latin-1 supplement)
     w = _BitWriter()
@@ -2582,13 +2582,13 @@ def _unittest_utf8_multibyte_characters() -> None:
 
 def _unittest_utf8_empty_string() -> None:
     """Test empty UTF-8 string roundtrip."""
-    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+    schema = VariableLengthArrayType(UTF8Type(), 255)
 
     w = _BitWriter()
     _serialize_array(w, schema, "")
     data = w.finish()
     assert len(data) == 1  # Just the length byte
-    assert data[0] == 0    # Length is 0
+    assert data[0] == 0  # Length is 0
 
     r = _BitReader(data)
     result = _deserialize_array(r, schema)
@@ -2599,7 +2599,7 @@ def _unittest_utf8_empty_string() -> None:
 def _unittest_utf8_at_capacity_boundary() -> None:
     """Test UTF-8 capacity checked against BYTE count, not character count."""
     # Capacity is 10 bytes
-    schema = VariableLengthArrayType(UTF8Type(), 10)  # type: ignore
+    schema = VariableLengthArrayType(UTF8Type(), 10)
 
     # Exactly at capacity: 10 bytes (3 emoji × 4 bytes = 12 bytes exceeds capacity)
     # Use 2 emoji (8 bytes) + 'hi' (2 bytes) = 10 bytes
@@ -2621,7 +2621,7 @@ def _unittest_utf8_at_capacity_boundary() -> None:
 
 def _unittest_utf8_mixed_ascii_multibyte() -> None:
     """Test UTF-8 strings with mixed ASCII and multi-byte characters."""
-    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+    schema = VariableLengthArrayType(UTF8Type(), 255)
 
     mixed = "Hello 世界! 😀"  # ASCII + 3-byte + ASCII + 4-byte
     w = _BitWriter()
@@ -2641,10 +2641,10 @@ def _unittest_utf8_mixed_ascii_multibyte() -> None:
 
 def _unittest_utf8_invalid_bytes_rejected() -> None:
     """Test that invalid UTF-8 byte sequences are rejected during serialization."""
-    schema = VariableLengthArrayType(UTF8Type(), 255)  # type: ignore
+    schema = VariableLengthArrayType(UTF8Type(), 255)
 
     # Invalid UTF-8: 0xFF is not a valid UTF-8 start byte
-    invalid_bytes = b"\xFF\xFE"
+    invalid_bytes = b"\xff\xfe"
 
     # According to _serdes.py:562-563, bytes input is validated with .decode("utf-8")
     with pytest.raises(UnicodeDecodeError):
@@ -2654,13 +2654,13 @@ def _unittest_utf8_invalid_bytes_rejected() -> None:
 
 def _unittest_byte_array_empty() -> None:
     """Test empty byte array roundtrip."""
-    schema = VariableLengthArrayType(ByteType(), 255)  # type: ignore
+    schema = VariableLengthArrayType(ByteType(), 255)
 
     w = _BitWriter()
     _serialize_array(w, schema, b"")
     data = w.finish()
     assert len(data) == 1  # Just the length byte
-    assert data[0] == 0    # Length is 0
+    assert data[0] == 0  # Length is 0
 
     r = _BitReader(data)
     result = _deserialize_array(r, schema)
@@ -2670,7 +2670,7 @@ def _unittest_byte_array_empty() -> None:
 
 def _unittest_byte_array_all_byte_values() -> None:
     """Test byte array with all 256 possible byte values (0x00-0xFF)."""
-    schema = VariableLengthArrayType(ByteType(), 256)  # type: ignore
+    schema = VariableLengthArrayType(ByteType(), 256)
 
     all_bytes = bytes(range(256))
     w = _BitWriter()
@@ -2690,7 +2690,7 @@ def _unittest_byte_array_all_byte_values() -> None:
 
 def _unittest_byte_array_at_capacity() -> None:
     """Test byte array at exact capacity boundary."""
-    schema = VariableLengthArrayType(ByteType(), 10)  # type: ignore
+    schema = VariableLengthArrayType(ByteType(), 10)
 
     # Exactly at capacity
     exact = b"0123456789"
@@ -2713,7 +2713,7 @@ def _unittest_fixed_utf8_array_roundtrip() -> None:
     """Test fixed-length UTF-8 array (uncommon but valid)."""
     # Fixed-length array of 3 UTF-8 characters (each UTF8Type element is capacity-1)
     # Note: FixedLengthArrayType with UTF8Type is unusual but should work
-    inner_schema = VariableLengthArrayType(UTF8Type(), 10)  # type: ignore
+    inner_schema = VariableLengthArrayType(UTF8Type(), 10)
     schema = _mk_structure(
         "test.FixedUtf8Array",
         [
@@ -2736,7 +2736,7 @@ def _unittest_float_negative_zero_roundtrip(width: int) -> None:
     _serialize_primitive(w, schema, -0.0)
     result = _deserialize_primitive(_BitReader(w.finish()), schema)
     assert isinstance(result, float)
-    float_result = typing.cast(float, result)
+    float_result = result
     assert float_result == 0.0
     assert math.copysign(1.0, float_result) == -1.0
 
@@ -2753,7 +2753,7 @@ def _unittest_float_denormalized_roundtrip(width: int) -> None:
     _serialize_primitive(w, schema, smallest_denormalized)
     result = _deserialize_primitive(_BitReader(w.finish()), schema)
     assert isinstance(result, float)
-    float_result = typing.cast(float, result)
+    float_result = result
     assert float_result == smallest_denormalized
     assert float_result > 0.0
 
@@ -2833,7 +2833,7 @@ def _unittest_float_saturated_nan_passthrough(width: int) -> None:
     _serialize_primitive(w, schema, float("nan"))
     result = _deserialize_primitive(_BitReader(w.finish()), schema)
     assert isinstance(result, float)
-    assert math.isnan(typing.cast(float, result))
+    assert math.isnan(result)
 
 
 @_typed_parametrize("width", [16, 32, 64])
@@ -2863,7 +2863,7 @@ def _unittest_float_truncated_nan_passthrough(width: int) -> None:
     _serialize_primitive(w, schema, float("nan"))
     result = _deserialize_primitive(_BitReader(w.finish()), schema)
     assert isinstance(result, float)
-    assert math.isnan(typing.cast(float, result))
+    assert math.isnan(result)
 
 
 def _unittest_float16_precision_boundary() -> None:
@@ -2899,6 +2899,7 @@ def _unittest_float_from_bool_input() -> None:
         true_result = _deserialize_primitive(_BitReader(w.finish()), schema)
         assert isinstance(true_result, float)
         assert true_result == 1.0
+
 
 def _unittest_bool_fixed_array_roundtrip() -> None:
     schema = FixedLengthArrayType(BooleanType(), 8)
@@ -3005,7 +3006,7 @@ def _unittest_bool_array_known_pattern() -> None:
 
 
 def _mk_union_for_scaling_tests(name: str, variant_count: int) -> UnionType:
-    return UnionType(  # type: ignore
+    return UnionType(
         name=name,
         version=Version(1, 0),
         attributes=[Field(UnsignedIntegerType(8, CM.TRUNCATED), f"v{index}") for index in range(variant_count)],
@@ -3058,7 +3059,7 @@ def _unittest_union_257_variants_tag_16bit() -> None:
 
 def _unittest_union_tag_width_boundary_verification() -> None:
     def expected_tag_width(variant_count: int) -> int:
-        return 2 ** math.ceil(math.log2(max(8, (variant_count - 1).bit_length())))
+        return int(2 ** math.ceil(math.log2(max(8, (variant_count - 1).bit_length()))))
 
     for variant_count in [2, 3, 4, 256, 257]:
         schema = _mk_union_for_scaling_tests(f"test.UnionTagWidth{variant_count}", variant_count)
@@ -3076,6 +3077,7 @@ def _unittest_union_deserialize_all_variants(variant_count: int) -> None:
         obj = {f"v{index}": 50 + index}
         encoded = serialize(schema, obj)
         assert deserialize(schema, encoded) == obj
+
 
 def _unittest_nested_struct_3_levels() -> None:
     level3 = _mk_structure(
@@ -3298,7 +3300,12 @@ def _unittest_complex_mixed_nesting() -> None:
         {
             "primary": {"meta": {"node_id": 12, "snapshot": {"reading": 500, "healthy": True}}},
             "fallbacks": [
-                {"event": {"recent": [{"reading": 1, "healthy": True}, {"reading": 2, "healthy": False}], "severity": 3}},
+                {
+                    "event": {
+                        "recent": [{"reading": 1, "healthy": True}, {"reading": 2, "healthy": False}],
+                        "severity": 3,
+                    }
+                },
                 {"meta": {"node_id": 99, "snapshot": {"reading": 1000, "healthy": False}}},
             ],
             "history": [
@@ -3312,10 +3319,17 @@ def _unittest_complex_mixed_nesting() -> None:
     _roundtrip_assert(
         schema,
         {
-            "primary": {"event": {"recent": [{"reading": 7, "healthy": True}, {"reading": 8, "healthy": True}], "severity": 1}},
+            "primary": {
+                "event": {"recent": [{"reading": 7, "healthy": True}, {"reading": 8, "healthy": True}], "severity": 1}
+            },
             "fallbacks": [
                 {"meta": {"node_id": 1, "snapshot": {"reading": 9, "healthy": True}}},
-                {"event": {"recent": [{"reading": 10, "healthy": False}, {"reading": 11, "healthy": True}], "severity": 2}},
+                {
+                    "event": {
+                        "recent": [{"reading": 10, "healthy": False}, {"reading": 11, "healthy": True}],
+                        "severity": 2,
+                    }
+                },
             ],
             "history": [
                 {"reading": 12, "healthy": False},
@@ -3334,15 +3348,15 @@ def _unittest_complex_mixed_nesting() -> None:
 def _unittest_mixed_alignment_struct() -> None:
     """
     Test struct with mixed alignment: byte-aligned and sub-byte fields.
-    
+
     Struct: {uint8 a, bool b, uint16 c}
     - uint8: 8 bits (bits 0-7)
     - bool: 1 bit (bit 8)
     - uint16: 16 bits (bits 9-24)
-    
+
     Note: Primitives have alignment_requirement=1 (bit-aligned, no padding).
     Only composite types enforce alignment > 1.
-    
+
     Expected wire layout (bit-packed, no alignment padding):
     - Bits 0-7: uint8 a
     - Bit 8: bool b
@@ -3357,10 +3371,10 @@ def _unittest_mixed_alignment_struct() -> None:
             Field(UnsignedIntegerType(16, CM.TRUNCATED), "c"),
         ],
     )
-    
+
     obj = {"a": 0xAA, "b": True, "c": 0x1234}
     data = serialize(schema, obj)
-    
+
     # Verify wire format (primitives are bit-packed):
     # Byte 0: 0xAA (bits 0-7)
     # Byte 1: 0x69 (bit 8: True, bits 9-15: first 7 bits of 0x1234)
@@ -3368,7 +3382,7 @@ def _unittest_mixed_alignment_struct() -> None:
     # Byte 3: 0x00 (bit 24: last bit of 0x1234, bits 25-31: padding)
     assert len(data) == 4
     assert data == bytes([0xAA, 0x69, 0x24, 0x00])
-    
+
     # Verify roundtrip
     result = deserialize(schema, data)
     assert result == obj
@@ -3377,7 +3391,7 @@ def _unittest_mixed_alignment_struct() -> None:
 def _unittest_alignment_padding_insertion() -> None:
     """
     Test alignment padding insertion for COMPOSITE types (not primitives).
-    
+
     Primitives have alignment_requirement=1 (bit-packed).
     Composite types (structs) have alignment based on their max field alignment.
     Verify that composite fields within structs enforce alignment.
@@ -3390,7 +3404,7 @@ def _unittest_alignment_padding_insertion() -> None:
         "test.AlignmentPaddingInnerBool",
         [Field(BooleanType(), "flag")],
     )
-    
+
     schema1 = _mk_structure(
         "test.AlignmentPadding1",
         [
@@ -3398,19 +3412,19 @@ def _unittest_alignment_padding_insertion() -> None:
             Field(inner_bool, "y"),
         ],
     )
-    
+
     obj1 = {"x": {"value": 5}, "y": {"flag": True}}
     data1 = serialize(schema1, obj1)
-    
+
     inner_uint3_alignment = inner_uint3.alignment_requirement
     inner_bool_alignment = inner_bool.alignment_requirement
     assert inner_uint3_alignment == 8
     assert inner_bool_alignment == 8
     assert len(data1) == 2
-    
+
     result1 = deserialize(schema1, data1)
     assert result1 == obj1
-    
+
     inner_multi = _mk_structure(
         "test.AlignmentPaddingMulti",
         [
@@ -3419,7 +3433,7 @@ def _unittest_alignment_padding_insertion() -> None:
             Field(UnsignedIntegerType(8, CM.TRUNCATED), "c"),
         ],
     )
-    
+
     schema2 = _mk_structure(
         "test.AlignmentPadding2",
         [
@@ -3427,10 +3441,10 @@ def _unittest_alignment_padding_insertion() -> None:
             Field(inner_multi, "nested"),
         ],
     )
-    
+
     obj2 = {"prefix": 7, "nested": {"a": True, "b": False, "c": 42}}
     data2 = serialize(schema2, obj2)
-    
+
     result2 = deserialize(schema2, data2)
     assert result2 == obj2
 
@@ -3438,7 +3452,7 @@ def _unittest_alignment_padding_insertion() -> None:
 def _unittest_struct_with_all_defaults() -> None:
     """
     Test struct where all fields have default values.
-    
+
     When deserializing with missing data (empty bytes or truncated payload),
     all fields should use their default values.
     """
@@ -3448,10 +3462,10 @@ def _unittest_struct_with_all_defaults() -> None:
             Field(BooleanType(), "flag"),
             Field(UnsignedIntegerType(8, CM.TRUNCATED), "count"),
             Field(FloatType(32, CM.SATURATED), "value"),
-            Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 10), "items"),  # type: ignore
+            Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 10), "items"),
         ],
     )
-    
+
     # Deserialize from empty bytes
     result_empty = deserialize(schema, bytes())
     expected_defaults = {
@@ -3461,7 +3475,7 @@ def _unittest_struct_with_all_defaults() -> None:
         "items": [],
     }
     assert result_empty == expected_defaults
-    
+
     # Serialize empty object (uses defaults) and verify roundtrip
     data = serialize(schema, {})
     result_roundtrip = deserialize(schema, data)
@@ -3471,7 +3485,7 @@ def _unittest_struct_with_all_defaults() -> None:
 def _unittest_partial_defaults_struct() -> None:
     """
     Test struct with partial defaults: some fields provided, others use defaults.
-    
+
     Verify that provided fields are serialized correctly and missing fields
     use default values during deserialization.
     """
@@ -3488,7 +3502,7 @@ def _unittest_partial_defaults_struct() -> None:
             Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 2), "arr"),
         ],
     )
-    
+
     # Provide only first field
     partial1 = {"a": 42}
     data1 = serialize(schema, partial1)
@@ -3499,7 +3513,7 @@ def _unittest_partial_defaults_struct() -> None:
         "nested": {"x": 0},
         "arr": [0, 0],
     }
-    
+
     # Provide first two fields
     partial2 = {"a": 99, "b": True}
     data2 = serialize(schema, partial2)
@@ -3510,7 +3524,7 @@ def _unittest_partial_defaults_struct() -> None:
         "nested": {"x": 0},
         "arr": [0, 0],
     }
-    
+
     # Provide all but array
     partial3 = {"a": 10, "b": False, "nested": {"x": 20}}
     data3 = serialize(schema, partial3)
@@ -3526,21 +3540,21 @@ def _unittest_partial_defaults_struct() -> None:
 def _unittest_empty_struct_roundtrip() -> None:
     """
     Test empty struct (no fields) serialization and deserialization.
-    
+
     Empty structs should serialize to zero bytes and deserialize to empty dict.
     """
     schema = _mk_structure("test.EmptyStruct", [])
-    
-    obj = {}
+
+    obj: dict[str, object] = {}
     data = serialize(schema, obj)
-    
+
     # Empty struct serializes to empty bytes
     assert data == bytes()
-    
+
     # Roundtrip
     result = deserialize(schema, data)
     assert result == {}
-    
+
     # Deserialize from any bytes (implicit truncation)
     result_truncated = deserialize(schema, bytes([0xFF, 0xAA, 0x55]))
     assert result_truncated == {}
@@ -3549,7 +3563,7 @@ def _unittest_empty_struct_roundtrip() -> None:
 def _unittest_single_field_struct() -> None:
     """
     Test struct with exactly one field.
-    
+
     Verify minimal struct serialization and deserialization.
     """
     # Test 1: Single primitive field
@@ -3557,14 +3571,14 @@ def _unittest_single_field_struct() -> None:
         "test.SingleFieldPrimitive",
         [Field(UnsignedIntegerType(16, CM.TRUNCATED), "value")],
     )
-    
+
     obj1 = {"value": 0xABCD}
     data1 = serialize(schema1, obj1)
     assert data1 == bytes([0xCD, 0xAB])  # little-endian
-    
+
     result1 = deserialize(schema1, data1)
     assert result1 == obj1
-    
+
     # Test 2: Single composite field (nested struct)
     inner = _mk_structure(
         "test.SingleFieldInner",
@@ -3574,24 +3588,24 @@ def _unittest_single_field_struct() -> None:
         "test.SingleFieldComposite",
         [Field(inner, "nested")],
     )
-    
+
     obj2 = {"nested": {"flag": True}}
     data2 = serialize(schema2, obj2)
     assert data2 == bytes([0x01])
-    
+
     result2 = deserialize(schema2, data2)
     assert result2 == obj2
-    
+
     # Test 3: Single array field
     schema3 = _mk_structure(
         "test.SingleFieldArray",
         [Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "items")],
     )
-    
+
     obj3 = {"items": [10, 20, 30]}
     data3 = serialize(schema3, obj3)
     assert data3 == bytes([10, 20, 30])
-    
+
     result3 = deserialize(schema3, data3)
     assert result3 == obj3
 
@@ -3599,32 +3613,32 @@ def _unittest_single_field_struct() -> None:
 def _unittest_single_variant_union() -> None:
     """
     Test union with minimum allowed variants (2).
-    
+
     UnionType requires MIN_NUMBER_OF_VARIANTS=2.
     Test that a 2-variant union works correctly when only using one variant.
     """
-    schema = _mk_union(  # type: ignore
+    schema = _mk_union(
         "test.TwoVariantUnion",
         [
             Field(UnsignedIntegerType(8, CM.TRUNCATED), "option_a"),
             Field(UnsignedIntegerType(16, CM.TRUNCATED), "option_b"),
         ],
     )
-    
+
     assert schema.tag_field_type.bit_length == 8
-    
+
     obj_a = {"option_a": 42}
     data_a = serialize(schema, obj_a)
-    
+
     assert data_a[0] == 0
     assert deserialize(schema, data_a) == obj_a
-    
+
     obj_b = {"option_b": 0x1234}
     data_b = serialize(schema, obj_b)
-    
+
     assert data_b[0] == 1
     assert deserialize(schema, data_b) == obj_b
-    
+
     with pytest.raises(UnionFieldError, match="Unknown union variant"):
         serialize(schema, {"nonexistent": 123})
 
@@ -3632,7 +3646,7 @@ def _unittest_single_variant_union() -> None:
 def _unittest_api_type_coercion_int_to_float() -> None:
     """
     Test API type coercion: int → float.
-    
+
     Integer values should be accepted for float fields and coerced to float.
     """
     schema = _mk_structure(
@@ -3642,18 +3656,18 @@ def _unittest_api_type_coercion_int_to_float() -> None:
             Field(FloatType(64, CM.SATURATED), "value64"),
         ],
     )
-    
+
     # Provide integers for float fields
     obj_int = {"value32": 42, "value64": 123}
     data = serialize(schema, obj_int)
     result = deserialize(schema, data)
-    
+
     # Verify coercion: integers are converted to floats
     assert isinstance(result["value32"], float)
     assert isinstance(result["value64"], float)
     assert result["value32"] == 42.0
     assert result["value64"] == 123.0
-    
+
     # Test with negative integers
     obj_negative = {"value32": -99, "value64": -456}
     data_negative = serialize(schema, obj_negative)
@@ -3665,17 +3679,17 @@ def _unittest_api_type_coercion_int_to_float() -> None:
 def _unittest_api_type_coercion_list_to_tuple() -> None:
     """
     Test API type coercion: list → tuple for arrays.
-    
+
     Arrays should accept both list and tuple inputs and always deserialize as list.
     """
     schema = _mk_structure(
         "test.ListTupleCoercion",
         [
             Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "fixed"),
-            Field(VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 10), "variable"),  # type: ignore
+            Field(VariableLengthArrayType(UnsignedIntegerType(16, CM.TRUNCATED), 10), "variable"),
         ],
     )
-    
+
     # Test 1: Provide tuples for array fields
     obj_tuple = {
         "fixed": (10, 20, 30),
@@ -3683,7 +3697,7 @@ def _unittest_api_type_coercion_list_to_tuple() -> None:
     }
     data_tuple = serialize(schema, obj_tuple)
     result_tuple = deserialize(schema, data_tuple)
-    
+
     # Verify deserialization returns lists (canonical form)
     assert isinstance(result_tuple["fixed"], list)
     assert isinstance(result_tuple["variable"], list)
@@ -3691,7 +3705,7 @@ def _unittest_api_type_coercion_list_to_tuple() -> None:
         "fixed": [10, 20, 30],
         "variable": [100, 200, 300],
     }
-    
+
     # Test 2: Provide lists (should work identically)
     obj_list = {
         "fixed": [10, 20, 30],
@@ -3699,7 +3713,7 @@ def _unittest_api_type_coercion_list_to_tuple() -> None:
     }
     data_list = serialize(schema, obj_list)
     result_list = deserialize(schema, data_list)
-    
+
     assert result_list == result_tuple
     assert data_list == data_tuple
 
@@ -3707,7 +3721,7 @@ def _unittest_api_type_coercion_list_to_tuple() -> None:
 def _unittest_api_error_handling_invalid_input() -> None:
     """
     Test API error handling for invalid inputs.
-    
+
     Verify that appropriate exceptions are raised for:
     - Invalid field names
     - Type mismatches
@@ -3719,58 +3733,58 @@ def _unittest_api_error_handling_invalid_input() -> None:
         "test.ErrorHandlingStruct",
         [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")],
     )
-    
+
     with pytest.raises(ValueError, match="Unknown field"):
         serialize(schema_struct, {"x": 10, "unknown": 20})
-    
+
     # Test 2: Non-dict value for struct
     with pytest.raises(ValueError, match="Structure value must be a dict"):
         serialize(schema_struct, typing.cast(_Obj, typing.cast(object, "not a dict")))
-    
+
     # Test 3: Invalid array length (fixed-length array)
     schema_array = _mk_structure(
         "test.ErrorHandlingArray",
         [Field(FixedLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "arr")],
     )
-    
+
     with pytest.raises(ArrayLengthError):
         serialize(schema_array, {"arr": [1, 2]})  # Too short
-    
+
     with pytest.raises(ArrayLengthError):
         serialize(schema_array, {"arr": [1, 2, 3, 4]})  # Too long
-    
+
     # Test 4: Invalid union variant
-    schema_union = _mk_union(  # type: ignore
+    schema_union = _mk_union(
         "test.ErrorHandlingUnion",
         [
             Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"),
             Field(UnsignedIntegerType(8, CM.TRUNCATED), "b"),
         ],
     )
-    
+
     with pytest.raises(UnionFieldError, match="Unknown union variant"):
         serialize(schema_union, {"unknown_variant": 42})
-    
+
     with pytest.raises(ValueError, match="exactly one field"):
         serialize(schema_union, {})  # No variant selected
-    
+
     with pytest.raises(ValueError, match="exactly one field"):
         serialize(schema_union, {"a": 10, "b": 20})  # Multiple variants
-    
+
     # Test 5: Type mismatch for primitive arrays
     schema_byte_array = _mk_structure(
         "test.ErrorHandlingByteArray",
-        [Field(VariableLengthArrayType(ByteType(), 10), "data")],  # type: ignore
+        [Field(VariableLengthArrayType(ByteType(), 10), "data")],
     )
-    
+
     with pytest.raises(TypeError, match="Byte array requires"):
         serialize(schema_byte_array, {"data": 123})  # Not a sequence
-    
+
     # Test 6: Variable-length array capacity exceeded
     schema_vararray = _mk_structure(
         "test.ErrorHandlingVarArray",
-        [Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "items")],  # type: ignore
+        [Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 3), "items")],
     )
-    
+
     with pytest.raises(ArrayLengthError):
         serialize(schema_vararray, {"items": [1, 2, 3, 4]})  # Exceeds capacity
