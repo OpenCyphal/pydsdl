@@ -2,6 +2,13 @@
 # This software is distributed under the terms of the MIT License.
 # Author: Pavel Kirienko <pavel@opencyphal.org>
 
+"""
+The binary serialization module is a tiny addition to the main functionality of the library that uses instances of
+:class:`pydsdl.CompositeType` to build and parse serialized representations. This is an alternative approach to
+serialization that does not involve code generation compared to Nunavut et al.
+Deserialized objects are represented using Python primitives: composites are dicts, arrays are lists, etc.
+"""
+
 from __future__ import annotations
 
 import struct
