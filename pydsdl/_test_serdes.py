@@ -53,6 +53,7 @@ from ._serializable import (
     DelimitedType,
     Field,
     PaddingField,
+    CompositeType,
 )
 from ._serializable._composite import Version
 
@@ -801,6 +802,51 @@ def _mk_union(name: str, attributes: list[Field]) -> UnionType:
         source_file_path=Path("test", name.split(".")[-1]),
         has_parent_service=False,
     )
+
+
+# ============================================================================
+# TEST HELPERS AND CONSTANTS (Wave 1 Foundation)
+# ============================================================================
+
+_UNSIGNED_WIDTHS = [1, 2, 3, 4, 5, 7, 8, 9, 12, 15, 16, 17, 24, 31, 32, 33, 48, 63, 64]
+_SIGNED_WIDTHS = [2, 3, 4, 5, 7, 8, 9, 12, 15, 16, 17, 24, 31, 32, 33, 48, 63, 64]
+
+
+def _mk_delimited(name: str, attributes: list[Field], extent: int | None = None) -> DelimitedType:
+    """
+    Create a DelimitedType wrapping a StructureType.
+    
+    :param name: The name of the inner structure.
+    :param attributes: The fields of the inner structure.
+    :param extent: The extent in bits. If None, uses the inner structure's extent.
+    :return: A DelimitedType instance.
+    """
+    inner = _mk_structure(name, attributes)
+    if extent is None:
+        extent = inner.extent
+    return DelimitedType(inner, extent)
+
+
+def _roundtrip(schema: CompositeType, obj: _Obj) -> _Obj:
+    """
+    Serialize an object and then deserialize it back.
+    
+    :param schema: The composite type schema.
+    :param obj: The object to roundtrip.
+    :return: The deserialized object.
+    """
+    return deserialize(schema, serialize(schema, obj))
+
+
+def _roundtrip_assert(schema: CompositeType, obj: _Obj) -> None:
+    """
+    Assert that an object survives a serialize-deserialize roundtrip.
+    
+    :param schema: The composite type schema.
+    :param obj: The object to roundtrip.
+    :raises AssertionError: If the roundtrip result differs from the original.
+    """
+    assert _roundtrip(schema, obj) == obj
 
 
 def _unittest_serialize_delimited_with_header() -> None:
