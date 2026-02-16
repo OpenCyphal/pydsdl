@@ -288,6 +288,17 @@ class _BitReader:
 
         Out-of-bounds bits return zeros (implicit zero extension).
         """
+        if self._bit_limit is not None:
+            bits_consumed = self._bit_offset - self._start_offset
+            available = max(0, self._bit_limit - bits_consumed)
+            if available == 0:
+                self._bit_offset += bit_length
+                return 0
+            if bit_length > available:
+                result = self.read_bits(available)
+                self._bit_offset += bit_length - available
+                return result
+
         if self._bit_offset % 8 == 0 and bit_length >= 8:
             full_bytes, remaining = divmod(bit_length, 8)
             start_byte = self._bit_offset // 8
@@ -398,14 +409,23 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
             else:
                 float_value = max(min_bound, min(max_bound, float_value))
 
-        if schema.bit_length == 16:
-            packed = struct.pack("<e", float_value)
-        elif schema.bit_length == 32:
-            packed = struct.pack("<f", float_value)
-        elif schema.bit_length == 64:
-            packed = struct.pack("<d", float_value)
-        else:
-            raise ValueError(f"Invalid float bit length: {schema.bit_length}")
+        try:
+            if schema.bit_length == 16:
+                packed = struct.pack("<e", float_value)
+            elif schema.bit_length == 32:
+                packed = struct.pack("<f", float_value)
+            elif schema.bit_length == 64:
+                packed = struct.pack("<d", float_value)
+            else:
+                raise ValueError(f"Invalid float bit length: {schema.bit_length}")
+        except OverflowError:
+            inf_value = math.copysign(math.inf, float_value)
+            if schema.bit_length == 16:
+                packed = struct.pack("<e", inf_value)
+            elif schema.bit_length == 32:
+                packed = struct.pack("<f", inf_value)
+            else:
+                packed = struct.pack("<d", inf_value)
 
         for byte_val in packed:
             writer.write_bits(byte_val, 8)
@@ -684,6 +704,7 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
         assert field is not None
         writer.write_bits(tag_index, schema.tag_field_type.bit_length)
         _serialize_field_value(writer, field.data_type, value)
+        writer.align_to(schema.alignment_requirement)
 
     elif isinstance(schema, StructureType):
         valid_fields = {f.name for f in schema.fields_except_padding}
@@ -702,6 +723,7 @@ def _serialize_composite(writer: _BitWriter, schema: CompositeType, obj: _Obj) -
                 if value is _DEFAULT_SENTINEL:
                     value = _default_value(field.data_type)
                 _serialize_field_value(writer, field.data_type, value)
+        writer.align_to(schema.alignment_requirement)
 
     elif isinstance(schema, ServiceType):
         raise TypeError("Service types are not directly serializable")
@@ -743,6 +765,7 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
 
         field = schema.fields[tag]
         value = _deserialize_field_value(reader, field.data_type)
+        reader.align_to(schema.alignment_requirement)
         return {field.name: value}
 
     elif isinstance(schema, StructureType):
@@ -757,6 +780,7 @@ def _deserialize_composite(reader: _BitReader, schema: CompositeType) -> _Obj:
                 value = _deserialize_field_value(reader, field.data_type)
                 result[field.name] = value
 
+        reader.align_to(schema.alignment_requirement)
         return result
 
     elif isinstance(schema, ServiceType):
