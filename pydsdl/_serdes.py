@@ -436,7 +436,7 @@ def _serialize_primitive(writer: _BitWriter, schema: PrimitiveType | VoidType, v
             elif schema.bit_length == 32:
                 packed = struct.pack("<f", inf_value)
             else:
-                packed = struct.pack("<d", inf_value)
+                assert False, "float64 packing cannot overflow"
 
         for byte_val in packed:
             writer.write_bits(byte_val, 8)
