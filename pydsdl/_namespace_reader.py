@@ -11,7 +11,7 @@ from typing import cast
 
 from ._dsdl import DefinitionVisitor, DSDLFile, ReadableDSDLFile, PrintOutputHandler, SortedFileList
 from ._dsdl import file_sort as dsdl_file_sort
-from ._error import FrontendError, InternalError
+from ._error import Error, InternalError
 from ._serializable._composite import CompositeType
 
 
@@ -69,7 +69,7 @@ def _read_definitions(
                 functools.partial(print_handler, target_definition.file_path),
                 allow_unregulated_fixed_port_id,
             )
-        except FrontendError as ex:  # pragma: no cover
+        except Error as ex:  # pragma: no cover
             ex.set_error_location_if_unknown(path=target_definition.file_path)
             raise ex
         except Exception as ex:  # pragma: no cover

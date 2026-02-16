@@ -656,7 +656,7 @@ def _unittest_error(wrkspc: Workspace) -> None:
                    """
             ),
         )
-    except _error.FrontendError as ex:
+    except _error.Error as ex:
         assert ex.path and ex.path.parts[-3:] == ("vendor", "types", "A.1.0.dsdl")
         assert ex.line and ex.line == 4
     else:  # pragma: no cover

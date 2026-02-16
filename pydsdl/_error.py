@@ -71,10 +71,6 @@ class Error(Exception):  # PEP8 says that the "Exception" suffix is redundant an
         return self.__class__.__name__ + ": " + repr(self.__str__())
 
 
-# Backward compatibility alias
-FrontendError = Error
-
-
 class InternalError(Error):
     """
     This exception is used to report internal errors in the front end itself that prevented it from
@@ -138,7 +134,7 @@ def _unittest_error() -> None:
 def _unittest_internal_error_github_reporting() -> None:
     try:
         raise InternalError(path=Path("FILE_PATH"), line=42)
-    except FrontendError as ex:
+    except Error as ex:
         assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
         assert str(ex) == "FILE_PATH:42: "
@@ -147,13 +143,13 @@ def _unittest_internal_error_github_reporting() -> None:
         try:
             try:  # TRY HARDER
                 raise InternalError(text="BASE TEXT", culprit=Exception("ERROR TEXT"))
-            except FrontendError as ex:
+            except Error as ex:
                 ex.set_error_location_if_unknown(path=Path("FILE_PATH"))
                 raise
-        except FrontendError as ex:
+        except Error as ex:
             ex.set_error_location_if_unknown(line=42)
             raise
-    except FrontendError as ex:
+    except Error as ex:
         print(ex)
         assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
@@ -168,5 +164,5 @@ def _unittest_internal_error_github_reporting() -> None:
 
     try:
         raise InternalError(text="BASE TEXT", path=Path("FILE_PATH"))
-    except FrontendError as ex:
+    except Error as ex:
         assert str(ex) == "FILE_PATH: BASE TEXT"

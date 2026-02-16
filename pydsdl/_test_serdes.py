@@ -70,10 +70,10 @@ def _unittest_serdes_module() -> None:
     assert issubclass(UnionTagError, SerDesError)
     assert issubclass(DelimiterHeaderError, SerDesError)
 
-    # Verify that SerDesError inherits from FrontendError (via Error)
-    from ._error import FrontendError
+    # Verify that SerDesError inherits from Error (via Error)
+    from ._error import Error
 
-    assert issubclass(SerDesError, FrontendError)
+    assert issubclass(SerDesError, Error)
 
     # Verify that type aliases are defined
     assert _Value is not None

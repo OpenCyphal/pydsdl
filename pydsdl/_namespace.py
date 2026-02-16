@@ -112,7 +112,7 @@ def read_namespace(
              version (newest version first). The ordering guarantee allows the caller to always find the newest version
              simply by picking the first matching occurrence.
 
-    :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
+    :raises: :class:`pydsdl.Error`, :class:`MemoryError`, :class:`SystemError`,
         :class:`OSError` if directories do not exist or inaccessible,
         :class:`ValueError`/:class:`TypeError` if the arguments are invalid.
     """
@@ -250,7 +250,7 @@ def read_files(
         fields that provide links back to the filesystem where the dsdl files were located when parsing the type;
         ``source_file_path`` and ``source_file_path_to_root``.
 
-    :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
+    :raises: :class:`pydsdl.Error`, :class:`MemoryError`, :class:`SystemError`,
         :class:`OSError` if directories do not exist or inaccessible,
         :class:`ValueError`/:class:`TypeError` if the arguments are invalid.
     """
@@ -366,7 +366,7 @@ def _construct_lookup_directories_path_list(
 
     :return: A list of lookup directories as paths.
 
-    :raises: :class:`pydsdl.FrontendError`, :class:`MemoryError`, :class:`SystemError`,
+    :raises: :class:`pydsdl.Error`, :class:`MemoryError`, :class:`SystemError`,
         :class:`OSError` if directories do not exist or inaccessible,
         :class:`ValueError`/:class:`TypeError` if the arguments are invalid.
     """

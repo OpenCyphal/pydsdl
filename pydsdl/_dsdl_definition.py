@@ -11,7 +11,7 @@ from typing import Callable, Iterable, Type
 from . import _parser
 from ._data_type_builder import DataTypeBuilder, UndefinedDataTypeError
 from ._dsdl import DefinitionVisitor, ReadableDSDLFile
-from ._error import FrontendError, InternalError, InvalidDefinitionError
+from ._error import Error, InternalError, InvalidDefinitionError
 from ._serializable import CompositeType, Version
 
 _logger = logging.getLogger(__name__)
@@ -275,7 +275,7 @@ class DSDLDefinition(ReadableDSDLFile):
                 self._cached_type.fixed_port_id,
             )
             return self._cached_type
-        except FrontendError as ex:  # pragma: no cover
+        except Error as ex:  # pragma: no cover
             ex.set_error_location_if_unknown(path=self.file_path)
             raise ex
         except (MemoryError, SystemError):  # pragma: no cover

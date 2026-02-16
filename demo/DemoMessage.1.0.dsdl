@@ -1,11 +1,10 @@
-# DemoMessage.1.0.dsdl
-# Self-contained demo type for serialization/deserialization demonstration
+# A simple demo type.
 
 bool flag
 uint32 counter
 float64 temperature
 float32[4] numeric_data
 uint8[<=256] text_data    # UTF-8 encoded text data
-uint8[<=64] binary_data   # Raw binary data
+byte[<=64] binary_data    # Raw binary data
 
 @extent 1024 * 8

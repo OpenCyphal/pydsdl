@@ -31,9 +31,11 @@ from ._namespace import read_files as read_files
 
 # Error model.
 from ._error import Error as Error
-from ._error import FrontendError as FrontendError
 from ._error import InvalidDefinitionError as InvalidDefinitionError
 from ._error import InternalError as InternalError
+
+# Deprecated compatibility alias, to be removed.
+FrontendError = Error
 
 # Data type model - meta types.
 from ._serializable import SerializableType as SerializableType
@@ -80,9 +82,5 @@ from ._bit_length_set import BitLengthSet as BitLengthSet
 from ._serdes import serialize as serialize
 from ._serdes import deserialize as deserialize
 from ._serdes import SerDesError as SerDesError
-from ._serdes import ArrayLengthError as ArrayLengthError
-from ._serdes import UnionFieldError as UnionFieldError
-from ._serdes import UnionTagError as UnionTagError
-from ._serdes import DelimiterHeaderError as DelimiterHeaderError
 
 _sys.path = _original_sys_path
