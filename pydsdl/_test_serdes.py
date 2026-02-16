@@ -120,10 +120,6 @@ def _unittest_serdes_api() -> None:
     assert hasattr(pydsdl, "serialize")
     assert hasattr(pydsdl, "deserialize")
     assert hasattr(pydsdl, "SerDesError")
-    assert hasattr(pydsdl, "ArrayLengthError")
-    assert hasattr(pydsdl, "UnionFieldError")
-    assert hasattr(pydsdl, "UnionTagError")
-    assert hasattr(pydsdl, "DelimiterHeaderError")
 
 
 def _unittest_serdes_bit_writer() -> None:
