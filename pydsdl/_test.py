@@ -11,7 +11,6 @@ from typing import Sequence, Type, Iterable, Any
 from pathlib import Path
 from textwrap import dedent
 import pytest  # This is only safe to import in test files!
-from . import InvalidDefinitionError
 from . import _expression
 from . import _error
 from . import _parser
@@ -657,7 +656,7 @@ def _unittest_error(wrkspc: Workspace) -> None:
                    """
             ),
         )
-    except _error.FrontendError as ex:
+    except _error.Error as ex:
         assert ex.path and ex.path.parts[-3:] == ("vendor", "types", "A.1.0.dsdl")
         assert ex.line and ex.line == 4
     else:  # pragma: no cover
@@ -2158,4 +2157,7 @@ def _unittest_public_api() -> None:
     for root in public_roots:
         expected_types = {root} | set(_collect_descendants(root))
         for t in expected_types:
+            # Skip test classes (defined in test modules)
+            if t.__module__.startswith("pydsdl._test"):
+                continue
             assert t.__name__ in dir(pydsdl), "Data type %r is not exported" % t

@@ -72,6 +72,13 @@ def pristine(session):
     exe("import pydsdl")
 
 
+@nox.session(python=PYTHONS[-1:])
+def demo(session):
+    """Run the serialization/deserialization demo script."""
+    session.install("-e", ".")
+    session.run("python", "demo/demo_serdes.py")
+
+
 @nox.session(python=PYTHONS, reuse_venv=True)
 def lint(session):
     session.log("Using the newest supported Python: %s", is_latest_python(session))

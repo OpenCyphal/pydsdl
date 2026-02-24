@@ -9,7 +9,7 @@ from pathlib import Path
 import urllib.parse
 
 
-class FrontendError(Exception):  # PEP8 says that the "Exception" suffix is redundant and should not be used.
+class Error(Exception):  # PEP8 says that the "Exception" suffix is redundant and should not be used.
     """
     This is the root exception type for all custom exceptions defined in the library.
     This type itself is not expected to be particularly useful to the library user;
@@ -71,7 +71,7 @@ class FrontendError(Exception):  # PEP8 says that the "Exception" suffix is redu
         return self.__class__.__name__ + ": " + repr(self.__str__())
 
 
-class InternalError(FrontendError):
+class InternalError(Error):
     """
     This exception is used to report internal errors in the front end itself that prevented it from
     processing the definitions. Every occurrence should be reported to the developers.
@@ -100,7 +100,7 @@ class InternalError(FrontendError):
         super().__init__(text=text, path=path, line=line)
 
 
-class InvalidDefinitionError(FrontendError):
+class InvalidDefinitionError(Error):
     """
     This exception type is used to point out mistakes and errors in DSDL definitions.
     This type is inherited by a dozen of specialized exception types; however, the class hierarchy beneath
@@ -113,28 +113,28 @@ class InvalidDefinitionError(FrontendError):
 
 def _unittest_error() -> None:
     try:
-        raise FrontendError("Hello world!")
+        raise Error("Hello world!")
     except Exception as ex:
         assert str(ex) == "Hello world!"
-        assert repr(ex) == "FrontendError: 'Hello world!'"
+        assert repr(ex) == "Error: 'Hello world!'"
 
     try:
-        raise FrontendError("Hello world!", path=Path("path/to/file.dsdl"), line=123)
+        raise Error("Hello world!", path=Path("path/to/file.dsdl"), line=123)
     except Exception as ex:
         assert str(ex) == "path/to/file.dsdl:123: Hello world!"
-        assert repr(ex) == "FrontendError: 'path/to/file.dsdl:123: Hello world!'"
+        assert repr(ex) == "Error: 'path/to/file.dsdl:123: Hello world!'"
 
     try:
-        raise FrontendError("Hello world!", path=Path("path/to/file.dsdl"))
+        raise Error("Hello world!", path=Path("path/to/file.dsdl"))
     except Exception as ex:
-        assert repr(ex) == "FrontendError: 'path/to/file.dsdl: Hello world!'"
+        assert repr(ex) == "Error: 'path/to/file.dsdl: Hello world!'"
         assert str(ex) == "path/to/file.dsdl: Hello world!"
 
 
 def _unittest_internal_error_github_reporting() -> None:
     try:
         raise InternalError(path=Path("FILE_PATH"), line=42)
-    except FrontendError as ex:
+    except Error as ex:
         assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
         assert str(ex) == "FILE_PATH:42: "
@@ -143,13 +143,13 @@ def _unittest_internal_error_github_reporting() -> None:
         try:
             try:  # TRY HARDER
                 raise InternalError(text="BASE TEXT", culprit=Exception("ERROR TEXT"))
-            except FrontendError as ex:
+            except Error as ex:
                 ex.set_error_location_if_unknown(path=Path("FILE_PATH"))
                 raise
-        except FrontendError as ex:
+        except Error as ex:
             ex.set_error_location_if_unknown(line=42)
             raise
-    except FrontendError as ex:
+    except Error as ex:
         print(ex)
         assert ex.path == Path("FILE_PATH")
         assert ex.line == 42
@@ -164,5 +164,5 @@ def _unittest_internal_error_github_reporting() -> None:
 
     try:
         raise InternalError(text="BASE TEXT", path=Path("FILE_PATH"))
-    except FrontendError as ex:
+    except Error as ex:
         assert str(ex) == "FILE_PATH: BASE TEXT"

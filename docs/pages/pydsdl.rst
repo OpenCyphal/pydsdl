@@ -17,6 +17,8 @@ The main functions
 
 .. autofunction:: pydsdl.read_namespace
 .. autofunction:: pydsdl.read_files
+.. autofunction:: pydsdl.serialize
+.. autofunction:: pydsdl.deserialize
 
 
 Type model
@@ -36,15 +38,24 @@ Exceptions
 
 .. computron-injection::
     :filename: ../descendant_diagram.py
-    :argv: FrontendError
+    :argv: Error
 
-.. autoexception:: pydsdl.FrontendError
+.. autoexception:: pydsdl.Error
    :undoc-members:
    :no-inherited-members:
    :show-inheritance:
    :special-members:
 
+.. note::
+   ``FrontendError`` is retained as a backward-compatibility alias for ``Error``.
+
 .. autoexception:: pydsdl.InvalidDefinitionError
+   :undoc-members:
+   :no-inherited-members:
+   :show-inheritance:
+   :special-members:
+
+.. autoexception:: pydsdl.SerDesError
    :undoc-members:
    :no-inherited-members:
    :show-inheritance:

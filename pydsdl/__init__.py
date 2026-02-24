@@ -7,7 +7,7 @@
 import sys as _sys
 from pathlib import Path as _Path
 
-__version__ = "1.24.3"
+__version__ = "1.25.0.rc0"
 __version_info__ = tuple(map(int, __version__.split(".")[:3]))
 __license__ = "MIT"
 __author__ = "OpenCyphal"
@@ -30,9 +30,12 @@ from ._namespace import read_namespace as read_namespace
 from ._namespace import read_files as read_files
 
 # Error model.
-from ._error import FrontendError as FrontendError
+from ._error import Error as Error
 from ._error import InvalidDefinitionError as InvalidDefinitionError
 from ._error import InternalError as InternalError
+
+# Deprecated compatibility alias, to be removed.
+FrontendError = Error
 
 # Data type model - meta types.
 from ._serializable import SerializableType as SerializableType
@@ -74,5 +77,10 @@ from ._expression import Set as Set
 from ._serializable import ValueRange as ValueRange
 from ._serializable import Version as Version
 from ._bit_length_set import BitLengthSet as BitLengthSet
+
+# Serialization/deserialization.
+from ._serdes import serialize as serialize
+from ._serdes import deserialize as deserialize
+from ._serdes import SerDesError as SerDesError
 
 _sys.path = _original_sys_path
