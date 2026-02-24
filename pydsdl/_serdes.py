@@ -6,7 +6,8 @@
 The binary serialization module is a tiny addition to the main functionality of the library that uses instances of
 :class:`pydsdl.CompositeType` to build and parse serialized representations. This is an alternative approach to
 serialization that does not involve code generation compared to Nunavut et al.
-Deserialized objects are represented using Python primitives: composites are dicts, arrays are lists, etc.
+Deserialized objects are represented using Python primitives: composites are dicts; arrays are usually lists
+(UTF-8 arrays become ``str`` and byte arrays become ``bytes``).
 """
 
 from __future__ import annotations
@@ -84,7 +85,7 @@ def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool =
     Serialize a Python object to bytes according to the given schema.
 
     :param schema: The composite type schema defining the structure.
-    :param obj: The Python object to serialize (typically a dict).
+    :param obj: The Python object to serialize as a dict keyed by field name.
     :param with_delimiter_header: If True, prepend a delimiter header to the output.
     :return: The serialized bytes.
     :raises SerDesError: If serialization fails.
@@ -147,7 +148,7 @@ def deserialize(
     :param schema: The composite type schema defining the structure.
     :param data: The bytes to deserialize.
     :param with_delimiter_header: If True, expect and parse a delimiter header from the input.
-    :return: The deserialized Python object (typically a dict).
+    :return: The deserialized Python object as a dict keyed by field name.
     :raises SerDesError: If deserialization fails.
     :raises TypeError: If schema is a ServiceType.
     :raises ValueError: If with_delimiter_header=True on a non-delimited type.

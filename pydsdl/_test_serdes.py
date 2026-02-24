@@ -129,6 +129,46 @@ def _unittest_serdes_api() -> None:
     assert hasattr(pydsdl, "SerDesError")
 
 
+def _unittest_serdes_api_dict_contract() -> None:
+    """
+    The public API operates on composite objects represented strictly as dict instances.
+    """
+    structure = _mk_structure("test.APIDictContractStruct", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x")])
+    union = _mk_union(
+        "test.APIDictContractUnion",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "a"), Field(UnsignedIntegerType(8, CM.TRUNCATED), "b")],
+    )
+    delimited_inner = _mk_structure("test.APIDictContractDelimitedInner", [Field(BooleanType(), "flag")])
+    delimited = DelimitedType(delimited_inner, delimited_inner.extent)
+
+    structure_result = deserialize(structure, serialize(structure, {"x": 42}))
+    assert isinstance(structure_result, dict)
+    assert structure_result == {"x": 42}
+
+    union_result = deserialize(union, serialize(union, {"b": 99}))
+    assert isinstance(union_result, dict)
+    assert union_result == {"b": 99}
+
+    delimited_payload = serialize(delimited, {"flag": True})
+    delimited_result = deserialize(delimited, delimited_payload)
+    assert isinstance(delimited_result, dict)
+    assert delimited_result == {"flag": True}
+
+    delimited_with_header = serialize(delimited, {"flag": True}, with_delimiter_header=True)
+    delimited_header_result = deserialize(delimited, delimited_with_header, with_delimiter_header=True)
+    assert isinstance(delimited_header_result, dict)
+    assert delimited_header_result == {"flag": True}
+
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        serialize(structure, typing.cast(_Obj, typing.cast(object, 123)))
+
+    with pytest.raises(ValueError, match="Union value must be a dict"):
+        serialize(union, typing.cast(_Obj, typing.cast(object, 123)))
+
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        serialize(delimited, typing.cast(_Obj, typing.cast(object, 123)))
+
+
 def _unittest_serdes_bit_writer() -> None:
     """
     Test _BitWriter with various bit lengths, cross-byte writes, and alignment.
