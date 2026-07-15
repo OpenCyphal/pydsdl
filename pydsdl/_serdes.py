@@ -18,6 +18,7 @@ import typing
 
 from ._error import Error
 from ._serializable import (
+    SerializableType,
     CompositeType,
     PrimitiveType,
     BooleanType,
@@ -69,7 +70,18 @@ class DelimiterHeaderError(SerDesError):
     """
 
 
-_Value = bool | int | float | str | bytes | dict[str, typing.Any] | list[typing.Any] | tuple[typing.Any, ...] | None
+_Value = (
+    bool
+    | int
+    | float
+    | str
+    | bytes
+    | bytearray
+    | dict[str, typing.Any]
+    | list[typing.Any]
+    | tuple[typing.Any, ...]
+    | None
+)
 _Obj = dict[str, typing.Any]
 
 _DEFAULT_SENTINEL = object()
@@ -80,13 +92,75 @@ _DEFAULT_SENTINEL = object()
 # ============================================================================
 
 
-def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool = False) -> bytes:
+def _normalize_relaxed_value(schema: SerializableType, value: _Value) -> _Value:
+    """Convert a relaxed input value into the strict representation expected by the serializer."""
+    if isinstance(schema, DelimitedType):
+        return _normalize_relaxed_value(schema.inner_type, value)
+
+    if isinstance(schema, UnionType):
+        if isinstance(value, dict) and len(value) == 1:
+            key = next(iter(value))
+            field = next((candidate for candidate in schema.fields if candidate.name == key), None)
+            if field is not None:
+                return {key: _normalize_relaxed_value(field.data_type, value[key])}
+        return value
+
+    if isinstance(schema, StructureType):
+        fields = schema.fields_except_padding
+
+        if isinstance(value, dict):
+            if len(fields) == 1 and value and fields[0].name not in value:
+                field = fields[0]
+                return {field.name: _normalize_relaxed_value(field.data_type, value)}
+
+            fields_by_name = {field.name: field for field in fields}
+            return {
+                key: (
+                    _normalize_relaxed_value(fields_by_name[key].data_type, field_value)
+                    if key in fields_by_name
+                    else field_value
+                )
+                for key, field_value in value.items()
+            }
+
+        if len(fields) == 1:
+            field = fields[0]
+            return {field.name: _normalize_relaxed_value(field.data_type, value)}
+
+        if isinstance(value, (list, tuple)):
+            if len(value) > len(fields):
+                raise ValueError(
+                    f"Too many positional values for structure: expected at most {len(fields)}, "
+                    f"got {len(value)} (structure type: {schema.full_name})"
+                )
+            return {
+                field.name: _normalize_relaxed_value(field.data_type, field_value)
+                for field, field_value in zip(fields, value)
+            }
+
+        return value
+
+    if isinstance(schema, ArrayType) and isinstance(value, (list, tuple)):
+        return [_normalize_relaxed_value(schema.element_type, element) for element in value]
+
+    return value
+
+
+def serialize(
+    schema: CompositeType,
+    obj: _Value,
+    *,
+    with_delimiter_header: bool = False,
+    relaxed: bool = False,
+) -> bytes:
     """
     Serialize a Python object to bytes according to the given schema.
 
     :param schema: The composite type schema defining the structure.
-    :param obj: The Python object to serialize as a dict keyed by field name.
+    :param obj: The Python object to serialize. By default, composites shall be dicts keyed by field name.
     :param with_delimiter_header: If True, prepend a delimiter header to the output.
+    :param relaxed: If True, recursively accept positional structure values and direct values for single-field
+        structures. Tagged unions still require an explicit one-key dict.
     :return: The serialized bytes.
     :raises SerDesError: If serialization fails.
     :raises TypeError: If schema is a ServiceType.
@@ -110,12 +184,14 @@ def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool =
     if with_delimiter_header and not isinstance(schema, DelimitedType):
         raise ValueError("with_delimiter_header=True is only valid for delimited types")
 
+    normalized_obj = typing.cast(_Obj, _normalize_relaxed_value(schema, obj) if relaxed else obj)
+
     # Handle DelimitedType
     if isinstance(schema, DelimitedType):
         if with_delimiter_header:
             # Serialize inner type to temp buffer, then prepend header
             inner_writer = _BitWriter()
-            _serialize_composite(inner_writer, schema.inner_type, obj)
+            _serialize_composite(inner_writer, schema.inner_type, normalized_obj)
             inner_bytes = inner_writer.finish()
             inner_byte_length = len(inner_bytes)
 
@@ -130,12 +206,12 @@ def serialize(schema: CompositeType, obj: _Obj, *, with_delimiter_header: bool =
         else:
             # Serialize inner type directly without header
             writer = _BitWriter()
-            _serialize_composite(writer, schema.inner_type, obj)
+            _serialize_composite(writer, schema.inner_type, normalized_obj)
             return writer.finish()
 
     # Handle StructureType and UnionType
     writer = _BitWriter()
-    _serialize_composite(writer, schema, obj)
+    _serialize_composite(writer, schema, normalized_obj)
     return writer.finish()
 
 
