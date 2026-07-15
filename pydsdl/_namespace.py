@@ -380,9 +380,6 @@ def _construct_lookup_directories_path_list(
     for a in lookup_directories_path_list:
         _logger.debug(_LOG_LIST_ITEM_PREFIX + str(a))
 
-    # Check for common usage errors and warn the user if anything looks suspicious.
-    _ensure_no_common_usage_errors(root_namespace_directories, lookup_directories_path_list, _logger.warning)
-
     # Check the namespaces and ensure that there are no name collisions.
     _ensure_no_namespace_name_collisions_or_nested_root_namespaces(
         lookup_directories_path_list, allow_root_namespace_name_collision
@@ -527,40 +524,6 @@ def _ensure_minor_version_compatibility_pairwise(
                 ),
                 path=a.source_file_path,
             )
-
-
-def _ensure_no_common_usage_errors(
-    root_namespace_directories: Iterable[Path], lookup_directories: Iterable[Path], reporter: Callable[[str], None]
-) -> None:
-    suspicious_base_names = [
-        "public_regulated_data_types",
-        "dsdl",
-    ]
-
-    def is_valid_name(s: str) -> bool:
-        try:
-            _serializable.check_name(s)
-        except _error.InvalidDefinitionError:
-            return False
-        else:
-            return True
-
-    # resolve() will also normalize the case in case-insensitive filesystems.
-    all_paths = {y.resolve() for y in root_namespace_directories} | {x.resolve() for x in lookup_directories}
-    for p in all_paths:
-        try:
-            candidates = [x for x in p.iterdir() if x.is_dir() and is_valid_name(x.name)]
-        except OSError:  # pragma: no cover
-            candidates = []
-        if candidates and p.name in suspicious_base_names:
-            report = (
-                "Possibly incorrect usage detected: input path %s is likely incorrect because the last path component "
-                "should be the root namespace name rather than its parent directory. You probably meant:\n%s"
-            ) % (
-                p,
-                "\n".join(("- %s" % (p / s)) for s in candidates),
-            )
-            reporter(report)
 
 
 def _ensure_no_namespace_name_collisions_or_nested_root_namespaces(
