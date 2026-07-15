@@ -169,6 +169,138 @@ def _unittest_serdes_api_dict_contract() -> None:
         serialize(delimited, typing.cast(_Obj, typing.cast(object, 123)))
 
 
+def _unittest_serdes_relaxed_positional_structures() -> None:
+    schema = _mk_structure(
+        "test.RelaxedPositional",
+        [
+            Field(UnsignedIntegerType(8, CM.TRUNCATED), "first"),
+            PaddingField(VoidType(8)),
+            Field(BooleanType(), "second"),
+        ],
+    )
+
+    expected = {"first": 42, "second": True}
+    assert deserialize(schema, serialize(schema, [42, True], relaxed=True)) == expected
+    assert deserialize(schema, serialize(schema, (42, True), relaxed=True)) == expected
+    assert deserialize(schema, serialize(schema, [42], relaxed=True)) == {"first": 42, "second": False}
+
+    with pytest.raises(ValueError, match="Too many positional values"):
+        serialize(schema, [1, True, 3], relaxed=True)
+
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        serialize(schema, [42, True])
+
+    empty = _mk_structure("test.RelaxedEmpty", [])
+    assert serialize(empty, [], relaxed=True) == b""
+    with pytest.raises(ValueError, match="Too many positional values"):
+        serialize(empty, [1], relaxed=True)
+
+
+def _unittest_serdes_relaxed_single_field_recursion() -> None:
+    leaf = _mk_structure("test.RelaxedLeaf", [Field(UnsignedIntegerType(8, CM.TRUNCATED), "value")])
+    middle = _mk_structure("test.RelaxedMiddle", [Field(leaf, "leaf")])
+    outer = _mk_structure("test.RelaxedOuter", [Field(middle, "middle")])
+
+    assert deserialize(outer, serialize(outer, 123, relaxed=True)) == {"middle": {"leaf": {"value": 123}}}
+
+    with pytest.raises(ValueError, match="Integer requires numeric input"):
+        serialize(leaf, [123], relaxed=True)
+
+    with pytest.raises(ValueError, match="Structure value must be a dict"):
+        serialize(outer, 123)
+
+
+def _unittest_serdes_relaxed_single_array_field() -> None:
+    scalar_array = _mk_structure(
+        "test.RelaxedScalarArray",
+        [Field(VariableLengthArrayType(UnsignedIntegerType(8, CM.TRUNCATED), 4), "items")],
+    )
+    assert deserialize(scalar_array, serialize(scalar_array, [9], relaxed=True)) == {"items": [9]}
+    assert deserialize(scalar_array, serialize(scalar_array, [1, 2, 3], relaxed=True)) == {"items": [1, 2, 3]}
+
+    element = _mk_structure(
+        "test.RelaxedArrayElement",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"), Field(BooleanType(), "valid")],
+    )
+    composite_array = _mk_structure(
+        "test.RelaxedCompositeArray",
+        [Field(FixedLengthArrayType(element, 2), "items")],
+    )
+    assert deserialize(composite_array, serialize(composite_array, [[10, True], [20, False]], relaxed=True)) == {
+        "items": [{"x": 10, "valid": True}, {"x": 20, "valid": False}]
+    }
+
+    text = _mk_structure(
+        "test.RelaxedText",
+        [Field(VariableLengthArrayType(UTF8Type(), 16), "value")],
+    )
+    blob = _mk_structure(
+        "test.RelaxedBlob",
+        [Field(VariableLengthArrayType(ByteType(), 16), "value")],
+    )
+    assert deserialize(text, serialize(text, "hello", relaxed=True)) == {"value": "hello"}
+    assert deserialize(blob, serialize(blob, bytearray(b"abc"), relaxed=True)) == {"value": b"abc"}
+
+
+def _unittest_serdes_relaxed_dictionary_scope() -> None:
+    inner = _mk_structure(
+        "test.RelaxedDictionaryInner",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "x"), Field(BooleanType(), "valid")],
+    )
+    outer = _mk_structure("test.RelaxedDictionaryOuter", [Field(inner, "nested")])
+
+    expected = {"nested": {"x": 42, "valid": True}}
+    assert deserialize(outer, serialize(outer, {"nested": [42, True]}, relaxed=True)) == expected
+    assert deserialize(outer, serialize(outer, {"x": 42, "valid": True}, relaxed=True)) == expected
+    assert deserialize(outer, serialize(outer, {}, relaxed=True)) == {"nested": {"x": 0, "valid": False}}
+
+    with pytest.raises(ValueError, match="Unknown field"):
+        serialize(outer, {"nested": [42, True], "unknown": 1}, relaxed=True)
+
+
+def _unittest_serdes_relaxed_unions_remain_explicit() -> None:
+    detail = _mk_structure(
+        "test.RelaxedUnionDetail",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "code")],
+    )
+    union = _mk_union(
+        "test.RelaxedUnion",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "small"), Field(detail, "detail")],
+    )
+
+    assert deserialize(union, serialize(union, {"detail": 55}, relaxed=True)) == {"detail": {"code": 55}}
+    with pytest.raises(ValueError, match="Union value must be a dict"):
+        serialize(union, [55], relaxed=True)
+
+    wrapper = _mk_structure("test.RelaxedUnionWrapper", [Field(union, "choice")])
+    assert deserialize(wrapper, serialize(wrapper, {"detail": 66}, relaxed=True)) == {
+        "choice": {"detail": {"code": 66}}
+    }
+
+    union_array = _mk_structure(
+        "test.RelaxedUnionArray",
+        [Field(FixedLengthArrayType(union, 2), "choices")],
+    )
+    assert deserialize(
+        union_array,
+        serialize(union_array, [{"small": 1}, {"detail": 2}], relaxed=True),
+    ) == {"choices": [{"small": 1}, {"detail": {"code": 2}}]}
+
+
+def _unittest_serdes_relaxed_delimited() -> None:
+    inner = _mk_structure(
+        "test.RelaxedDelimitedInner",
+        [Field(UnsignedIntegerType(8, CM.TRUNCATED), "value"), Field(BooleanType(), "valid")],
+    )
+    schema = DelimitedType(inner, inner.extent)
+    expected = {"value": 77, "valid": True}
+
+    bare = serialize(schema, [77, True], relaxed=True)
+    with_header = serialize(schema, [77, True], with_delimiter_header=True, relaxed=True)
+    assert deserialize(schema, bare) == expected
+    assert deserialize(schema, with_header, with_delimiter_header=True) == expected
+
+
 def _unittest_serdes_bit_writer() -> None:
     """
     Test _BitWriter with various bit lengths, cross-byte writes, and alignment.
