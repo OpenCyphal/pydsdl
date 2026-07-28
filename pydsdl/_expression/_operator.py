@@ -8,7 +8,6 @@ import typing
 import functools
 from . import _any, _primitive
 
-
 OperatorOutput = typing.TypeVar("OperatorOutput")
 BinaryOperator = typing.Callable[[_any.Any, _any.Any], OperatorOutput]
 AttributeOperator = typing.Callable[[_any.Any, typing.Union[_primitive.String, str]], OperatorOutput]
@@ -47,7 +46,7 @@ def _auto_swap(
                     raise
 
             assert isinstance(result, _any.Any)
-            return typing.cast(OperatorOutput, result)
+            return result
 
         return wrapper
 

@@ -50,10 +50,16 @@ class VoidType(SerializableType):
         return 1
 
     def __str__(self) -> str:
-        return "void%d" % self.bit_length
+        try:
+            return "void%d" % self.bit_length
+        except AttributeError:  # pragma: no cover
+            return "VoidType(UNINITIALIZED)"
 
     def __repr__(self) -> str:
-        return "VoidType(bit_length=%d)" % self.bit_length
+        try:
+            return "VoidType(bit_length=%d)" % self.bit_length
+        except AttributeError:  # pragma: no cover
+            return "VoidType(UNINITIALIZED)"
 
 
 def _unittest_void() -> None:

@@ -3,10 +3,12 @@
 Development guide
 =================
 
-This document is intended for library developers only.
+This document is intended for library developers and AI agents only.
 If you just want to use the library, you don't need to read it.
 
-Development automation is managed by Nox; please see ``noxfile.py``.
+Development automation is managed by Nox; please read ``noxfile.py``.
+
+The coding style is PEP8 with max line length 120 characters.
 
 
 Writing tests
@@ -26,17 +28,15 @@ outside of test-enabled environments.
         import pytest  # OK to import inside test functions only (rarely useful)
         assert get_the_answer() == 42
 
+For targeted test runs: ``pytest pydsdl -k _unittest_whatever -v``.
+
 
 Supporting newer versions of Python
 +++++++++++++++++++++++++++++++++++
 
-Normally, this should be done a few months after a new version of CPython is released:
-
 1. Update the CI/CD pipelines to enable the new Python version.
 2. Update the CD configuration to make sure that the library is released using the newest version of Python.
 3. Bump the version number using the ``.dev`` suffix to indicate that it is not release-ready until tested.
-
-When the CI/CD pipelines pass, you are all set.
 
 
 Releasing

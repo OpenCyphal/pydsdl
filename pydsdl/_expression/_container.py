@@ -9,7 +9,6 @@ import typing
 import functools
 from . import _any, _primitive, _operator
 
-
 _O = typing.TypeVar("_O")
 
 
@@ -83,7 +82,10 @@ class Set(Container):
         return NotImplemented
 
     def __str__(self) -> str:
-        return "{%s}" % ", ".join(map(str, self._value))  # This is recursive.
+        try:
+            return "{%s}" % ", ".join(map(str, self._value))  # This is recursive.
+        except (AttributeError, TypeError):  # pragma: no cover
+            return "Set(UNINITIALIZED)"
 
     #
     # Set algebra implementation.

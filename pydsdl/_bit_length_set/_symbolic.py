@@ -329,9 +329,9 @@ class MemoizationOperator(Operator):
 
 def least_common_multiple(a: int, b: int) -> int:
     """
-    This replicates :func:`math.lcm` to support Python <3.9.
+    Wrapper for :func:`math.lcm` to keep call sites readable.
     """
-    return abs(a * b) // math.gcd(a, b)
+    return math.lcm(a, b)
 
 
 def validate_numerically(op: Operator) -> None:

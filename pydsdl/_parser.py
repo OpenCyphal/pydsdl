@@ -29,7 +29,7 @@ def parse(text: str, statement_stream_processor: "StatementStreamProcessor", *, 
     pr = _ParseTreeProcessor(statement_stream_processor, strict=strict)
     try:
         pr.visit(_get_grammar().parse(text))  # type: ignore
-    except _error.FrontendError as ex:
+    except _error.Error as ex:
         # Inject error location. If this exception is being propagated from a recursive instance, it already has
         # its error location populated, so nothing will happen here.
         ex.set_error_location_if_unknown(line=pr.current_line_number)
@@ -132,7 +132,7 @@ class _ParseTreeProcessor(parsimonious.NodeVisitor):
 
     # Intentional exceptions that shall not be treated as parse errors.
     # Beware that those might be propagated from recursive parser instances!
-    unwrapped_exceptions = (_error.FrontendError, SystemError, MemoryError, SystemExit)  # type: ignore
+    unwrapped_exceptions = (_error.Error, SystemError, MemoryError, SystemExit)  # type: ignore
 
     def __init__(self, statement_stream_processor: StatementStreamProcessor, *, strict: bool):
         assert isinstance(statement_stream_processor, StatementStreamProcessor)

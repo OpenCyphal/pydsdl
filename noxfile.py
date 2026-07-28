@@ -10,7 +10,7 @@ from functools import partial
 import nox
 
 
-PYTHONS = ["3.8", "3.9", "3.10", "3.11", "3.12"]
+PYTHONS = ["3.10", "3.11", "3.12", "3.13", "3.14"]
 """The newest supported Python shall be listed LAST."""
 
 nox.options.error_on_external_run = True
@@ -70,6 +70,13 @@ def pristine(session):
     session.cd(session.create_tmp())  # Change the directory to reveal spurious dependencies from the project root.
     session.install(f"{ROOT_DIR}")  # Testing bare installation first.
     exe("import pydsdl")
+
+
+@nox.session(python=PYTHONS[-1:])
+def demo(session):
+    """Run the serialization/deserialization demo script."""
+    session.install("-e", ".")
+    session.run("python", "demo/demo_serdes.py")
 
 
 @nox.session(python=PYTHONS, reuse_venv=True)

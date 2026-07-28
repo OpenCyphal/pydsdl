@@ -98,10 +98,16 @@ class FixedLengthArrayType(ArrayType):
             yield index, offset
 
     def __str__(self) -> str:
-        return "%s[%d]" % (self.element_type, self.capacity)
+        try:
+            return "%s[%d]" % (self.element_type, self.capacity)
+        except AttributeError:  # pragma: no cover
+            return "FixedLengthArrayType(UNINITIALIZED)"
 
     def __repr__(self) -> str:
-        return "FixedLengthArrayType(element_type=%r, capacity=%r)" % (self.element_type, self.capacity)
+        try:
+            return "FixedLengthArrayType(element_type=%r, capacity=%r)" % (self.element_type, self.capacity)
+        except AttributeError:  # pragma: no cover
+            return "FixedLengthArrayType(UNINITIALIZED)"
 
 
 def _unittest_fixed_array() -> None:
@@ -178,10 +184,16 @@ class VariableLengthArrayType(ArrayType):
         return self._length_field_type
 
     def __str__(self) -> str:
-        return "%s[<=%d]" % (self.element_type, self.capacity)
+        try:
+            return "%s[<=%d]" % (self.element_type, self.capacity)
+        except AttributeError:  # pragma: no cover
+            return "VariableLengthArrayType(UNINITIALIZED)"
 
     def __repr__(self) -> str:
-        return "VariableLengthArrayType(element_type=%r, capacity=%r)" % (self.element_type, self.capacity)
+        try:
+            return "VariableLengthArrayType(element_type=%r, capacity=%r)" % (self.element_type, self.capacity)
+        except AttributeError:  # pragma: no cover
+            return "VariableLengthArrayType(UNINITIALIZED)"
 
 
 def _unittest_variable_array() -> None:

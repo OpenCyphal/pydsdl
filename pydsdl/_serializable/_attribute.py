@@ -53,10 +53,16 @@ class Attribute(_expression.Any):
 
     def __str__(self) -> str:
         """Returns the normalized DSDL representation of the attribute."""
-        return ("%s %s" % (self.data_type, self.name)).strip()
+        try:
+            return ("%s %s" % (self.data_type, self.name)).strip()
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
     def __repr__(self) -> str:
-        return "%s(data_type=%r, name=%r)" % (self.__class__.__name__, self.data_type, self.name)
+        try:
+            return "%s(data_type=%r, name=%r)" % (self.__class__.__name__, self.data_type, self.name)
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
 
 class Field(Attribute):
@@ -145,10 +151,16 @@ class Constant(Attribute):
 
     def __str__(self) -> str:
         """Returns the normalized DSDL representation of the constant and its value."""
-        return "%s %s = %s" % (self.data_type, self.name, self.value)
+        try:
+            return "%s %s = %s" % (self.data_type, self.name, self.value)
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
     def __repr__(self) -> str:
-        return "Constant(data_type=%r, name=%r, value=%r)" % (self.data_type, self.name, self._value)
+        try:
+            return "Constant(data_type=%r, name=%r, value=%r)" % (self.data_type, self.name, self._value)
+        except AttributeError:  # pragma: no cover
+            return "Constant(UNINITIALIZED)"
 
 
 def _unittest_attribute() -> None:

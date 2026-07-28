@@ -12,7 +12,6 @@ import fractions
 from .._bit_length_set import BitLengthSet
 from ._serializable import SerializableType, TypeParameterError, AggregationFailure
 
-
 ValueRange = typing.NamedTuple("ValueRange", [("min", fractions.Fraction), ("max", fractions.Fraction)])
 
 
@@ -100,7 +99,10 @@ class PrimitiveType(SerializableType):
         raise NotImplementedError
 
     def __repr__(self) -> str:
-        return "%s(bit_length=%r, cast_mode=%r)" % (self.__class__.__name__, self.bit_length, self.cast_mode)
+        try:
+            return "%s(bit_length=%r, cast_mode=%r)" % (self.__class__.__name__, self.bit_length, self.cast_mode)
+        except AttributeError:  # pragma: no cover
+            return "%s(UNINITIALIZED)" % self.__class__.__name__
 
 
 class BooleanType(PrimitiveType):
